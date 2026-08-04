@@ -59,10 +59,16 @@ pub const DEFAULT_LIMIT: usize = 10;
 /// How many entries are kept after ranking (the "top N").
 pub const DEFAULT_TOP_N: usize = 5;
 /// Default character budget for the formatted injection string.
+///
+/// The cap is enforced on the output's UTF-8 *byte* length (strict upper
+/// bound; equal to the char count for ASCII content, fewer chars for
+/// non-ASCII).
 pub const DEFAULT_MAX_CHARS: usize = 2000;
 
-/// Recency decay half-life constant (hours): an entry this old scores `e⁻¹`.
-pub const RECENCY_HALF_LIFE_HOURS: f64 = 24.0;
+/// Recency decay time constant τ (hours): an entry this old scores `e⁻¹`.
+/// The spec formula `e^(-hours_ago / 24.0)` makes this a mean lifetime
+/// (τ), not a half-life (τ·ln2 ≈ 16.6 h) — the name follows the spec.
+pub const RECENCY_DECAY_HOURS: f64 = 24.0;
 
 /// Weight of the recency term in the final score (spec).
 pub const RECENCY_WEIGHT: f64 = 0.5;
@@ -153,7 +159,8 @@ impl<S: ContextSource> ContextInjector<S> {
         self
     }
 
-    /// Override the character budget for formatted output.
+    /// Override the character budget for formatted output (a strict UTF-8
+    /// byte cap — see [`DEFAULT_MAX_CHARS`]).
     pub fn with_max_chars(mut self, max_chars: usize) -> Self {
         self.max_chars = max_chars;
         self
@@ -263,7 +270,7 @@ impl<S: ContextSource> ContextInjector<S> {
 /// timestamps clamp to 1.0 (nothing is "more recent than now").
 pub fn recency_score(timestamp: DateTime<Utc>, now: DateTime<Utc>) -> f64 {
     let hours_ago = (now - timestamp).num_milliseconds().max(0) as f64 / 3_600_000.0;
-    (-hours_ago / RECENCY_HALF_LIFE_HOURS).exp()
+    (-hours_ago / RECENCY_DECAY_HOURS).exp()
 }
 
 /// Heuristic relevance of `ctx` to the target agent / current session (0..=1).
@@ -398,7 +405,14 @@ fn truncate_entry(header: &str, line: &str, max: usize) -> String {
         return truncate_chars(header, max);
     }
     // Reserve the byte length of '…' (3) so the total stays within budget.
-    let line_budget = max - header.len() - ELLIPSIS.len();
+    // Saturating: when `max` is only 1–2 bytes past the header there is no
+    // room for any line content + ellipsis — the header alone still fits.
+    let line_budget = max
+        .saturating_sub(header.len())
+        .saturating_sub(ELLIPSIS.len());
+    if line_budget == 0 {
+        return header.to_string();
+    }
     let mut trimmed = truncate_chars(line, line_budget);
     trimmed.push_str(ELLIPSIS);
     format!("{header}{trimmed}")
@@ -577,5 +591,19 @@ mod tests {
         // Header alone over budget → header itself is cut.
         let tiny = truncate_entry(header, line, 5);
         assert_eq!(tiny.len(), 5);
+    }
+
+    #[test]
+    fn truncate_entry_does_not_underflow_for_tight_budgets() {
+        let header = "[Cross-Agent Context]\n"; // 22 bytes
+        let line = "• Task: a long content here";
+        // Budgets just 1–2 bytes past the header used to underflow `usize`.
+        for tight in [header.len() + 1, header.len() + 2, header.len() + 3] {
+            let cut = truncate_entry(header, line, tight);
+            assert!(cut.len() <= tight, "{cut:?} exceeds {tight}");
+            assert!(cut.starts_with(header));
+        }
+        // Exact-header budget: no line, no ellipsis.
+        assert_eq!(truncate_entry(header, line, header.len()), header);
     }
 }

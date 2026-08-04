@@ -141,7 +141,7 @@ fn ranking_orders_by_final_score_descending() {
 }
 
 #[test]
-fn recency_dominates_at_same_relevance_and_confidence() {
+fn recency_dominates_even_with_higher_confidence() {
     let fresh = entry("new", "s1", AgentType::Codex, ContextType::Task, "fresh", 0);
     let mut old = entry(
         "old",
