@@ -16,6 +16,14 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+/// Minimum interval between full crash-report writes (panics closer together
+/// only append a log line).
+pub const CRASH_REPORT_MIN_INTERVAL: Duration = Duration::from_secs(30);
+/// Maximum crash reports written per process.
+pub const CRASH_REPORT_MAX: usize = 1000;
 
 /// Latest memory footprint (bytes), updated by the server's stats path so the
 /// panic hook can include it in crash reports without a dependency cycle.
@@ -76,27 +84,43 @@ impl Crashpad {
             "-".repeat(60)
         );
         fs::write(&path, body)?;
+        // Crash reports contain backtraces — keep them private on Unix.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+        }
         Ok(path)
     }
 
     /// Append a line to `daemon.log` (used by the panic hook so the crash is
-    /// also in the collectible log stream). Never panics.
+    /// also in the collectible log stream). Newlines in the payload are
+    /// escaped so a crafted panic message cannot forge log lines. Never
+    /// panics.
     pub fn append_log(&self, line: &str) {
         if let Ok(mut file) = fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(self.dir.join("daemon.log"))
         {
-            let _ = writeln!(file, "{}", line);
+            let safe = line.replace(['\r', '\n'], "\\n");
+            let _ = writeln!(file, "{}", safe);
         }
     }
 
     /// Install the process-global panic hook. Every panic appends to the
     /// daemon log and writes a crash report; the previous hook is chained so
     /// default stderr output still happens.
+    ///
+    /// Report writes are throttled (at most [`CRASH_REPORT_MIN_INTERVAL`]
+    /// apart) and capped ([`CRASH_REPORT_MAX`] per process) so an attacker
+    /// who can trigger panics (e.g. `--debug` + `cacm.debug.panic` from a
+    /// loopback client) cannot fill the crash directory with backtraces.
     pub fn install_hook(self) {
         let pad = Arc::new(self);
         let previous = std::panic::take_hook();
+        let last_report = Arc::new(Mutex::new(Instant::now() - CRASH_REPORT_MIN_INTERVAL));
+        let report_count = Arc::new(AtomicUsize::new(0));
         std::panic::set_hook(Box::new(move |info| {
             let message = info.to_string();
             let backtrace = Backtrace::force_capture();
@@ -108,15 +132,34 @@ impl Crashpad {
                 backtrace: backtrace.to_string(),
                 memory_used_bytes: CURRENT_MEMORY_USED.load(Ordering::Relaxed),
             };
+            // Always keep the panic in the collectible log (cheap, one line).
             pad.append_log(&format!("PANIC: {message}"));
-            match pad.write_report(&report) {
-                Ok(path) => {
-                    eprintln!(
-                        "cacm-daemon panic — crash report written to {}",
-                        path.display()
-                    )
+            let report_due = {
+                let mut last = match last_report.lock() {
+                    Ok(guard) => guard,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+                let due = last.elapsed() >= CRASH_REPORT_MIN_INTERVAL;
+                if due {
+                    *last = Instant::now();
                 }
-                Err(err) => eprintln!("cacm-daemon panic — failed to write crash report: {err}"),
+                due
+            };
+            let under_cap = report_count.fetch_add(1, Ordering::Relaxed) < CRASH_REPORT_MAX;
+            if report_due && under_cap {
+                match pad.write_report(&report) {
+                    Ok(path) => {
+                        eprintln!(
+                            "cacm-daemon panic — crash report written to {}",
+                            path.display()
+                        )
+                    }
+                    Err(err) => {
+                        eprintln!("cacm-daemon panic — failed to write crash report: {err}")
+                    }
+                }
+            } else {
+                eprintln!("cacm-daemon panic — {message} (crash report throttled)");
             }
             previous(info);
         }));
@@ -166,6 +209,50 @@ mod tests {
         let log = fs::read_to_string(dir.join("daemon.log")).unwrap();
         assert_eq!(log.lines().count(), 2);
         assert!(log.contains("line two"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn append_log_escapes_newlines() {
+        let dir = temp_dir("escape");
+        let pad = Crashpad::new(dir.clone()).unwrap();
+        pad.append_log("line one");
+        pad.append_log("forged\ninjected\rline");
+        let log = fs::read_to_string(dir.join("daemon.log")).unwrap();
+        let lines: Vec<&str> = log.lines().collect();
+        assert_eq!(
+            lines.len(),
+            2,
+            "newlines in the payload must not forge lines"
+        );
+        // Both \r and \n are escaped to the two-char sequence `\n`.
+        assert_eq!(lines[1], "forged\\ninjected\\nline");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn panic_hook_throttles_reports() {
+        let dir = temp_dir("throttle");
+        let pad = Crashpad::new(dir.clone()).unwrap();
+        pad.install_hook();
+
+        // Two panics back-to-back: the second is throttled (interval 30s), so
+        // only ONE crash report is written while the log gets both.
+        let _ = std::panic::catch_unwind(|| panic!("first panic"));
+        let _ = std::panic::catch_unwind(|| panic!("second panic"));
+
+        let reports = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().starts_with("crash-"))
+            .count();
+        assert_eq!(
+            reports, 1,
+            "repeated panics must be throttled to one report"
+        );
+        let log = fs::read_to_string(dir.join("daemon.log")).unwrap();
+        assert!(log.contains("first panic"));
+        assert!(log.contains("second panic"));
         let _ = fs::remove_dir_all(&dir);
     }
 
