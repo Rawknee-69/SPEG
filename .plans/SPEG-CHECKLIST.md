@@ -23,7 +23,7 @@
 
 | ID | Task | Status | Files | Depends | Agent | Report |
 |----|------|--------|-------|---------|-------|--------|
-| 1.1 | Package scaffolding | ⬜ | `speg/package.json`, `speg/tsconfig.json`, `pnpm-workspace.yaml` | — | — | — |
+| 1.1 | Package scaffolding | ✅ | `speg/package.json`, `speg/tsconfig.json`, `pnpm-workspace.yaml` | — | — | [1.1-scaffolding.md](../research/report/1.1-scaffolding.md) |
 | 1.2 | SPEG contracts (schemas) | ⬜ | `packages/contracts/src/speg/` (7 files) | 1.1 | — | — |
 | 1.3 | Jcode SDK Effect wrapper | ⬜ | `speg/src/jcode/` (8 files) | 1.1, 1.2 | — | — |
 | 1.4 | CACM session watcher | ⬜ | `speg/src/cacm/` (7 files) | 1.3 | — | — |
@@ -174,14 +174,14 @@
 ## Overall Progress
 
 ```
-Phase 1: ░░░░░░░░░░░░░░░░░░░░  0/9   (0%)
+Phase 1: █░░░░░░░░░░░░░░░░░░░  1/9   (11%)
 Phase 2: ░░░░░░░░░░░░░░░░░░░░  0/8   (0%)
 Phase 3: ░░░░░░░░░░░░░░░░░░░░  0/12  (0%)
 Phase 4: ░░░░░░░░░░░░░░░░░░░░  0/10  (0%)
 Phase 5: ░░░░░░░░░░░░░░░░░░░░  0/9   (0%)
 Phase 6: ░░░░░░░░░░░░░░░░░░░░  0/11  (0%)
 ─────────────────────────────────────
-TOTAL:   ░░░░░░░░░░░░░░░░░░░░  0/59  (0%)
+TOTAL:   █░░░░░░░░░░░░░░░░░░░  1/59  (2%)
 ```
 
 ---
