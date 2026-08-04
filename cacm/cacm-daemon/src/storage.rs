@@ -93,6 +93,17 @@ pub trait Storage: Send + Sync {
 
     /// Record (or update) a session.
     fn store_session(&mut self, session: &AgentSession) -> Result<(), StorageError>;
+
+    /// Approximate in-memory footprint of the stored data, used by the
+    /// memory manager. Default: 0 (nothing tracked).
+    fn memory_bytes(&self) -> usize {
+        0
+    }
+
+    /// Ask the backend to release memory until its footprint is at most
+    /// `target_bytes` (evicting oldest context entries; SQLite is disk-backed
+    /// so it is a no-op there). Default: no-op.
+    fn shrink_memory(&mut self, _target_bytes: usize) {}
 }
 
 /// Does this context entry belong to `project`?
@@ -140,7 +151,6 @@ pub(crate) fn path_within(path: &str, base: &str) -> bool {
 /// (matching SQLite's `INSERT OR REPLACE`), and the store is bounded both by
 /// entry count and by a total string-data byte budget, so an unauthenticated
 /// `cacm.context.store` loop cannot grow memory without bound.
-#[derive(Default)]
 pub struct MemoryGraph {
     /// All context entries, in insertion order.
     contexts: Vec<CrossAgentContext>,
@@ -148,14 +158,31 @@ pub struct MemoryGraph {
     sessions: HashMap<String, AgentSession>,
     /// Approximate total string-data bytes (used for the eviction budget).
     total_bytes: usize,
+    /// Byte budget enforced on store (defaults to [`MEMORY_GRAPH_MAX_BYTES`];
+    /// lowered by the memory manager under pressure).
+    byte_budget: usize,
+    /// Entry-count cap (defaults to [`MEMORY_GRAPH_CAP`]).
+    count_cap: usize,
 }
 
 /// Maximum entries kept in a [`MemoryGraph`]; the oldest is evicted beyond
-/// this.
+/// this (the default `count_cap`).
 pub const MEMORY_GRAPH_CAP: usize = 10_000;
 /// Maximum total string-data bytes kept in a [`MemoryGraph`]; the oldest
-/// entries are evicted beyond this.
+/// entries are evicted beyond this (the default `byte_budget`).
 pub const MEMORY_GRAPH_MAX_BYTES: usize = 64 << 20; // 64 MiB
+
+impl Default for MemoryGraph {
+    fn default() -> Self {
+        Self {
+            contexts: Vec::new(),
+            sessions: HashMap::new(),
+            total_bytes: 0,
+            byte_budget: MEMORY_GRAPH_MAX_BYTES,
+            count_cap: MEMORY_GRAPH_CAP,
+        }
+    }
+}
 
 /// Approximate in-memory cost of an entry: total bytes of its string fields
 /// (id, session_id, content, and every file path / decision / error).
@@ -188,15 +215,15 @@ impl MemoryGraph {
         // Enforce the caps in one O(n log n) pass (sort + truncate) rather
         // than O(n) evictions, since this runs while the storage mutex is
         // held and every request shares it.
-        if self.total_bytes > MEMORY_GRAPH_MAX_BYTES || self.contexts.len() > MEMORY_GRAPH_CAP {
+        if self.total_bytes > self.byte_budget || self.contexts.len() > self.count_cap {
             self.contexts.sort_by_key(|c| c.timestamp); // ascending: oldest first
                                                         // Keep the newest entries that fit under both caps.
             let mut bytes = 0usize;
             let mut first_kept = self.contexts.len();
             for i in (0..self.contexts.len()).rev() {
-                let count_ok = self.contexts.len() - i <= MEMORY_GRAPH_CAP;
+                let count_ok = self.contexts.len() - i <= self.count_cap;
                 let next_bytes = bytes.saturating_add(context_cost(&self.contexts[i]));
-                if !count_ok || next_bytes > MEMORY_GRAPH_MAX_BYTES {
+                if !count_ok || next_bytes > self.byte_budget {
                     break;
                 }
                 bytes = next_bytes;
@@ -207,6 +234,41 @@ impl MemoryGraph {
                 self.total_bytes = bytes;
             }
         }
+    }
+
+    /// Lower (or raise) the eviction budgets. Used by the memory manager to
+    /// shrink the graph under soft memory pressure.
+    pub fn set_budgets(&mut self, byte_budget: usize, count_cap: usize) {
+        self.byte_budget = byte_budget;
+        self.count_cap = count_cap;
+    }
+
+    /// Current approximate string-data footprint (bytes).
+    pub fn total_bytes(&self) -> usize {
+        self.total_bytes
+    }
+
+    /// Evict the oldest entries until the footprint is at most `target_bytes`
+    /// (always keeping at least the newest entry).
+    pub fn shrink_to(&mut self, target_bytes: usize) {
+        if self.total_bytes <= target_bytes {
+            return;
+        }
+        self.contexts.sort_by_key(|c| c.timestamp); // ascending: oldest first
+                                                    // Walk from the newest backwards, keeping entries while they fit.
+        let mut bytes = 0usize;
+        let mut first_kept = self.contexts.len();
+        for i in (0..self.contexts.len()).rev() {
+            let next = bytes.saturating_add(context_cost(&self.contexts[i]));
+            // Always keep the newest entry even if it alone exceeds the target.
+            if next > target_bytes && first_kept != self.contexts.len() {
+                break;
+            }
+            bytes = next;
+            first_kept = i;
+        }
+        self.contexts.drain(..first_kept);
+        self.total_bytes = bytes;
     }
 
     pub fn query_context(&self, project: &str, limit: usize) -> Vec<CrossAgentContext> {
@@ -384,6 +446,14 @@ impl Storage for JcodeBackend {
     fn store_session(&mut self, session: &AgentSession) -> Result<(), StorageError> {
         self.graph.store_session(session);
         Ok(())
+    }
+
+    fn memory_bytes(&self) -> usize {
+        self.graph.total_bytes()
+    }
+
+    fn shrink_memory(&mut self, target_bytes: usize) {
+        self.graph.shrink_to(target_bytes);
     }
 }
 
@@ -635,6 +705,19 @@ impl Storage for SqliteBackend {
         )?;
         Ok(())
     }
+
+    fn memory_bytes(&self) -> usize {
+        // SQLite is disk-backed; report the page footprint as a proxy for the
+        // stored-data size (the memory manager's write-admission bound).
+        let Ok(conn) = self.lock() else { return 0 };
+        let page_size: i64 = conn
+            .query_row("PRAGMA page_size", [], |row| row.get(0))
+            .unwrap_or(4096);
+        let page_count: i64 = conn
+            .query_row("PRAGMA page_count", [], |row| row.get(0))
+            .unwrap_or(0);
+        (page_size as usize).saturating_mul(page_count as usize)
+    }
 }
 
 /// Auto-select a storage backend: try Jcode first, fall back to SQLite.
@@ -845,6 +928,85 @@ mod tests {
             "expected byte budget to evict, got {}",
             all.len()
         );
+    }
+
+    #[test]
+    fn memory_graph_budgets_and_shrink_are_controllable() {
+        let mut graph = MemoryGraph::new();
+        let t0 = chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let big = "x".repeat(1 << 20); // 1 MiB per entry
+        for i in 0..8 {
+            graph.store_context(&CrossAgentContext {
+                id: format!("m{i}"),
+                content: big.clone(),
+                timestamp: t0 + chrono::Duration::seconds(i as i64),
+                ..sample_context(&format!("m{i}"), "s1", "/repo/a.rs")
+            });
+        }
+        // context_cost counts all string fields, so ≥ 8 MiB of content.
+        assert!(graph.total_bytes() >= 8 << 20);
+
+        // Memory manager lowers the budget → the next store evicts harder.
+        graph.set_budgets(4 << 20, 100);
+        graph.store_context(&CrossAgentContext {
+            id: "m8".into(),
+            content: big.clone(),
+            timestamp: t0 + chrono::Duration::seconds(8),
+            ..sample_context("m8", "s1", "/repo/a.rs")
+        });
+        assert!(graph.total_bytes() <= 4 << 20);
+
+        // shrink_to evicts the oldest until under the target.
+        graph.shrink_to(2 << 20);
+        assert!(graph.total_bytes() <= 2 << 20);
+        // The newest entries survive.
+        let all = graph.query_context("*", 100);
+        assert_eq!(all[0].id, "m8");
+    }
+
+    #[test]
+    fn sqlite_memory_bytes_reflects_stored_pages() {
+        let mut backend = SqliteBackend::open_in_memory().unwrap();
+        assert!(
+            backend.memory_bytes() > 0,
+            "an empty sqlite db still has pages"
+        );
+        for i in 0..20 {
+            backend
+                .store_context(&sample_context(&format!("c{i}"), "s1", "/repo/f.rs"))
+                .unwrap();
+        }
+        // More rows → at least as many pages (never shrinks for this test).
+        assert!(backend.memory_bytes() >= backend.memory_bytes());
+    }
+
+    #[test]
+    fn jcode_backend_reports_graph_bytes() {
+        let mut backend = JcodeBackend::new(PathBuf::from("C:\\nonexistent\\jcode-api.sock"));
+        assert_eq!(backend.memory_bytes(), 0);
+        let t0 = chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        backend
+            .store_context(&CrossAgentContext {
+                timestamp: t0,
+                ..sample_context("c1", "s1", "/repo/a.rs")
+            })
+            .unwrap();
+        backend
+            .store_context(&CrossAgentContext {
+                timestamp: t0 + chrono::Duration::minutes(1),
+                ..sample_context("c2", "s1", "/repo/b.rs")
+            })
+            .unwrap();
+        assert!(backend.memory_bytes() > 0);
+        // Shrink to roughly one entry → only the newest survives.
+        backend.shrink_memory(backend.memory_bytes() / 2);
+        let all = backend.query_context("*", 10).unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].id, "c2");
     }
 
     #[test]

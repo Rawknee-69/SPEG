@@ -16,6 +16,7 @@
 //!
 //! - `cacm.context.store` → `{"stored": "<context id>"}`
 
+use crate::memory::MemoryManager;
 use crate::server::RpcError;
 use crate::storage::Storage;
 use cacm_core::types::{AgentSession, CrossAgentContext};
@@ -157,6 +158,38 @@ fn context_type_str(t: cacm_core::types::ContextType) -> &'static str {
     }
 }
 
+/// `cacm.memory.stats` → memory-manager snapshot.
+///
+/// `used_bytes` is the storage footprint; budgets and pressure come from the
+/// [`MemoryManager`]. Parameters are ignored.
+pub fn handle_memory_stats(
+    memory: &MemoryManager,
+    storage: &dyn Storage,
+    sessions: usize,
+    connections: usize,
+    pending: usize,
+) -> Value {
+    let used = storage.memory_bytes();
+    let pressure = memory.pressure(used);
+    json!({
+        "used_bytes": used,
+        "soft_limit": memory.soft_limit(),
+        "hard_limit": memory.hard_limit(),
+        "pressure": pressure,
+        "sessions": sessions,
+        "connections": connections,
+        "pending": pending,
+    })
+}
+
+/// `cacm.debug.panic` (enabled only with `--debug`) — deliberately panics the
+/// calling connection's task. The daemon survives (the task dies, the
+/// connection closes) and the crashpad records the panic. Used to verify the
+/// crashpad and self-heal machinery.
+pub fn handle_debug_panic() -> ! {
+    panic!("debug panic requested by client (cacm.debug.panic)")
+}
+
 /// `cacm.context.store` (extension) — params
 /// `{"context": {CrossAgentContext}}` → `{"stored": "<id>"}`.
 ///
@@ -296,6 +329,31 @@ mod tests {
             result["formatted"],
             "[Cross-Agent Context]\nNo cross-agent context available yet."
         );
+    }
+
+    #[test]
+    fn memory_stats_reports_pressure() {
+        let mut backend = test_backend();
+        seed_context(&mut backend, "c1", "s1", "/repo/a.rs");
+        let manager = MemoryManager::new(10, 1000);
+        let stats = handle_memory_stats(&manager, &backend, 2, 3, 4);
+        // Used bytes are above the 10-byte soft limit → soft pressure.
+        assert_eq!(stats["used_bytes"].as_u64().unwrap() > 10, true);
+        assert_eq!(stats["pressure"], "soft");
+        assert_eq!(stats["sessions"], 2);
+        assert_eq!(stats["connections"], 3);
+        assert_eq!(stats["pending"], 4);
+        assert_eq!(stats["soft_limit"], 10);
+        assert_eq!(stats["hard_limit"], 1000);
+    }
+
+    #[test]
+    fn debug_panic_panics() {
+        let result = std::panic::catch_unwind(|| {
+            // Silence the "panic in test" noise by asserting the panic payload.
+            let _ = handle_debug_panic();
+        });
+        assert!(result.is_err());
     }
 
     #[test]

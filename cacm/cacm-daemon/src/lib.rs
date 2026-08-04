@@ -13,14 +13,23 @@
 //! - `server` — the axum HTTP + WebSocket server: frame parsing/routing,
 //!   request/reply correlation, and `cacm.session_activity` push
 //!   notifications broadcast to all connected clients.
+//! - `memory` — the memory manager: budgets, pressure levels, and store
+//!   admission so the daemon degrades instead of OOM-ing.
+//! - `crashpad` — crash reports + a collectible daemon log; combined with the
+//!   restart loop in `main` this gives the daemon self-heal.
 
+pub mod crashpad;
 pub mod handlers;
+pub mod memory;
 pub mod server;
 pub mod storage;
 
+pub use crashpad::{CrashInfo, Crashpad};
 pub use handlers::{
-    handle_inject, handle_ping, handle_query, handle_sessions, handle_store_context,
+    handle_inject, handle_memory_stats, handle_ping, handle_query, handle_sessions,
+    handle_store_context,
 };
+pub use memory::{MemoryManager, MemoryPressure, MemoryStats};
 pub use server::{
     broadcast_activity, dispatch, AppState, RpcError, RpcNotification, RpcRequest, RpcResponse,
 };

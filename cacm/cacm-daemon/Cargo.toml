@@ -45,8 +45,10 @@ hex = "0.4"
 
 # Logging + stream utilities for the WebSocket handler.
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "registry"] }
 futures-util = { version = "0.3", features = ["sink"] }
+# Non-blocking file log sink (crashpad: collect logs for post-mortem).
+tracing-appender = "0.2"
 
 [dev-dependencies]
 # Real WebSocket client for HTTP-layer integration tests (handshake 403/503,

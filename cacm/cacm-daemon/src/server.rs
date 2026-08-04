@@ -16,6 +16,7 @@
 //! still in flight is rejected, and the map also serves `/healthz` and logs.
 
 use crate::handlers;
+use crate::memory::MemoryManager;
 use crate::storage::Storage;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
@@ -32,6 +33,7 @@ use futures_util::SinkExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -106,6 +108,13 @@ impl RpcError {
             message: message.into(),
         }
     }
+    /// Memory-pressure rejection (exposed to clients, unlike `-32000`).
+    pub fn memory_exhausted(message: impl Into<String>) -> Self {
+        Self {
+            code: -32002,
+            message: message.into(),
+        }
+    }
 }
 
 /// A reply frame: exactly one of `result` / `error` is present.
@@ -174,6 +183,12 @@ pub struct AppState {
     /// the operator opts in per origin. The daemon is unauthenticated, so it
     /// must not be reachable from arbitrary web pages.
     pub allow_origins: Arc<Vec<String>>,
+    /// Memory manager (budgets, pressure, store admission).
+    pub memory: MemoryManager,
+    /// Debug mode (`--debug`): enables `cacm.debug.panic`.
+    pub debug: bool,
+    /// Directory crash reports and the daemon log are collected in.
+    pub crash_dir: Arc<PathBuf>,
     /// Pre-serialized notification broadcast to every connected client.
     pub events: broadcast::Sender<String>,
     pub started_at: DateTime<Utc>,
@@ -194,6 +209,9 @@ impl AppState {
             next_conn: Arc::new(AtomicU64::new(0)),
             active_connections: Arc::new(AtomicUsize::new(0)),
             allow_origins: Arc::new(Vec::new()),
+            memory: MemoryManager::defaults(),
+            debug: false,
+            crash_dir: Arc::new(PathBuf::from("./crashes")),
             events,
             started_at: Utc::now(),
         }
@@ -261,7 +279,7 @@ pub fn build_router(state: AppState) -> Router {
 
 /// HTTP health check — plain JSON, no WebSocket upgrade required.
 async fn health(State(state): State<AppState>) -> impl IntoResponse {
-    let (storage_name, session_count) = {
+    let (storage_name, session_count, used, pressure) = {
         let storage = match state.storage.lock() {
             Ok(s) => s,
             Err(_) => {
@@ -272,13 +290,22 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
             }
         };
         let sessions = state.sessions.lock().map(|s| s.len()).unwrap_or(0);
-        (storage.name().to_string(), sessions)
+        let used = storage.memory_bytes();
+        let pressure = state.memory.pressure(used);
+        (storage.name().to_string(), sessions, used, pressure)
     };
     let body = json!({
         "status": "ok",
         "storage": storage_name,
         "sessions": session_count,
         "pending": state.pending_count(),
+        "memory": {
+            "used_bytes": used,
+            "soft_limit": state.memory.soft_limit(),
+            "hard_limit": state.memory.hard_limit(),
+            "pressure": pressure,
+        },
+        "crash_dir": state.crash_dir.display().to_string(),
         "uptime_secs": (Utc::now() - state.started_at).num_seconds(),
         "version": env!("CARGO_PKG_VERSION"),
     });
@@ -506,11 +533,54 @@ fn route(state: &AppState, method: &str, params: &Value) -> Result<Value, RpcErr
                 .map_err(|_| RpcError::server_error("storage lock poisoned"))?;
             handlers::handle_inject(&**storage, params)
         }
+        "cacm.memory.stats" => {
+            let storage = state
+                .storage
+                .lock()
+                .map_err(|_| RpcError::server_error("storage lock poisoned"))?;
+            let sessions = state.sessions.lock().map(|s| s.len()).unwrap_or(0);
+            let connections = state.active_connections.load(Ordering::Relaxed);
+            let pending = state.pending_count();
+            Ok(handlers::handle_memory_stats(
+                &state.memory,
+                &**storage,
+                sessions,
+                connections,
+                pending,
+            ))
+        }
+        // Debug-only: deliberately panics the calling connection's task. The
+        // crashpad records it and the daemon keeps running (self-heals at the
+        // task level).
+        "cacm.debug.panic" if state.debug => handlers::handle_debug_panic(),
+        "cacm.debug.panic" => Err(RpcError::method_not_found("cacm.debug.panic")),
         "cacm.context.store" => {
             let mut storage = state
                 .storage
                 .lock()
                 .map_err(|_| RpcError::server_error("storage lock poisoned"))?;
+            // Memory manager: shrink under soft pressure, reject under hard.
+            let used = storage.memory_bytes();
+            match state.memory.pressure(used) {
+                crate::memory::MemoryPressure::Normal => {}
+                pressure => {
+                    let target = state.memory.shrink_target();
+                    if storage.memory_bytes() > target {
+                        storage.shrink_memory(target);
+                    }
+                    tracing::warn!(
+                        ?pressure,
+                        used,
+                        target,
+                        "memory pressure — shrinking storage before write"
+                    );
+                }
+            }
+            let incoming = serde_json::to_string(params).map(|s| s.len()).unwrap_or(0);
+            state
+                .memory
+                .admit(storage.memory_bytes(), incoming)
+                .map_err(RpcError::memory_exhausted)?;
             handlers::handle_store_context(&mut **storage, params)
         }
         other => Err(RpcError::method_not_found(other)),
