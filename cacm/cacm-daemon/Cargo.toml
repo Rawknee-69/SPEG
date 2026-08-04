@@ -47,3 +47,8 @@ hex = "0.4"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 futures-util = { version = "0.3", features = ["sink"] }
+
+[dev-dependencies]
+# Real WebSocket client for HTTP-layer integration tests (handshake 403/503,
+# frame-size limits, end-to-end ping).
+tokio-tungstenite = "0.24"

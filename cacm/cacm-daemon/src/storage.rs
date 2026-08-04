@@ -118,8 +118,9 @@ pub fn context_matches_project(ctx: &CrossAgentContext, project: &str) -> bool {
 ///
 /// `"a/b/c".within("a/b")` → true; `"a/bc".within("a/b")` → false. A base
 /// ending in a separator (including the root `"/"`) matches every path under
-/// it.
-fn path_within(path: &str, base: &str) -> bool {
+/// it. `pub(crate)` so the sessions handler can filter with the same rules as
+/// `cacm.query`.
+pub(crate) fn path_within(path: &str, base: &str) -> bool {
     if path == base {
         return true;
     }
@@ -184,22 +185,27 @@ impl MemoryGraph {
         }
         self.contexts.push(ctx.clone());
         self.total_bytes = self.total_bytes.saturating_add(cost);
-        // Enforce the caps: evict the oldest entries beyond the byte budget
-        // or the count cap.
-        while self.total_bytes > MEMORY_GRAPH_MAX_BYTES || self.contexts.len() > MEMORY_GRAPH_CAP {
-            let Some(oldest) = self
-                .contexts
-                .iter()
-                .enumerate()
-                .min_by_key(|(_, c)| c.timestamp)
-                .map(|(i, _)| i)
-            else {
-                break;
-            };
-            self.total_bytes = self
-                .total_bytes
-                .saturating_sub(context_cost(&self.contexts[oldest]));
-            self.contexts.remove(oldest);
+        // Enforce the caps in one O(n log n) pass (sort + truncate) rather
+        // than O(n) evictions, since this runs while the storage mutex is
+        // held and every request shares it.
+        if self.total_bytes > MEMORY_GRAPH_MAX_BYTES || self.contexts.len() > MEMORY_GRAPH_CAP {
+            self.contexts.sort_by_key(|c| c.timestamp); // ascending: oldest first
+                                                        // Keep the newest entries that fit under both caps.
+            let mut bytes = 0usize;
+            let mut first_kept = self.contexts.len();
+            for i in (0..self.contexts.len()).rev() {
+                let count_ok = self.contexts.len() - i <= MEMORY_GRAPH_CAP;
+                let next_bytes = bytes.saturating_add(context_cost(&self.contexts[i]));
+                if !count_ok || next_bytes > MEMORY_GRAPH_MAX_BYTES {
+                    break;
+                }
+                bytes = next_bytes;
+                first_kept = i;
+            }
+            if first_kept < self.contexts.len() {
+                self.contexts.drain(..first_kept);
+                self.total_bytes = bytes;
+            }
         }
     }
 

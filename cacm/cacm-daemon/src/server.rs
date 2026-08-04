@@ -49,7 +49,9 @@ pub const MAX_CONNECTIONS: usize = 64;
 /// A client request frame.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RpcRequest {
-    /// Client-chosen correlation id (number or string).
+    /// Client-chosen correlation id (number or string). Defaults to `null`
+    /// when absent so dispatch can reject it with `-32600` like an invalid id.
+    #[serde(default)]
     pub id: Value,
     /// Method name, e.g. `cacm.query`.
     pub method: String,
@@ -235,7 +237,13 @@ pub fn build_router(state: AppState) -> Router {
         let origins: Vec<HeaderValue> = state
             .allow_origins
             .iter()
-            .filter_map(|o| o.parse().ok())
+            .filter_map(|o| match o.parse() {
+                Ok(v) => Some(v),
+                Err(_) => {
+                    tracing::warn!(origin = %o, "ignoring unparseable --allow-origin value");
+                    None
+                }
+            })
             .collect();
         CorsLayer::new()
             .allow_origin(origins)
@@ -403,33 +411,30 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, _guard: Connectio
 /// JSON-RPC mandates a reply for every message (id is `null` when the frame
 /// could not be parsed).
 pub fn dispatch(state: &AppState, conn_id: u64, raw: &str) -> String {
-    let parsed: Value = match serde_json::from_str(raw) {
-        Ok(value) => value,
+    let request: RpcRequest = match serde_json::from_str(raw) {
+        Ok(request) => request,
+        // Batch arrays (JSON arrays) and unparseable frames both land here.
         Err(_) => return response_json(RpcResponse::err(Value::Null, RpcError::parse_error())),
     };
 
-    // Reject batch arrays (out of scope) and frames without scalar ids.
-    let id = match parsed.get("id") {
-        Some(id) if id.is_number() || id.is_string() => id.clone(),
-        _ => {
-            return response_json(RpcResponse::err(
-                Value::Null,
-                RpcError::invalid_request("request must carry a numeric or string 'id'"),
-            ))
-        }
+    // Reject frames without a numeric or string id (missing id is `null` via
+    // `#[serde(default)]`).
+    let id = if request.id.is_number() || request.id.is_string() {
+        request.id
+    } else {
+        return response_json(RpcResponse::err(
+            Value::Null,
+            RpcError::invalid_request("request must carry a numeric or string 'id'"),
+        ));
     };
-    let method = parsed
-        .get("method")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string();
+    let method = request.method;
     if method.is_empty() {
         return response_json(RpcResponse::err(
             id,
             RpcError::invalid_request("request must carry a non-empty 'method'"),
         ));
     }
-    let params = parsed.get("params").cloned().unwrap_or_else(|| json!({}));
+    let params = request.params;
 
     // Request/reply correlation: a still-in-flight id is a duplicate. The key
     // is scoped by connection, so concurrent clients reusing ids don't clash.
@@ -811,5 +816,81 @@ mod tests {
         assert_eq!(value["event"], "cacm.session_activity");
         assert_eq!(value["data"]["session_id"], "fox");
         assert_eq!(value["data"]["agent_type"], "jcode");
+    }
+
+    // ---- HTTP-layer WebSocket handshake tests (real server + tungstenite) ----
+
+    /// Spawn the daemon router on an ephemeral loopback port.
+    async fn spawn_test_server(state: AppState) -> String {
+        let app = build_router(state);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        format!("ws://{addr}/ws")
+    }
+
+    #[tokio::test]
+    async fn ws_handshake_rejects_disallowed_origin() {
+        let mut state = test_state();
+        state.allow_origins = Arc::new(vec!["http://ok.example".to_string()]);
+        let url = spawn_test_server(state).await;
+
+        use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+        let mut request = url.into_client_request().unwrap();
+        request
+            .headers_mut()
+            .insert(ORIGIN, HeaderValue::from_static("http://evil.example"));
+        let result = tokio_tungstenite::connect_async(request).await;
+        assert!(
+            result.is_err(),
+            "disallowed origin must fail the handshake (403)"
+        );
+    }
+
+    #[tokio::test]
+    async fn ws_handshake_allows_listed_origin_and_serves_ping() {
+        let mut state = test_state();
+        state.allow_origins = Arc::new(vec!["http://ok.example".to_string()]);
+        let url = spawn_test_server(state).await;
+
+        use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+        let mut request = url.into_client_request().unwrap();
+        request
+            .headers_mut()
+            .insert(ORIGIN, HeaderValue::from_static("http://ok.example"));
+        let (mut ws, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+
+        use futures_util::{SinkExt, StreamExt};
+        ws.send(tokio_tungstenite::tungstenite::Message::Text(
+            r#"{"id":1,"method":"cacm.ping","params":{}}"#.into(),
+        ))
+        .await
+        .unwrap();
+        let reply = ws.next().await.unwrap().unwrap();
+        let text = match reply {
+            tokio_tungstenite::tungstenite::Message::Text(t) => t.to_string(),
+            other => panic!("expected a text reply, got {other:?}"),
+        };
+        let value: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(value["id"], 1);
+        assert_eq!(value["result"], "pong");
+        let _ = ws.close(None).await;
+    }
+
+    #[tokio::test]
+    async fn ws_handshake_rejects_connections_over_cap() {
+        let state = test_state();
+        state
+            .active_connections
+            .store(MAX_CONNECTIONS, Ordering::Relaxed);
+        let url = spawn_test_server(state).await;
+
+        let result = tokio_tungstenite::connect_async(&url).await;
+        assert!(
+            result.is_err(),
+            "connection over the cap must fail the handshake (503)"
+        );
     }
 }

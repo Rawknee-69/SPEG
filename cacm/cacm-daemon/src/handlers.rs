@@ -79,8 +79,11 @@ pub fn handle_sessions(
     let mut all: Vec<AgentSession> = guard.values().cloned().collect();
     drop(guard);
     if !project.is_empty() {
+        // Same separator-aware rules as cacm.query (via storage::path_within),
+        // plus an exact session-id match for directory-named sessions.
         all.retain(|s| {
-            s.session_id.contains(project) || s.path.to_string_lossy().contains(project)
+            s.session_id == project
+                || crate::storage::path_within(&s.path.to_string_lossy(), project)
         });
     }
     all.sort_by_key(|s| s.created_at);

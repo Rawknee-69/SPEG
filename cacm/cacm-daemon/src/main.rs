@@ -57,9 +57,16 @@ struct Cli {
 }
 
 /// Is `host` a loopback address? Anything else exposes the unauthenticated
-/// daemon to the network and requires `--expose`.
+/// daemon to the network and requires `--expose`. Conservative: unknown host
+/// names (other than `localhost`) are treated as non-loopback.
 fn is_loopback_host(host: &str) -> bool {
-    host == "localhost" || host == "127.0.0.1" || host == "::1" || host.starts_with("127.")
+    let host = host.trim();
+    host == "localhost"
+        || host == "127.0.0.1"
+        || host == "::1"
+        || host == "[::1]"
+        || host.starts_with("127.")
+        || host.starts_with("::ffff:127.")
 }
 
 #[tokio::main]
@@ -275,6 +282,8 @@ mod tests {
         assert!(is_loopback_host("127.5.5.5"));
         assert!(is_loopback_host("localhost"));
         assert!(is_loopback_host("::1"));
+        assert!(is_loopback_host("[::1]"));
+        assert!(is_loopback_host("::ffff:127.0.0.1"));
         assert!(!is_loopback_host("0.0.0.0"));
         assert!(!is_loopback_host("192.168.1.10"));
         assert!(!is_loopback_host(""));
