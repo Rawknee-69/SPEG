@@ -27,9 +27,12 @@
 //!   over-matches phrases like "we are using the axum framework".
 //! - File paths are recognized from structured `file_modifications`, from
 //!   path-shaped tool inputs, and from text patterns (`Modified:` /
-//!   `Created:` / `Wrote to:` prefixes and file-extension tokens). Path
-//!   sanitization (strip `.`/`..`, absolute prefixes) lives in the parsers;
-//!   here paths are only de-quoted and de-punctuated. Extension tokens are
+//!   `Created:` / `Wrote to:` prefixes and file-extension tokens). All
+//!   sources are sanitized the same way the jcode parser sanitizes its
+//!   structured paths ([`sanitize_path`]): `.`/`..` segments are
+//!   collapsed and absolute prefixes (`/`, `\`, drive letters) stripped, so
+//!   traversal-style paths never leak verbatim into stored entries. Paths
+//!   are also de-quoted and de-punctuated. Extension tokens are
 //!   case-sensitive (`README.MD` is missed), and extensionless file names
 //!   mentioned in prose (`Created: Makefile`) are only picked up from the
 //!   structured `file_modifications` source (tool inputs are shape-guarded
@@ -424,9 +427,12 @@ fn normalize_path(raw: &str) -> String {
 }
 
 /// Add a normalized path to the output unless it is empty, has no alphabetic
-/// character (rejects `"3.14"`-style tokens), or is a duplicate.
+/// character (rejects `"3.14"`-style tokens), or is a duplicate. The path is
+/// sanitized (`.`, `..`, absolute prefixes) before storing.
 fn push_path(out: &mut Vec<String>, seen: &mut HashSet<String>, raw: &str) {
-    let path = normalize_path(raw);
+    let Some(path) = sanitize_path(&normalize_path(raw)) else {
+        return;
+    };
     if path.is_empty() || !path.chars().any(|c| c.is_ascii_alphabetic()) {
         return;
     }
@@ -435,16 +441,46 @@ fn push_path(out: &mut Vec<String>, seen: &mut HashSet<String>, raw: &str) {
     }
 }
 
-/// Add a structured path (from a parser's `file_modifications`) verbatim —
-/// trimmed, but not de-punctuated, so an authoritative `README!` stays
+/// Add a structured path (from a parser's `file_modifications`). Trimmed and
+/// sanitized, but not de-punctuated, so an authoritative `README!` stays
 /// intact. Deduplicates against the same seen-set.
 fn push_path_raw(out: &mut Vec<String>, seen: &mut HashSet<String>, raw: &str) {
-    let path = raw.trim().to_string();
+    let Some(path) = sanitize_path(raw) else {
+        return;
+    };
     if path.is_empty() || !path.chars().any(|c| c.is_ascii_alphabetic()) {
         return;
     }
     if seen.insert(path.clone()) {
         out.push(path);
+    }
+}
+
+/// Sanitize a path extracted from transcript data into a clean, relative
+/// form — identical semantics to the jcode parser's
+/// `normalize_extracted_path`: empty and `.` segments are dropped, `..`
+/// segments cancel the previous segment, and absolute prefixes (`/`, `\`,
+/// drive letters) are stripped. Traversal-style paths can therefore never
+/// leak verbatim into stored `CrossAgentContext` entries. Returns `None`
+/// when nothing meaningful remains.
+fn sanitize_path(raw: &str) -> Option<String> {
+    let mut segments: Vec<&str> = Vec::new();
+    for segment in raw.trim().split(['/', '\\']) {
+        match segment {
+            "" | "." => {}
+            ".." => {
+                segments.pop();
+            }
+            // Drive letters (e.g. `C:`) mark an absolute root; drop the
+            // marker but keep the remaining path segments.
+            segment if segment.len() == 2 && segment.ends_with(':') => {}
+            segment => segments.push(segment),
+        }
+    }
+    if segments.is_empty() {
+        None
+    } else {
+        Some(segments.join("/"))
     }
 }
 

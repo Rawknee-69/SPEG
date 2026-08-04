@@ -382,6 +382,43 @@ fn extract_file_changes_keeps_structured_paths_verbatim() {
 }
 
 #[test]
+fn extract_file_changes_sanitizes_traversal_paths() {
+    // `.`/`..` segments collapse and absolute prefixes are stripped, so
+    // traversal-style paths never leak verbatim into stored context.
+    let turns = vec![
+        simple(
+            0,
+            "hack",
+            "Modified: ../../etc/passwd\nCreated: /etc/shadow\nUpdated: C:\\repo\\src\\main.rs",
+        ),
+        turn(
+            1,
+            "tool",
+            Some("done"),
+            vec![tool(
+                "edit_file",
+                serde_json::json!({"path": "../../../src/evil.rs"}),
+            )],
+            vec![],
+        ),
+    ];
+    let paths = extract_file_changes(&turns);
+    assert_eq!(
+        paths,
+        vec![
+            "etc/passwd".to_string(),
+            "etc/shadow".to_string(),
+            "repo/src/main.rs".to_string(),
+            // The extension token also surfaces the final segment of a
+            // backslash path ("C:\repo\src\main.rs") — sanitized to the
+            // relative file name.
+            "main.rs".to_string(),
+            "src/evil.rs".to_string(),
+        ]
+    );
+}
+
+#[test]
 fn extract_file_changes_is_empty_for_no_signals() {
     assert!(extract_file_changes(&[simple(0, "hi", "hi")]).is_empty());
     assert!(extract_file_changes(&[]).is_empty());
