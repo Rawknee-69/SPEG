@@ -25,7 +25,7 @@
 |----|------|--------|-------|---------|-------|--------|
 | 1.1 | Package scaffolding | ✅ | `speg/package.json`, `speg/tsconfig.json`, `pnpm-workspace.yaml` | — | — | [1.1-scaffolding.md](../research/report/1.1-scaffolding.md) |
 | 1.2 | SPEG contracts (schemas) | ⬜ | `packages/contracts/src/speg/` (7 files) | 1.1 | — | — |
-| 1.3 | Jcode SDK Effect wrapper | ⬜ | `speg/src/jcode/` (8 files) | 1.1, 1.2 | — | — |
+| 1.3 | Jcode harness API client (from source) | ⬜ | `speg/src/jcode/` (10 files: protocol, framing, sockets, client, launch, errors, service, layer) | 1.1, 1.2 | — | — |
 | 1.4 | CACM session watcher | ⬜ | `speg/src/cacm/` (7 files) | 1.3 | — | — |
 | 1.5 | CACM context extractor | ⬜ | `speg/src/cacm/` (4 files) | 1.4 | — | — |
 | 1.6 | CACM context injector | ⬜ | `speg/src/cacm/` (4 files) | 1.5 | — | — |

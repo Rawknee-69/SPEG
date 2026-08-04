@@ -7,7 +7,7 @@
 
 ## Task 1.1: Package Scaffolding
 
-```
+````
 TASK: Create the @speg/core package scaffold inside the T3 Code monorepo.
 
 CONTEXT:
@@ -48,9 +48,10 @@ VERIFICATION:
 ```bash
 vp i                                    # Install dependencies
 vp run --filter @speg/core typecheck   # Must pass
-```
+````
 
 GIT COMMIT (only after verification passes):
+
 ```bash
 git add -A
 git commit -m "feat(speg): scaffold @speg/core package
@@ -62,6 +63,7 @@ git commit -m "feat(speg): scaffold @speg/core package
 
 AFTER COMMIT: Mark task 1.1 as ✅ in .plans/SPEG-CHECKLIST.md
 WRITE REPORT to research/report/1.1-scaffolding.md
+
 ```
 
 ---
@@ -69,9 +71,11 @@ WRITE REPORT to research/report/1.1-scaffolding.md
 ## Task 1.2: SPEG Contracts
 
 ```
+
 TASK: Define all SPEG wire types using Effect/Schema in packages/contracts/src/speg/.
 
 CONTEXT:
+
 - Follow EXACT patterns from packages/contracts/src/baseSchemas.ts (branded IDs)
 - Follow EXACT patterns from packages/contracts/src/rpc.ts (RPC definitions)
 - All types must have encode/decode roundtrip tests
@@ -79,6 +83,7 @@ CONTEXT:
 - Existing T3 Code contracts MUST NOT be modified — only new files added
 
 FILES TO CREATE:
+
 1. packages/contracts/src/speg/spegBaseSchemas.ts:
    - Branded IDs: SpegSessionId, SpegMemoryId, SpegContextId
    - Follow makeEntityId pattern from baseSchemas.ts
@@ -121,17 +126,20 @@ FILES TO CREATE:
    - Test invalid input rejection
 
 RESEARCH BEFORE IMPLEMENTING:
+
 - Read packages/contracts/src/baseSchemas.ts to understand branded ID pattern
 - Read packages/contracts/src/rpc.ts to understand RPC registration pattern
 - Search: "Effect Schema branded types best practices"
 
 VERIFICATION:
+
 ```bash
 vp run --filter @t3tools/contracts typecheck
 vp run test packages/contracts/test/speg/contracts.test.ts
 ```
 
 GIT COMMIT:
+
 ```bash
 git add -A
 git commit -m "feat(speg): define wire contracts for cross-agent platform
@@ -143,97 +151,188 @@ git commit -m "feat(speg): define wire contracts for cross-agent platform
 ```
 
 AFTER: Mark ✅ in checklist. Write report to research/report/1.2-contracts.md
+
 ```
 
 ---
 
-## Task 1.3: Jcode SDK Effect Wrapper
+## Task 1.3: Jcode Harness API Client (Build from Source)
 
 ```
-TASK: Build Effect-native service wrappers around @1jehuang/jcode-sdk.
+
+TASK: Build our own TypeScript client that speaks the Jcode harness API protocol.
+NO external SDK dependency. We write the client from scratch against the protocol spec.
 
 CONTEXT:
-- Jcode SDK provides JcodeClient.launch() and JcodeClient.connect()
-- We use launch() mode — private instance per project (isolated state)
-- All services follow Effect Service + Layer pattern
-- Service tags: "speg/jcode/ServiceName" (NOT "t3/")
-- Windows: Jcode binary at %LOCALAPPDATA%\jcode\bin\jcode.exe
-- Linux/macOS: ~/.local/bin/jcode or PATH
+
+- Jcode uses a simple NDJSON protocol over a local socket
+- Protocol is defined in jcode/crates/jcode-harness-api/src/ (Rust types)
+- 31 request types, 30 event types — we implement the ones we need
+- Transport: Unix socket (Linux/macOS) or Windows named pipe
+- We build Jcode from source: jcode/ directory is already in the repo
+- Run Jcode: spawn `jcode serve` (daemon) + `jcode api-bridge` (API access)
+
+REFERENCE FILES (read these first):
+
+- jcode/crates/jcode-harness-api/src/lib.rs — protocol types, version constants
+- jcode/crates/jcode-harness-api/src/requests.rs — all 31 request types
+- jcode/crates/jcode-harness-api/src/events.rs — all 30 event types
+- jcode/crates/jcode-harness-api/src/sockets.rs — socket path resolution
+- jcode/crates/jcode-transport/src/unix.rs — Unix socket implementation
+- jcode/crates/jcode-transport/src/windows.rs — Windows named pipe implementation
+
+PROTOCOL SPEC:
+
+- Framing: NDJSON — one JSON object per line, '\n' delimited, blank lines skipped
+- Every frame: {"v": 1, ...} (protocol version)
+- Client → Server: {"v":1, "id":<monotonic>, "req":"<kind>", ...params}\n
+- Server → Client (reply): {"v":1, "reply_to":<id>, "ev":"<kind>", ...data}\n
+- Server → Client (streaming): {"v":1, "ev":"<kind>", "session_id":"...", ...data}\n
+- Max frame size: 16 MiB
+
+SOCKET PATH:
+
+- Env override: $JCODE_API_SOCKET
+- Default: $JCODE_RUNTIME_DIR/jcode-api.sock or $XDG_RUNTIME_DIR/jcode-api.sock
+- Fallback: $TMPDIR/jcode-<user>/jcode-api.sock
+- Windows: named pipe derived via SHA256 of path stem
+
+HANDSHAKE:
+Client: {"v":1,"id":1,"req":"hello","min_version":1,"max_version":1,"client":"speg/0.1"}
+Server: {"v":1,"reply_to":1,"ev":"hello_ok","version":1,"server":"...","capabilities":[...]}
 
 FILES TO CREATE:
-1. speg/src/jcode/Errors.ts:
+
+1. speg/src/jcode/protocol.ts:
+   - TypeScript types matching jcode-harness-api exactly
+   - ApiRequest union: all 31 request kinds
+   - ApiEvent union: all 30 event kinds
+   - Frame types: ClientFrame, ServerFrame
+   - Version constants: API_VERSION = 1
+   - Helper: isKnownEvent(), isKnownRequest()
+   - Reference every field from the Rust source — no guessing
+
+2. speg/src/jcode/framing.ts:
+   - NdjsonEncoder: serialize frame → JSON line
+   - NdjsonDecoder: incremental line-by-line decoder
+   - Handle partial lines (buffer remainder)
+   - Skip blank lines
+   - Enforce 16 MiB max frame size
+   - Pure functions, no dependencies
+
+3. speg/src/jcode/sockets.ts:
+   - resolveApiSocketPath(): platform-specific path resolution
+   - Unix: read $JCODE_API_SOCKET or compute default path
+   - Windows: compute named pipe path from socket path stem
+   - Reference jcode-transport for exact logic
+
+4. speg/src/jcode/client.ts:
+   - JcodeClient class:
+     - constructor(socketPath): connect to api-bridge
+     - connect(): open socket, send hello, await hello_ok
+     - request(req): send request, await correlated reply
+     - events(sessionId?): async iterator over streaming events
+     - close(): close socket
+   - Request/reply correlation via pending Map<id, Deferred>
+   - Event routing: events with reply_to → resolve pending; without → streaming iterator
+   - Auto-reconnect with exponential backoff (1s → 16s cap)
+   - High-level methods mirroring protocol:
+     - createSession(workingDir) → session info
+     - sendMessage(id, content, opts?) → void
+     - run(id, content, opts?) → collected turn
+     - cancel(id) / softInterrupt(id, msg) → void
+     - listModels(id) / setModel(id, model) → models
+     - getHistory(id) / peekSession(id, limit?) → messages
+     - listSessions() → session list
+     - ping() → boolean
+
+5. speg/src/jcode/launch.ts:
+   - launchJcodeDaemon(opts): spawn `jcode serve` as child process
+   - Build Jcode first: run `cargo build --release` in jcode/ dir
+   - Find binary: jcode/target/release/jcode
+   - Wait for daemon socket to appear (poll with timeout)
+   - launchApiBridge(): spawn `jcode api-bridge` after daemon ready
+   - Health check: ping the bridge
+   - Shutdown: kill processes gracefully (SIGTERM → SIGKILL after timeout)
+   - Platform: Unix uses setsid() to detach, Windows uses CREATE_NEW_PROCESS_GROUP
+
+6. speg/src/jcode/Errors.ts:
    - JcodeNotFoundError: { searchedPaths: string[] }
-   - JcodeLaunchError: { reason: string, stderr?: string }
-   - JcodeSessionError: { sessionId: string, reason: string }
-   - JcodeTimeoutError: { operation: string, timeoutMs: number }
+   - JcodeBuildError: { reason: string, stderr: string }
+   - JcodeLaunchError: { reason: string }
+   - ProtocolError: { code: string, message: string }
+   - ConnectionError: { socketPath: string, reason: string }
    - All extend Schema.TaggedErrorClass
-   - Export union type: JcodeError
 
-2. speg/src/jcode/Services/JcodeInstanceManager.ts:
-   - Shape: { readonly launch: (opts: LaunchOptions) => Effect<JcodeClient, JcodeError>; readonly healthCheck: () => Effect<boolean, JcodeError>; readonly shutdown: () => Effect<void> }
-   - LaunchOptions: { workingDir: string; jcodeHome?: string; inheritLogins?: boolean }
-   - Service tag: "speg/jcode/JcodeInstanceManager"
+7. speg/src/jcode/Services/JcodeService.ts:
+   - Effect service wrapping JcodeClient lifecycle
+   - Shape: launch, healthCheck, shutdown, createSession, sendMessage, streamEvents
+   - Service tag: "speg/jcode/JcodeService"
 
-3. speg/src/jcode/Layers/JcodeInstanceManagerLive.ts:
-   - Layer.effect(JcodeInstanceManager, ...)
-   - Platform detection for binary path
-   - Launch with JcodeClient.launch()
-   - Health check: client.ping()
-   - Shutdown: client.close()
-   - On Windows: resolve %LOCALAPPDATA% path
-   - On Unix: check ~/.local/bin/jcode first, then PATH
+8. speg/src/jcode/Layers/JcodeServiceLive.ts:
+   - Layer.effect(JcodeService, ...)
+   - Launch Jcode daemon + api-bridge on startup
+   - Health check periodically (every 30s)
+   - Graceful shutdown on server stop
+   - Fork-parked behind ServerActivation
 
-4. speg/src/jcode/Services/JcodeSessionBridge.ts:
-   - Shape: { readonly createSession: (opts) => Effect<SessionInfo, JcodeError>; readonly sendMessage: (id, msg, opts?) => Effect<void>; readonly streamEvents: (id) => Stream<ApiEvent>; readonly cancel: (id) => Effect<void> }
-   - Service tag: "speg/jcode/JcodeSessionBridge"
+9. speg/test/jcode/protocol.test.ts:
+   - Test frame encode/decode roundtrip
+   - Test all request types serialize correctly
+   - Test all event types deserialize correctly
+   - Test NDJSON decoder handles partial lines
+   - Test unknown event kinds don't crash
 
-5. speg/src/jcode/Layers/JcodeSessionBridgeLive.ts:
-   - Maps between SPEG concepts and Jcode SDK calls
-   - Stream events via async iterator → Effect Stream
-   - Handle permission requests, interrupts
-
-6. speg/src/jcode/Services/JcodeMemoryAccess.ts:
-   - Shape: { readonly search: (query) => Effect<MemoryEntry[], JcodeError>; readonly store: (entry) => Effect<void>; readonly delete: (id) => Effect<void> }
-   - Service tag: "speg/jcode/JcodeMemoryAccess"
-
-7. speg/src/jcode/Layers/JcodeMemoryAccessLive.ts:
-   - Wraps Jcode's memory tools via agent session
-   - For MVP: use a lightweight agent session for memory operations
-   - Future: direct memory graph access if SDK supports it
-
-8. speg/src/jcode/index.ts — export all services and layers
-
-9. speg/test/jcode/InstanceManager.test.ts:
-   - Mock JcodeClient for unit tests
-   - Test binary path resolution per platform
-   - Test launch → health → shutdown lifecycle
-   - Test error paths (binary not found, launch timeout)
+10. speg/test/jcode/client.test.ts:
+    - Mock Unix socket for unit tests
+    - Test handshake flow
+    - Test request/reply correlation
+    - Test streaming events
+    - Test reconnect behavior
+    - Test error handling (connection refused, timeout)
 
 RESEARCH:
-- Read @1jehuang/jcode-sdk TypeScript declarations (in node_modules after install)
-- Read docs at https://jcode.sh/sdk for API reference
-- Search: "JcodeClient.launch vs connect best practices"
-- Search: "Effect Layer pattern service implementation"
+
+- Read ALL files in jcode/crates/jcode-harness-api/src/
+- Read jcode/crates/jcode-transport/src/unix.rs for socket details
+- Read jcode/crates/jcode-transport/src/windows.rs for named pipe details
+- Search: "Node.js Unix domain socket client"
+- Search: "Windows named pipe Node.js"
+- Search: "NDJSON streaming parser TypeScript"
 
 VERIFICATION:
+
 ```bash
 vp run --filter @speg/core typecheck
-vp run test speg/test/jcode/
+vp run test speg/test/jcode/protocol.test.ts
+vp run test speg/test/jcode/client.test.ts
+
+# Integration test (requires Jcode built):
+cd jcode && cargo build --release
+cd .. && node -e "
+  const { JcodeClient } = require('./speg/dist/jcode/client.js');
+  // ... test full flow
+"
 ```
 
 GIT COMMIT:
+
 ```bash
 git add -A
-git commit -m "feat(speg): add Effect-native Jcode SDK wrappers
+git commit -m "feat(speg): build Jcode harness API client from protocol spec
 
-- JcodeInstanceManager: launch/health/shutdown with platform paths
-- JcodeSessionBridge: session creation, messaging, event streaming
-- JcodeMemoryAccess: memory graph read/write
-- Service + Layer pattern with tagged errors
-- Unit tests with mocked Jcode SDK"
+- TypeScript types matching jcode-harness-api Rust crate exactly
+- NDJSON encoder/decoder with incremental parsing
+- Platform socket resolution (Unix + Windows named pipe)
+- JcodeClient: connect, request/reply, streaming events, reconnect
+- Jcode daemon + api-bridge lifecycle management
+- Effect service wrapper with health checks and graceful shutdown
+- Zero external SDK dependencies — pure protocol implementation
+- Unit tests with mock socket; integration test with real Jcode"
 ```
 
-AFTER: Mark ✅ in checklist. Write report to research/report/1.3-jcode-sdk.md
+AFTER: Mark ✅ in checklist. Write report to research/report/1.3-jcode-client.md
+
 ```
 
 ---
@@ -241,9 +340,11 @@ AFTER: Mark ✅ in checklist. Write report to research/report/1.3-jcode-sdk.md
 ## Task 1.4: CACM Session Watcher
 
 ```
+
 TASK: Build a cross-platform filesystem watcher that monitors agent session directories.
 
 CONTEXT:
+
 - CACM = Cross-Agent Context Manager
 - Watch multiple agent session directories for new activity
 - Parse each agent's session format into canonical AgentTurn
@@ -252,6 +353,7 @@ CONTEXT:
 - Pluggable parser interface for different agent types
 
 FILES TO CREATE:
+
 1. speg/src/cacm/Errors.ts:
    - SessionWatchError: { path: string, reason: string }
    - SessionParseError: { sessionPath: string, agentType: string, reason: string }
@@ -303,18 +405,21 @@ FILES TO CREATE:
 11. speg/src/cacm/index.ts — export all
 
 RESEARCH:
+
 - Search: "chokidar vs fs.watch Windows reliability"
 - Search: "best way to watch multiple directories Node.js"
 - Read Jcode transcript.jsonl format (sample in ~/.jcode/sessions/ if available)
 - Search: "NDJSON parsing streaming Node.js"
 
 VERIFICATION:
+
 ```bash
 vp run --filter @speg/core typecheck
 vp run test speg/test/cacm/SessionWatcher.test.ts
 ```
 
 GIT COMMIT:
+
 ```bash
 git add -A
 git commit -m "feat(speg): add CACM session watcher with Jcode parser
@@ -329,6 +434,7 @@ git commit -m "feat(speg): add CACM session watcher with Jcode parser
 ```
 
 AFTER: Mark ✅ in checklist. Write report to research/report/1.4-session-watcher.md
+
 ```
 
 ---
@@ -336,9 +442,11 @@ AFTER: Mark ✅ in checklist. Write report to research/report/1.4-session-watche
 ## Task 1.5: CACM Context Extractor
 
 ```
+
 TASK: Extract context from agent turns and store in Jcode memory graph.
 
 CONTEXT:
+
 - Subscribe to SessionWatcher's activity stream
 - For each new turn, extract key context
 - Batch turns within a session (every 5 turns or at session end)
@@ -347,6 +455,7 @@ CONTEXT:
 - Use KeyedCoalescingWorker from @t3tools/shared for per-session batching
 
 FILES TO CREATE:
+
 1. speg/src/cacm/ExtractionHeuristics.ts:
    - extractTaskDescription(turn): string | null
      - First user message in session = task description
@@ -386,18 +495,21 @@ FILES TO CREATE:
    - Test error resilience (bad turn data doesn't crash)
 
 RESEARCH:
+
 - Search: "NLP keyword extraction JavaScript without ML"
 - Search: "extract file paths from text regex"
 - Read @t3tools/shared KeyedCoalescingWorker pattern
 - Read Jcode MemoryEntry schema from research/06-jcode-internals.md
 
 VERIFICATION:
+
 ```bash
 vp run --filter @speg/core typecheck
 vp run test speg/test/cacm/ContextExtractor.test.ts
 ```
 
 GIT COMMIT:
+
 ```bash
 git add -A
 git commit -m "feat(speg): add CACM context extractor with heuristics
@@ -411,6 +523,7 @@ git commit -m "feat(speg): add CACM context extractor with heuristics
 ```
 
 AFTER: Mark ✅ in checklist. Write report to research/report/1.5-context-extractor.md
+
 ```
 
 ---
@@ -418,9 +531,11 @@ AFTER: Mark ✅ in checklist. Write report to research/report/1.5-context-extrac
 ## Task 1.6: CACM Context Injector
 
 ```
+
 TASK: Query memory graph, format context, inject into new agent sessions.
 
 CONTEXT:
+
 - When user starts a new session with any agent, inject relevant context
 - Query Jcode memory graph for recent activity in the project
 - Rank by recency × relevance × confidence
@@ -428,6 +543,7 @@ CONTEXT:
 - Inject via appropriate mechanism per agent
 
 FILES TO CREATE:
+
 1. speg/src/cacm/InjectionFormatters.ts:
    - formatForSpeg(contexts: CrossAgentContext[]): string
      - Format: bullet list with agent name + time ago
@@ -472,18 +588,21 @@ FILES TO CREATE:
    - Test deduplication
 
 RESEARCH:
+
 - Search: "exponential decay scoring algorithm"
 - Search: "LLM context injection best practices"
 - Read Jcode memory search from research/06-jcode-internals.md
 - Search: "ranking algorithm recency relevance confidence"
 
 VERIFICATION:
+
 ```bash
 vp run --filter @speg/core typecheck
 vp run test speg/test/cacm/ContextInjector.test.ts
 ```
 
 GIT COMMIT:
+
 ```bash
 git add -A
 git commit -m "feat(speg): add CACM context injector with cross-agent formatting
@@ -496,6 +615,7 @@ git commit -m "feat(speg): add CACM context injector with cross-agent formatting
 ```
 
 AFTER: Mark ✅ in checklist. Write report to research/report/1.6-context-injector.md
+
 ```
 
 ---
@@ -503,9 +623,11 @@ AFTER: Mark ✅ in checklist. Write report to research/report/1.6-context-inject
 ## Task 1.7: SPEG Server Integration
 
 ```
+
 TASK: Wire SPEG services into the T3 Code server. Add WebSocket RPC routes.
 
 CRITICAL RULES:
+
 - DO NOT modify existing T3 Code RPC methods or behavior
 - Add new SPEG routes following EXISTING ws.ts patterns exactly
 - Use authorizeEffect + observeRpcEffect for all new handlers
@@ -513,13 +635,14 @@ CRITICAL RULES:
 - SPEG Layer composition follows existing server.ts patterns
 
 FILES TO CREATE:
+
 1. apps/server/src/speg/SpegLayer.ts:
    - Compose all SPEG services into one Layer
    - SpegLayer = Layer.mergeAll(
-       JcodeInstanceManagerLive,
-       SessionWatcherLive.pipe(Layer.provide(JcodeInstanceManagerLive)),
-       ContextExtractorLive.pipe(Layer.provide(SessionWatcherLive)),
-       ContextInjectorLive.pipe(Layer.provide(ContextExtractorLive)),
+     JcodeInstanceManagerLive,
+     SessionWatcherLive.pipe(Layer.provide(JcodeInstanceManagerLive)),
+     ContextExtractorLive.pipe(Layer.provide(SessionWatcherLive)),
+     ContextInjectorLive.pipe(Layer.provide(ContextExtractorLive)),
      )
    - Export as SpegLayer
 
@@ -556,11 +679,13 @@ FILES TO CREATE:
    - Test: existing T3 Code RPC still works (regression check)
 
 RESEARCH:
+
 - Read apps/server/src/ws.ts to understand EXACT route registration pattern
 - Read apps/server/src/server.ts to understand EXACT layer composition
 - Search: "Effect RPC server route registration pattern"
 
 VERIFICATION:
+
 ```bash
 vp run --filter @speg/core typecheck
 vp run --filter @t3tools/server typecheck
@@ -569,6 +694,7 @@ vp run test apps/server/test/speg/SpegIntegration.test.ts
 ```
 
 GIT COMMIT:
+
 ```bash
 git add -A
 git commit -m "feat(speg): integrate SPEG services into T3 Code server
@@ -582,6 +708,7 @@ git commit -m "feat(speg): integrate SPEG services into T3 Code server
 ```
 
 AFTER: Mark ✅ in checklist. Write report to research/report/1.7-server-integration.md
+
 ```
 
 ---
@@ -589,9 +716,11 @@ AFTER: Mark ✅ in checklist. Write report to research/report/1.7-server-integra
 ## Task 1.8: Desktop Build & Windows Packaging
 
 ```
+
 TASK: Package SPEG into a working Windows Electron desktop application.
 
 CONTEXT:
+
 - Existing T3 Code desktop app wraps web in Electron
 - SPEG adds new routes + components to web → desktop inherits them
 - Windows build: NSIS installer + portable .exe
@@ -599,6 +728,7 @@ CONTEXT:
 - Target: Windows x64, macOS ARM64/x64, Linux x64
 
 FILES TO CREATE/MODIFY:
+
 1. apps/desktop/src/speg/SpegDesktopBridge.ts:
    - Desktop IPC handlers for SPEG-specific operations
    - SpegJcodeStatus: check Jcode binary installation
@@ -632,12 +762,14 @@ FILES TO CREATE/MODIFY:
    - Same as above but for macOS/Linux targets
 
 RESEARCH:
+
 - Read apps/desktop/src/main.ts to understand EXACT initialization
 - Read existing electron-builder.yml for config patterns
 - Search: "electron-builder Windows NSIS configuration"
 - Search: "bundle external binary with Electron app"
 
 VERIFICATION:
+
 ```bash
 # On Windows:
 powershell -File scripts/build-speg-desktop.ps1
@@ -648,6 +780,7 @@ vp run --filter @t3tools/desktop typecheck
 ```
 
 GIT COMMIT:
+
 ```bash
 git add -A
 git commit -m "feat(speg): add desktop packaging with Windows build
@@ -660,6 +793,7 @@ git commit -m "feat(speg): add desktop packaging with Windows build
 ```
 
 AFTER: Mark ✅ in checklist. Write report to research/report/1.8-desktop-build.md
+
 ```
 
 ---
@@ -667,10 +801,13 @@ AFTER: Mark ✅ in checklist. Write report to research/report/1.8-desktop-build.
 ## Task 1.9: Phase 1 Integration Test & Cleanup
 
 ```
+
 TASK: End-to-end verification that Phase 1 is complete and production-ready.
 
 WHAT TO DO:
+
 1. Run full typecheck on all SPEG files:
+
    ```bash
    vp run --filter @speg/core typecheck
    vp run --filter @t3tools/contracts typecheck
@@ -680,6 +817,7 @@ WHAT TO DO:
    ```
 
 2. Run all SPEG tests:
+
    ```bash
    vp run test speg/test/
    vp run test packages/contracts/test/speg/
@@ -687,11 +825,13 @@ WHAT TO DO:
    ```
 
 3. Run lint on changed files:
+
    ```bash
    vp lint
    ```
 
 4. Start dev server to verify SPEG endpoints:
+
    ```bash
    vp run dev
    # Verify in another terminal:
@@ -700,6 +840,7 @@ WHAT TO DO:
    ```
 
 5. Build desktop for Windows:
+
    ```bash
    powershell -File scripts/build-speg-desktop.ps1
    # Verify .exe exists and can launch
@@ -713,6 +854,7 @@ WHAT TO DO:
 FILES CHANGED: None (verification only)
 
 EXIT CRITERIA:
+
 - [ ] All typecheck passes
 - [ ] All tests pass (0 failures)
 - [ ] Lint clean (0 errors)
@@ -721,6 +863,7 @@ EXIT CRITERIA:
 - [ ] Git tag created
 
 GIT COMMIT:
+
 ```bash
 # Only if there are lint/type fixes needed
 git add -A
@@ -732,6 +875,7 @@ AFTER: Write final Phase 1 report to research/report/1.9-phase1-complete.md
 Mark Phase 1 header as ✅ in SPEG-CHECKLIST.md
 
 PHASE 1 COMPLETE. Ready for Phase 2.
+
 ```
 
 ---
@@ -747,3 +891,4 @@ Phases 2-6 follow the same pattern. Each task gets:
 6. Report instructions
 
 Copy the pattern above for each new task.
+```
