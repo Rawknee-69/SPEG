@@ -137,7 +137,7 @@ fn path_within(path: &str, base: &str) -> bool {
 /// persistence — that is what the harness write path (task 1.8) and the
 /// SQLite fallback provide. Storing the same id again replaces the old entry
 /// (matching SQLite's `INSERT OR REPLACE`), and the store is bounded both by
-/// entry count and by a total-content byte budget, so an unauthenticated
+/// entry count and by a total string-data byte budget, so an unauthenticated
 /// `cacm.context.store` loop cannot grow memory without bound.
 #[derive(Default)]
 pub struct MemoryGraph {
@@ -145,16 +145,27 @@ pub struct MemoryGraph {
     contexts: Vec<CrossAgentContext>,
     /// Sessions keyed by session id.
     sessions: HashMap<String, AgentSession>,
-    /// Approximate total content bytes (used for the eviction budget).
+    /// Approximate total string-data bytes (used for the eviction budget).
     total_bytes: usize,
 }
 
 /// Maximum entries kept in a [`MemoryGraph`]; the oldest is evicted beyond
 /// this.
 pub const MEMORY_GRAPH_CAP: usize = 10_000;
-/// Maximum total content bytes kept in a [`MemoryGraph`]; the oldest entries
-/// are evicted beyond this.
+/// Maximum total string-data bytes kept in a [`MemoryGraph`]; the oldest
+/// entries are evicted beyond this.
 pub const MEMORY_GRAPH_MAX_BYTES: usize = 64 << 20; // 64 MiB
+
+/// Approximate in-memory cost of an entry: total bytes of its string fields
+/// (id, session_id, content, and every file path / decision / error).
+fn context_cost(ctx: &CrossAgentContext) -> usize {
+    ctx.id.len()
+        + ctx.session_id.len()
+        + ctx.content.len()
+        + ctx.file_paths.iter().map(String::len).sum::<usize>()
+        + ctx.decisions.iter().map(String::len).sum::<usize>()
+        + ctx.errors.iter().map(String::len).sum::<usize>()
+}
 
 impl MemoryGraph {
     pub fn new() -> Self {
@@ -162,16 +173,17 @@ impl MemoryGraph {
     }
 
     pub fn store_context(&mut self, ctx: &CrossAgentContext) {
+        let cost = context_cost(ctx);
         // Replace same-id entries so repeated stores don't duplicate results
         // or grow the store.
         if let Some(pos) = self.contexts.iter().position(|c| c.id == ctx.id) {
             self.total_bytes = self
                 .total_bytes
-                .saturating_sub(self.contexts[pos].content.len());
+                .saturating_sub(context_cost(&self.contexts[pos]));
             self.contexts.remove(pos);
         }
         self.contexts.push(ctx.clone());
-        self.total_bytes = self.total_bytes.saturating_add(ctx.content.len());
+        self.total_bytes = self.total_bytes.saturating_add(cost);
         // Enforce the caps: evict the oldest entries beyond the byte budget
         // or the count cap.
         while self.total_bytes > MEMORY_GRAPH_MAX_BYTES || self.contexts.len() > MEMORY_GRAPH_CAP {
@@ -186,7 +198,7 @@ impl MemoryGraph {
             };
             self.total_bytes = self
                 .total_bytes
-                .saturating_sub(self.contexts[oldest].content.len());
+                .saturating_sub(context_cost(&self.contexts[oldest]));
             self.contexts.remove(oldest);
         }
     }
