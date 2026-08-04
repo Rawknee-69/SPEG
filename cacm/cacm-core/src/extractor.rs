@@ -30,11 +30,11 @@
 //!   `Created:` / `Wrote to:` prefixes and file-extension tokens). Path
 //!   sanitization (strip `.`/`..`, absolute prefixes) lives in the parsers;
 //!   here paths are only de-quoted and de-punctuated. Extension tokens are
-//!   case-sensitive (`README.MD` is missed), and text tokens starting with a
-//!   separator (`.hidden` / `/src/main.rs` in prose) are rejected by the
-//!   boundary checks — the structured sources carry those paths reliably.
-//!   Extensionless file names mentioned in prose (`Created: Makefile`) are
-//!   likewise only picked up from the structured sources.
+//!   case-sensitive (`README.MD` is missed), and extensionless file names
+//!   mentioned in prose (`Created: Makefile`) are only picked up from the
+//!   structured `file_modifications` source (tool inputs are shape-guarded
+//!   like text tokens). Sentence-ending punctuation right after a path
+//!   (`src/main.rs.`) is tolerated.
 
 use crate::types::{AgentTurn, AgentType, ContextType, CrossAgentContext};
 use chrono::{DateTime, Utc};
@@ -136,8 +136,9 @@ pub fn extract_file_changes(turns: &[AgentTurn]) -> Vec<String> {
 
     for turn in turns {
         // 1. Structured modifications (authoritative; includes Delete/Rename).
+        //    Taken verbatim — no de-punctuation of parser-extracted paths.
         for fm in &turn.file_modifications {
-            push_path(&mut out, &mut seen, &fm.path);
+            push_path_raw(&mut out, &mut seen, &fm.path);
         }
         // 2. Path-shaped tool inputs ("parse tool calls for file paths").
         for tool in &turn.tool_calls {
@@ -434,11 +435,25 @@ fn push_path(out: &mut Vec<String>, seen: &mut HashSet<String>, raw: &str) {
     }
 }
 
+/// Add a structured path (from a parser's `file_modifications`) verbatim —
+/// trimmed, but not de-punctuated, so an authoritative `README!` stays
+/// intact. Deduplicates against the same seen-set.
+fn push_path_raw(out: &mut Vec<String>, seen: &mut HashSet<String>, raw: &str) {
+    let path = raw.trim().to_string();
+    if path.is_empty() || !path.chars().any(|c| c.is_ascii_alphabetic()) {
+        return;
+    }
+    if seen.insert(path.clone()) {
+        out.push(path);
+    }
+}
+
 /// Extract paths from a tool-call input: every string value found under a
 /// [`TOOL_PATH_KEYS`] key (e.g. `edit_file` → `{"path": "src/lib.rs"}`,
-/// `rename` → `{"old_path": "a.rs", "new_path": "b.rs"}`). Non-object
-/// inputs, non-string values, empty strings, and duplicate keys yield
-/// nothing extra.
+/// `rename` → `{"old_path": "a.rs", "new_path": "b.rs"}`). Values must be
+/// path-like ([`is_path_like`]) — the same shape guard text tokens get, so
+/// prose under a loose key (`{"file": "some prose"}`) is not stored. The
+/// parser-populated `file_modifications` source carries extensionless names.
 fn paths_from_tool_input(input: &serde_json::Value) -> Vec<String> {
     let Some(obj) = input.as_object() else {
         return Vec::new();
@@ -448,7 +463,7 @@ fn paths_from_tool_input(input: &serde_json::Value) -> Vec<String> {
     for key in TOOL_PATH_KEYS {
         if let Some(text) = obj.get(*key).and_then(|v| v.as_str()) {
             let trimmed = text.trim();
-            if !trimmed.is_empty() && seen.insert(trimmed.to_string()) {
+            if !trimmed.is_empty() && is_path_like(trimmed) && seen.insert(trimmed.to_string()) {
                 paths.push(trimmed.to_string());
             }
         }
@@ -483,15 +498,21 @@ fn paths_from_text(text: &str) -> Vec<String> {
 }
 
 /// The regex crate has no look-around, so token boundaries are enforced in
-/// code: the characters immediately before/after `[start, end)` must not be
-/// path chars.
+/// code: the character before the token must not be a path char, and the
+/// character after it (ignoring terminal sentence punctuation such as a
+/// trailing `.` or `,`) must not be a path char either. This accepts
+/// `src/main.rs.` at a sentence end while still rejecting `x/y.rs.foo`.
 fn token_boundaries_ok(text: &str, start: usize, end: usize) -> bool {
     let prev_ok =
         start == 0 || !is_path_char(text[..start].chars().next_back().expect("byte boundary"));
-    let next_ok =
-        end == text.len() || !is_path_char(text[end..].chars().next().expect("byte boundary"));
+    let after = text[end..].trim_start_matches(TERMINAL_PUNCTUATION);
+    let next_ok = after.chars().next().is_none_or(|c| !is_path_char(c));
     prev_ok && next_ok
 }
+
+/// Punctuation that may terminate a path token in prose (`src/main.rs.`,
+/// `Cargo.toml,`). A path char after any of these still continues the token.
+const TERMINAL_PUNCTUATION: [char; 9] = ['.', ',', ';', ':', '!', '?', ')', ']', '}'];
 
 /// A text token is path-like when it contains a path separator (`/` or `\`)
 /// or ends in a known [`FILE_EXTENSIONS`] extension — this rejects bare

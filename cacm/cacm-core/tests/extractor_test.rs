@@ -337,6 +337,51 @@ fn extract_file_changes_prefixes_reject_bare_words() {
 }
 
 #[test]
+fn extract_file_changes_extension_token_at_sentence_end() {
+    // A trailing period is sentence punctuation, not part of the path.
+    let turns = vec![simple(0, "i edited src/main.rs.", "done.")];
+    assert_eq!(
+        extract_file_changes(&turns),
+        vec!["src/main.rs".to_string()]
+    );
+    // ...but a path char after punctuation still continues a longer token.
+    let suffix = vec![simple(0, "see x/y.rs.foo", "ok")];
+    assert!(extract_file_changes(&suffix).is_empty());
+}
+
+#[test]
+fn extract_file_changes_tool_inputs_reject_prose() {
+    let turns = vec![turn(
+        0,
+        "merge",
+        Some("done"),
+        vec![
+            tool("some_tool", serde_json::json!({"file": "some prose"})),
+            tool(
+                "branch",
+                serde_json::json!({"source": "main", "destination": "feature"}),
+            ),
+            tool("edit_file", serde_json::json!({"path": "src/lib.rs"})),
+        ],
+        vec![],
+    )];
+    assert_eq!(extract_file_changes(&turns), vec!["src/lib.rs".to_string()]);
+}
+
+#[test]
+fn extract_file_changes_keeps_structured_paths_verbatim() {
+    // Structured (parser-extracted) paths are authoritative: no de-punctuation.
+    let turns = vec![turn(
+        0,
+        "x",
+        Some("ok"),
+        vec![],
+        vec![file("README!", FileChangeKind::Modify)],
+    )];
+    assert_eq!(extract_file_changes(&turns), vec!["README!".to_string()]);
+}
+
+#[test]
 fn extract_file_changes_is_empty_for_no_signals() {
     assert!(extract_file_changes(&[simple(0, "hi", "hi")]).is_empty());
     assert!(extract_file_changes(&[]).is_empty());
