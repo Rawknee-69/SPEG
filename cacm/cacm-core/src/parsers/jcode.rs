@@ -567,9 +567,10 @@ fn file_modification_from_tool_use(name: &str, input: &serde_json::Value) -> Opt
 }
 
 /// The file path from a tool input, accepting the field names jcode and its
-/// provider aliases use (`file_path`, `path`, `file`).
+/// provider aliases use (`file_path`, `path`, `file`). `old_path` is included
+/// for rename-style tools whose source path names it explicitly.
 fn tool_input_path(input: &serde_json::Value) -> Option<String> {
-    for key in ["file_path", "path", "file"] {
+    for key in ["file_path", "path", "old_path", "file"] {
         if let Some(path) = input.get(key).and_then(|v| v.as_str()) {
             let path = path.trim();
             if !path.is_empty() {

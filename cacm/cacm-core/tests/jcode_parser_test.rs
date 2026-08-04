@@ -207,6 +207,25 @@ fn parses_journal_entry_line_into_one_turn() {
     assert_eq!(turn.tool_calls[0].name, "write");
     assert_eq!(turn.file_modifications.len(), 1);
     assert_eq!(turn.file_modifications[0].path, "notes.md");
+    // Timestamp comes from the newest appended message, not the journal meta.
+    assert_eq!(
+        turn.timestamp.to_rfc3339(),
+        "2026-06-25T10:00:04+00:00"
+    );
+}
+
+#[test]
+fn rename_tool_uses_old_path_as_the_modified_file() {
+    let line = r#"{"id":"msg-r","role":"assistant","content":[
+      {"type":"tool_use","id":"tc-r","name":"rename","input":{"old_path":"src/old.rs","new_path":"src/new.rs"}}
+    ],"timestamp":"2026-06-25T10:00:00Z"}"#;
+    let parser = cacm_core::parsers::jcode::JcodeSessionParser::new();
+    let turn = parser.parse_turn(line).unwrap();
+    assert_eq!(turn.tool_calls.len(), 1);
+    assert_eq!(turn.tool_calls[0].name, "rename");
+    assert_eq!(turn.file_modifications.len(), 1);
+    assert_eq!(turn.file_modifications[0].path, "src/old.rs");
+    assert_eq!(turn.file_modifications[0].change, FileChangeKind::Rename);
 }
 
 #[test]
