@@ -229,6 +229,42 @@ fn rename_tool_uses_old_path_as_the_modified_file() {
 }
 
 #[test]
+fn extracted_paths_are_normalized_against_traversal_and_absolute_roots() {
+    let parser = cacm_core::parsers::jcode::JcodeSessionParser::new();
+
+    // A single assistant message carrying every shape of hostile/absolute path.
+    let line = r#"{"id":"msg-p","role":"assistant","content":[
+      {"type":"tool_use","id":"t1","name":"edit","input":{"file_path":"../etc/passwd","old_string":"a","new_string":"b"}},
+      {"type":"tool_use","id":"t2","name":"write","input":{"path":"/workspace/demo/src/lib.rs","content":"x"}},
+      {"type":"tool_use","id":"t3","name":"write","input":{"file_path":"C:\\proj\\file.rs","content":"x"}},
+      {"type":"tool_use","id":"t4","name":"write","input":{"file_path":"./src/ok.rs","content":"x"}},
+      {"type":"tool_use","id":"t5","name":"write","input":{"file_path":"a/../../b","content":"x"}}
+    ],"timestamp":"2026-06-25T10:00:00Z"}"#;
+    let turn = parser.parse_turn(line).unwrap();
+    let paths: Vec<&str> = turn
+        .file_modifications
+        .iter()
+        .map(|m| m.path.as_str())
+        .collect();
+    assert_eq!(
+        paths,
+        vec!["etc/passwd", "workspace/demo/src/lib.rs", "proj/file.rs", "src/ok.rs", "b"]
+    );
+}
+
+#[test]
+fn oversized_turn_line_is_rejected() {
+    let parser = cacm_core::parsers::jcode::JcodeSessionParser::new();
+    let mut padded = String::from(r#"{"id":"x","role":"user","content":[]"#);
+    padded.push_str(&"a".repeat(1024 * 1024 + 16));
+    padded.push('}');
+    assert!(matches!(
+        parser.parse_turn(&padded),
+        Err(ParseError::InvalidFormat(_))
+    ));
+}
+
+#[test]
 fn parse_turn_rejects_garbage() {
     let parser = cacm_core::parsers::jcode::JcodeSessionParser::new();
     assert!(matches!(

@@ -35,6 +35,13 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, Copy, Default)]
 pub struct JcodeSessionParser;
 
+/// Safety cap for reading a session file (snapshots carry full transcripts,
+/// but maliciously padded files must not OOM the daemon). Generous vs real
+/// files: jcode itself rolls journals into snapshots at 512 KiB.
+const MAX_SESSION_FILE_BYTES: u64 = 64 * 1024 * 1024;
+/// Safety cap for one `parse_turn` line (a transcript or journal entry).
+const MAX_TURN_LINE_BYTES: usize = 1024 * 1024;
+
 impl JcodeSessionParser {
     pub fn new() -> Self {
         Self
@@ -233,7 +240,15 @@ impl AgentSessionParser for JcodeSessionParser {
     ///
     /// `turn_index` is always 0 — this method has no positional context; the
     /// caller (watcher/daemon) assigns real indexes when sequencing turns.
+    ///
+    /// Oversized lines (over [`MAX_TURN_LINE_BYTES`]) are rejected outright so
+    /// padded/malicious input cannot exhaust memory.
     fn parse_turn(&self, raw: &str) -> ParseResult<AgentTurn> {
+        if raw.len() > MAX_TURN_LINE_BYTES {
+            return Err(ParseError::InvalidFormat(format!(
+                "transcript line exceeds {MAX_TURN_LINE_BYTES} bytes"
+            )));
+        }
         let value: serde_json::Value = serde_json::from_str(raw)
             .map_err(|err| ParseError::InvalidFormat(format!("not valid JSON: {err}")))?;
         if value.get("meta").is_some() {
@@ -271,7 +286,7 @@ impl AgentSessionParser for JcodeSessionParser {
 // ---------------------------------------------------------------------------
 
 fn parse_snapshot(path: &Path) -> ParseResult<AgentSession> {
-    let raw = std::fs::read_to_string(path)?;
+    let raw = read_session_file(path)?;
     let snapshot: SessionSnapshot = serde_json::from_str(&raw)
         .map_err(|err| ParseError::InvalidFormat(format!("{}: {err}", path.display())))?;
     Ok(AgentSession {
@@ -344,7 +359,7 @@ fn session_from_journal(path: &Path) -> ParseResult<AgentSession> {
         )));
     }
 
-    let raw = std::fs::read_to_string(path)?;
+    let raw = read_session_file(path)?;
     // Journal lines are append-ordered, so the last parseable entry's status
     // is authoritative; created_at (not stored in journals) falls back to the
     // newest `updated_at` seen.
@@ -372,6 +387,19 @@ fn session_from_journal(path: &Path) -> ParseResult<AgentSession> {
         created_at: created_at.unwrap_or_else(Utc::now),
         status,
     })
+}
+
+/// Read a session file with a size cap so oversized (or maliciously padded)
+/// files are rejected before any allocation.
+fn read_session_file(path: &Path) -> ParseResult<String> {
+    let metadata = std::fs::metadata(path)?;
+    if metadata.len() > MAX_SESSION_FILE_BYTES {
+        return Err(ParseError::InvalidFormat(format!(
+            "{}: session file exceeds {MAX_SESSION_FILE_BYTES} bytes",
+            path.display()
+        )));
+    }
+    std::fs::read_to_string(path).map_err(ParseError::from)
 }
 
 /// Map a jcode `SessionStatus` (string or `{"Variant":...}` object form) to
@@ -568,15 +596,44 @@ fn file_modification_from_tool_use(name: &str, input: &serde_json::Value) -> Opt
 
 /// The file path from a tool input, accepting the field names jcode and its
 /// provider aliases use (`file_path`, `path`, `file`). `old_path` is included
-/// for rename-style tools whose source path names it explicitly.
+/// for rename-style tools whose source path names it explicitly. The value is
+/// normalized (see [`normalize_extracted_path`]) before it becomes a
+/// [`FileModification`].
 fn tool_input_path(input: &serde_json::Value) -> Option<String> {
     for key in ["file_path", "path", "old_path", "file"] {
         if let Some(path) = input.get(key).and_then(|v| v.as_str()) {
-            let path = path.trim();
-            if !path.is_empty() {
-                return Some(path.to_string());
-            }
+            return normalize_extracted_path(path);
         }
     }
     None
+}
+
+/// Normalize a path extracted from a tool input into a clean, root-relative
+/// form: drops `.` segments, cancels `..` segments, and strips absolute
+/// prefixes (`/`, `\`, drive letters). Traversal-style paths can therefore
+/// never leak verbatim into [`FileModification`] / `CrossAgentContext` records
+/// that later tooling might resolve against a project root.
+fn normalize_extracted_path(raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let mut segments: Vec<&str> = Vec::new();
+    for segment in raw.split(['/', '\\']) {
+        match segment {
+            "" | "." => {}
+            ".." => {
+                segments.pop();
+            }
+            // Drive letters (e.g. `C:`) mark an absolute root; drop the
+            // marker but keep the remaining path segments.
+            segment if segment.len() == 2 && segment.ends_with(':') => {}
+            segment => segments.push(segment),
+        }
+    }
+    if segments.is_empty() {
+        None
+    } else {
+        Some(segments.join("/"))
+    }
 }
