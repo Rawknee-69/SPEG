@@ -388,9 +388,17 @@ async fn watcher_task(mut rx: mpsc::Receiver<SessionActivity>, state: AppState) 
 }
 
 /// Bind a TCP listener with SO_REUSEADDR so a self-heal restart can rebind
-/// while pre-crash connections are still in TIME_WAIT.
+/// while pre-crash connections are still in TIME_WAIT. (On Windows this also
+/// allows another local process to bind the same port — acceptable under the
+/// loopback-only threat model.) `localhost` is resolved to the loopback
+/// address since the binder accepts IP literals only.
 async fn bind_listener(host: &str, port: u16) -> Result<tokio::net::TcpListener, std::io::Error> {
     use tokio::net::TcpSocket;
+    let host = if host == "localhost" {
+        "127.0.0.1"
+    } else {
+        host
+    };
     // IPv6 literals need brackets in the host:port form.
     let host_port = if host.contains(':') {
         format!("[{host}]:{port}")
