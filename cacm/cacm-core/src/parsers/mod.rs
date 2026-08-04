@@ -2,8 +2,20 @@
 //!
 //! [`AgentSessionParser`] defines the interface every per-agent session parser
 //! (Claude Code, Codex, OpenCode, Cursor, Jcode, ...) implements. Concrete
-//! parsers live in this crate's `parsers/` directory (added in later tasks);
-//! [`ParserRegistry`] holds one parser per [`AgentType`].
+//! parsers live in this crate's `parsers/` directory:
+//!
+//! - [`jcode`] — functional parser for jcode's own sessions (task 1.5).
+//! - [`claude`], [`codex`], [`opencode`], [`cursor`] — stubs that return
+//!   [`ParseError::NotImplemented`] until their Phase 2 tasks land.
+//!
+//! [`ParserRegistry`] holds one parser per [`AgentType`];
+//! [`ParserRegistry::with_defaults`] registers the full default set.
+
+pub mod claude;
+pub mod codex;
+pub mod cursor;
+pub mod jcode;
+pub mod opencode;
 
 use crate::types::{AgentSession, AgentTurn, AgentType};
 use std::collections::HashMap;
@@ -18,6 +30,8 @@ pub enum ParseError {
     InvalidFormat(String),
     /// The parser does not support the given agent type.
     UnsupportedAgent(AgentType),
+    /// The parser is a placeholder and does not implement parsing yet.
+    NotImplemented(String),
 }
 
 impl std::fmt::Display for ParseError {
@@ -26,8 +40,16 @@ impl std::fmt::Display for ParseError {
             ParseError::Io(err) => write!(f, "io error: {err}"),
             ParseError::InvalidFormat(detail) => write!(f, "invalid session format: {detail}"),
             ParseError::UnsupportedAgent(agent) => write!(f, "unsupported agent: {agent}"),
+            ParseError::NotImplemented(detail) => write!(f, "not implemented: {detail}"),
         }
     }
+}
+
+/// Build the [`ParseError::NotImplemented`] error used by Phase-2 stub parsers.
+pub(crate) fn not_implemented(agent: AgentType, method: &str) -> ParseError {
+    ParseError::NotImplemented(format!(
+        "{method} for agent {agent} (planned for Phase 2)"
+    ))
 }
 
 impl std::error::Error for ParseError {}
@@ -70,6 +92,19 @@ pub struct ParserRegistry {
 impl ParserRegistry {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A registry pre-populated with the default parser set:
+    /// the functional [`jcode::JcodeSessionParser`] plus Phase-2 stubs for
+    /// Claude Code, Codex, OpenCode, and Cursor.
+    pub fn with_defaults() -> Self {
+        let mut registry = Self::new();
+        let _ = registry.register(Box::new(jcode::JcodeSessionParser::new()));
+        let _ = registry.register(Box::new(claude::ClaudeCodeSessionParser::new()));
+        let _ = registry.register(Box::new(codex::CodexSessionParser::new()));
+        let _ = registry.register(Box::new(opencode::OpenCodeSessionParser::new()));
+        let _ = registry.register(Box::new(cursor::CursorSessionParser::new()));
+        registry
     }
 
     /// Register a parser, keyed by its own [`AgentSessionParser::agent_type`].
