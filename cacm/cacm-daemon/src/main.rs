@@ -272,9 +272,11 @@ async fn daemon_main(
     // Keep the crashpad's memory figure fresh for panic reports.
     tokio::spawn(memory_sampler(state.clone()));
 
-    // HTTP + WebSocket server. Loopback by default (see `--host`).
+    // HTTP + WebSocket server. Loopback by default (see `--host`). The
+    // listener sets SO_REUSEADDR so a self-heal restart can rebind while old
+    // connections are still draining (TIME_WAIT) after a crash.
     let app = build_router(state);
-    let listener = tokio::net::TcpListener::bind((cli.host.as_str(), cli.port)).await?;
+    let listener = bind_listener(&cli.host, cli.port).await?;
     let addr = listener.local_addr()?;
     tracing::info!(%addr, "cacm-daemon listening (ws://{addr}/ws, http://{addr}/healthz)");
 
@@ -383,6 +385,28 @@ async fn watcher_task(mut rx: mpsc::Receiver<SessionActivity>, state: AppState) 
             "session activity"
         );
     }
+}
+
+/// Bind a TCP listener with SO_REUSEADDR so a self-heal restart can rebind
+/// while pre-crash connections are still in TIME_WAIT.
+async fn bind_listener(host: &str, port: u16) -> Result<tokio::net::TcpListener, std::io::Error> {
+    use tokio::net::TcpSocket;
+    // IPv6 literals need brackets in the host:port form.
+    let host_port = if host.contains(':') {
+        format!("[{host}]:{port}")
+    } else {
+        format!("{host}:{port}")
+    };
+    let addr: std::net::SocketAddr = host_port
+        .parse()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    let socket = match addr {
+        std::net::SocketAddr::V4(_) => TcpSocket::new_v4()?,
+        std::net::SocketAddr::V6(_) => TcpSocket::new_v6()?,
+    };
+    socket.set_reuseaddr(true)?;
+    socket.bind(addr)?;
+    socket.listen(1024)
 }
 
 /// Backoff between self-heal restarts: 2s, 4s, 8s, … capped at 30s.

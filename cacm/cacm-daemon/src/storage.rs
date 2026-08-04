@@ -978,17 +978,16 @@ mod tests {
     #[test]
     fn sqlite_memory_bytes_reflects_stored_pages() {
         let mut backend = SqliteBackend::open_in_memory().unwrap();
-        assert!(
-            backend.memory_bytes() > 0,
-            "an empty sqlite db still has pages"
-        );
+        let before = backend.memory_bytes();
+        assert!(before > 0, "an empty sqlite db still has pages");
         for i in 0..20 {
             backend
                 .store_context(&sample_context(&format!("c{i}"), "s1", "/repo/f.rs"))
                 .unwrap();
         }
-        // More rows → at least as many pages (never shrinks for this test).
-        assert!(backend.memory_bytes() >= backend.memory_bytes());
+        // More rows → the page footprint does not shrink.
+        let after = backend.memory_bytes();
+        assert!(after >= before);
     }
 
     #[test]

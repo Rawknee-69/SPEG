@@ -494,12 +494,22 @@ pub fn dispatch(state: &AppState, conn_id: u64, raw: &str) -> String {
     }
 
     // Route to the handler. Storage access is short (SQLite/memory), so a
-    // blocking mutex is fine here.
-    let result = route(state, &method, &params);
+    // blocking mutex is fine here. A panicking handler (e.g. the debug-only
+    // cacm.debug.panic) must still release the pending entry, so the call is
+    // caught: the entry is removed, then the panic is resumed so the
+    // connection task dies as designed.
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        route(state, &method, &params)
+    }));
 
     if let Ok(mut pending) = state.pending.lock() {
         pending.remove(&id_key);
     }
+
+    let result = match result {
+        Ok(result) => result,
+        Err(panic) => std::panic::resume_unwind(panic),
+    };
 
     // Client errors (-3260x) are safe to echo; server errors (-32000) may
     // embed filesystem paths or backend internals, so log the detail and
@@ -747,6 +757,25 @@ mod tests {
         let state = test_state();
         call(&state, r#"{"id":9,"method":"cacm.ping","params":{}}"#);
         assert_eq!(state.pending_count(), 0);
+    }
+
+    #[test]
+    fn dispatch_clears_pending_when_handler_panics() {
+        let mut state = test_state();
+        state.debug = true;
+        // cacm.debug.panic must not leak its pending entry (the connection
+        // task dies, but the correlation map stays clean).
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            call(
+                &state,
+                r#"{"id":77,"method":"cacm.debug.panic","params":{}}"#,
+            )
+        }));
+        assert_eq!(state.pending_count(), 0);
+        // And the entry is reusable afterwards.
+        let resp = call(&state, r#"{"id":77,"method":"cacm.ping","params":{}}"#);
+        let value: Value = serde_json::from_str(&resp).unwrap();
+        assert_eq!(value["result"], "pong");
     }
 
     #[test]

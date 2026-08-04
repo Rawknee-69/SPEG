@@ -70,11 +70,10 @@ impl Crashpad {
         );
         let path = self.dir.join(name);
         let body = format!(
-            "CACM daemon crash report\n{}\n{}\n{}\n",
+            "CACM daemon crash report\n{}\n{}\n",
             serde_json::to_string_pretty(info)
                 .unwrap_or_else(|_| r#"{"serialize":"failed"}"#.into()),
-            "-".repeat(60),
-            info.backtrace
+            "-".repeat(60)
         );
         fs::write(&path, body)?;
         Ok(path)
