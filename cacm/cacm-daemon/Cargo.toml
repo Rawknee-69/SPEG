@@ -1,0 +1,9 @@
+[package]
+name = "cacm-daemon"
+version = "0.1.0"
+edition = "2021"
+description = "HTTP + WebSocket daemon for the Cross-Agent Context Manager (CACM)"
+license = "MIT"
+publish = false
+
+[dependencies]

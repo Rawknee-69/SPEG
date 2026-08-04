@@ -1,0 +1,6 @@
+# Rust build artifacts
+/target/
+**/target/
+
+# Machine-local cargo config (linker path is machine-specific)
+/.cargo/

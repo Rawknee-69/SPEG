@@ -1,0 +1,9 @@
+[package]
+name = "cacm-sdk-rs"
+version = "0.1.0"
+edition = "2021"
+description = "Rust SDK client for the CACM daemon"
+license = "MIT"
+publish = false
+
+[dependencies]
