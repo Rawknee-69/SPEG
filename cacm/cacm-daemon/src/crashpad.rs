@@ -133,7 +133,7 @@ impl Crashpad {
         let last_report = Arc::new(Mutex::new(Instant::now() - CRASH_REPORT_MIN_INTERVAL));
         let report_count = Arc::new(AtomicUsize::new(0));
         std::panic::set_hook(Box::new(move |info| {
-            let message = info.to_string();
+            let message = panic_payload_message(info);
             let backtrace = Backtrace::force_capture();
             let report = CrashInfo {
                 version: env!("CARGO_PKG_VERSION"),
@@ -156,10 +156,13 @@ impl Crashpad {
                 }
                 due
             };
-            let under_cap = report_count.fetch_add(1, Ordering::Relaxed) < CRASH_REPORT_MAX;
+            // Count reports *written*, not panics: an attacker burning 1000
+            // throttled panics must not silence reports for genuine crashes.
+            let under_cap = report_count.load(Ordering::Relaxed) < CRASH_REPORT_MAX;
             if report_due && under_cap {
                 match pad.write_report(&report) {
                     Ok(path) => {
+                        report_count.fetch_add(1, Ordering::Relaxed);
                         eprintln!(
                             "cacm-daemon panic — crash report written to {}",
                             path.display()
@@ -174,6 +177,19 @@ impl Crashpad {
             }
             previous(info);
         }));
+    }
+}
+
+/// Extract the panic payload's message (the `panic!("...")` string) without
+/// the `PanicHookInfo` location header, so reports and log lines are clean
+/// single lines.
+fn panic_payload_message(info: &std::panic::PanicHookInfo<'_>) -> String {
+    if let Some(s) = info.payload().downcast_ref::<&str>() {
+        (*s).to_string()
+    } else if let Some(s) = info.payload().downcast_ref::<String>() {
+        s.clone()
+    } else {
+        info.to_string()
     }
 }
 
@@ -242,47 +258,49 @@ mod tests {
     }
 
     #[test]
-    fn panic_hook_throttles_reports() {
-        let dir = temp_dir("throttle");
-        let pad = Crashpad::new(dir.clone()).unwrap();
-        pad.install_hook();
-
-        // Two panics back-to-back: the second is throttled (interval 30s), so
-        // only ONE crash report is written while the log gets both.
-        let _ = std::panic::catch_unwind(|| panic!("first panic"));
-        let _ = std::panic::catch_unwind(|| panic!("second panic"));
-
-        let reports = fs::read_dir(&dir)
-            .unwrap()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_name().to_string_lossy().starts_with("crash-"))
-            .count();
-        assert_eq!(
-            reports, 1,
-            "repeated panics must be throttled to one report"
-        );
-        let log = fs::read_to_string(dir.join("daemon.log")).unwrap();
-        assert!(log.contains("first panic"));
-        assert!(log.contains("second panic"));
-        let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn panic_hook_writes_crash_report() {
+    fn panic_hook_writes_and_throttles_reports() {
+        // Single test so the process-global hook is installed exactly once
+        // (parallel hook installations would race each other). Panics from
+        // other tests may reach this hook too, so report counts are asserted
+        // tolerantly while the log (append_log is never throttled) is
+        // asserted deterministically.
         let dir = temp_dir("hook");
         let pad = Crashpad::new(dir.clone()).unwrap();
         pad.install_hook();
 
-        let result = std::panic::catch_unwind(|| panic!("synthetic panic {}", "here"));
-        assert!(result.is_err());
+        let _ = std::panic::catch_unwind(|| panic!("synthetic panic {}", "here"));
+        let _ = std::panic::catch_unwind(|| panic!("second panic"));
+        let _ = std::panic::catch_unwind(|| panic!("third panic"));
 
-        let crash = fs::read_dir(&dir)
+        // Wiring: every panic lands in the collectible log.
+        let log = fs::read_to_string(dir.join("daemon.log")).unwrap();
+        assert!(log.contains("PANIC: synthetic panic here"));
+        assert!(log.contains("PANIC: second panic"));
+        assert!(log.contains("PANIC: third panic"));
+
+        // Throttle: at most ONE report carries our messages (a racing panic
+        // from another test may consume the 30s window first).
+        let ours = ["synthetic panic here", "second panic", "third panic"];
+        let with_ours = fs::read_dir(&dir)
             .unwrap()
             .filter_map(|e| e.ok())
-            .find(|e| e.file_name().to_string_lossy().starts_with("crash-"))
-            .expect("a crash report must be written");
-        let body = fs::read_to_string(crash.path()).unwrap();
-        assert!(body.contains("synthetic panic here"));
+            .map(|e| e.path())
+            .filter(|p| {
+                p.file_name()
+                    .map(|n| n.to_string_lossy().starts_with("crash-"))
+                    .unwrap_or(false)
+            })
+            .filter(|p| {
+                let body = fs::read_to_string(p).unwrap_or_default();
+                ours.iter().any(|m| body.contains(m))
+            })
+            .count();
+        assert!(
+            with_ours <= 1,
+            "repeated panics must be throttled to at most one report, got {with_ours}"
+        );
+        // The report-writing path itself is covered by
+        // `write_report_contains_panic_details`.
         let _ = fs::remove_dir_all(&dir);
     }
 }
