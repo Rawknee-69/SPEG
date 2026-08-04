@@ -19,8 +19,9 @@ use crate::handlers;
 use crate::storage::Storage;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::http::header::{HeaderMap, HeaderValue, ORIGIN};
+use axum::http::{Method, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use cacm_core::parsers::ParserRegistry;
@@ -31,6 +32,7 @@ use futures_util::SinkExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::broadcast;
@@ -150,8 +152,17 @@ pub struct AppState {
     pub sessions: Arc<Mutex<HashMap<String, AgentSession>>>,
     /// Registered session parsers (populated by task 1.5).
     pub registry: Arc<ParserRegistry>,
-    /// In-flight request ids → method, for request/reply correlation.
+    /// In-flight request ids → method, for request/reply correlation. Keyed by
+    /// `<connection id>:<request id>` so ids from different clients never
+    /// collide.
     pub pending: Arc<Mutex<HashMap<String, PendingRequest>>>,
+    /// Monotonic per-connection counter (used to scope the pending map).
+    pub next_conn: Arc<AtomicU64>,
+    /// Allowed WebSocket `Origin` headers. Empty = only clients that send no
+    /// Origin (e.g. node, the SDK) are accepted — browsers are rejected until
+    /// the operator opts in per origin. The daemon is unauthenticated, so it
+    /// must not be reachable from arbitrary web pages.
+    pub allow_origins: Arc<Vec<String>>,
     /// Pre-serialized notification broadcast to every connected client.
     pub events: broadcast::Sender<String>,
     pub started_at: DateTime<Utc>,
@@ -169,6 +180,8 @@ impl AppState {
             sessions: Arc::new(Mutex::new(sessions)),
             registry: Arc::new(registry),
             pending: Arc::new(Mutex::new(HashMap::new())),
+            next_conn: Arc::new(AtomicU64::new(0)),
+            allow_origins: Arc::new(Vec::new()),
             events,
             started_at: Utc::now(),
         }
@@ -191,12 +204,40 @@ pub fn broadcast_activity(tx: &broadcast::Sender<String>, activity: &SessionActi
     }
 }
 
+/// Is this WS upgrade request's Origin allowed?
+///
+/// Clients that send no Origin (node, the SDK, desktop tools) are always
+/// allowed; browser requests must match an entry in `allow`. The daemon is
+/// unauthenticated, so this is the only defense against malicious web pages
+/// reaching it via `127.0.0.1`.
+pub fn origin_allowed(origin: Option<&str>, allow: &[String]) -> bool {
+    match origin {
+        None => true,
+        Some(origin) => allow.iter().any(|allowed| allowed == origin),
+    }
+}
+
 /// Build the axum router (WebSocket + health endpoint + CORS).
 pub fn build_router(state: AppState) -> Router {
+    let cors = if state.allow_origins.is_empty() {
+        // Loopback default: browsers are blocked at the WS handshake anyway;
+        // /healthz leaks only status counters, so permissive is acceptable.
+        CorsLayer::permissive()
+    } else {
+        let origins: Vec<HeaderValue> = state
+            .allow_origins
+            .iter()
+            .filter_map(|o| o.parse().ok())
+            .collect();
+        CorsLayer::new()
+            .allow_origin(origins)
+            .allow_methods([Method::GET])
+            .allow_headers([axum::http::header::CONTENT_TYPE])
+    };
     Router::new()
         .route("/ws", get(ws_handler))
         .route("/healthz", get(health))
-        .layer(CorsLayer::permissive())
+        .layer(cors)
         .with_state(state)
 }
 
@@ -226,21 +267,35 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
     (StatusCode::OK, Json(body))
 }
 
-/// WebSocket upgrade handler.
-pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
+/// WebSocket upgrade handler. Rejects requests from origins not on the
+/// allow-list (browsers send an `Origin` header; non-browser clients usually
+/// don't).
+pub async fn ws_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Response {
+    let origin = headers.get(ORIGIN).and_then(|v| v.to_str().ok());
+    if !origin_allowed(origin, &state.allow_origins) {
+        tracing::warn!(?origin, "rejected WebSocket upgrade from disallowed origin");
+        return (StatusCode::FORBIDDEN, "origin not allowed").into_response();
+    }
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
 /// Per-connection loop: dispatch incoming frames and forward replies +
 /// broadcast notifications back over the socket.
 async fn handle_socket(mut socket: WebSocket, state: AppState) {
+    // Scope request/reply correlation per connection so two clients can use
+    // the same request ids concurrently without false "duplicate" rejections.
+    let conn_id = state.next_conn.fetch_add(1, Ordering::Relaxed);
     let mut event_rx = state.events.subscribe();
     loop {
         tokio::select! {
             maybe = socket.recv() => {
                 match maybe {
                     Some(Ok(Message::Text(text))) => {
-                        let payload = dispatch(&state, &text);
+                        let payload = dispatch(&state, conn_id, &text);
                         if socket.send(Message::Text(payload.into())).await.is_err() {
                             break;
                         }
@@ -277,9 +332,11 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
 
 /// Parse a raw client frame and route it to the matching handler.
 ///
-/// Always returns a serialized [`RpcResponse`]; JSON-RPC mandates a reply for
-/// every message (id is `null` when the frame could not be parsed).
-pub fn dispatch(state: &AppState, raw: &str) -> String {
+/// `conn_id` scopes the request/reply correlation map, so ids from different
+/// connections never collide. Always returns a serialized [`RpcResponse`];
+/// JSON-RPC mandates a reply for every message (id is `null` when the frame
+/// could not be parsed).
+pub fn dispatch(state: &AppState, conn_id: u64, raw: &str) -> String {
     let parsed: Value = match serde_json::from_str(raw) {
         Ok(value) => value,
         Err(_) => return response_json(RpcResponse::err(Value::Null, RpcError::parse_error())),
@@ -308,8 +365,9 @@ pub fn dispatch(state: &AppState, raw: &str) -> String {
     }
     let params = parsed.get("params").cloned().unwrap_or_else(|| json!({}));
 
-    // Request/reply correlation: a still-in-flight id is a duplicate.
-    let id_key = id.to_string();
+    // Request/reply correlation: a still-in-flight id is a duplicate. The key
+    // is scoped by connection, so concurrent clients reusing ids don't clash.
+    let id_key = format!("{conn_id}:{id}");
     {
         let mut pending = match state.pending.lock() {
             Ok(p) => p,
@@ -388,13 +446,18 @@ fn response_json(response: RpcResponse) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{JcodeBackend, Storage};
+    use crate::storage::JcodeBackend;
     use cacm_core::types::{AgentType, ContextType, CrossAgentContext};
     use std::path::PathBuf;
 
     fn test_state() -> AppState {
         let backend = JcodeBackend::new(PathBuf::from("C:\\nonexistent\\jcode-api.sock"));
         AppState::new(Box::new(backend), ParserRegistry::new(), HashMap::new())
+    }
+
+    /// Helper: dispatch a frame as if from connection 0.
+    fn call(state: &AppState, raw: &str) -> String {
+        dispatch(state, 0, raw)
     }
 
     fn seed(state: &AppState, id: &str, session: &str, path: &str) {
@@ -416,7 +479,7 @@ mod tests {
     #[test]
     fn dispatch_ping_roundtrip() {
         let state = test_state();
-        let resp = dispatch(&state, r#"{"id":1,"method":"cacm.ping","params":{}}"#);
+        let resp = call(&state, r#"{"id":1,"method":"cacm.ping","params":{}}"#);
         let value: Value = serde_json::from_str(&resp).unwrap();
         assert_eq!(value["id"], 1);
         assert_eq!(value["result"], "pong");
@@ -427,7 +490,7 @@ mod tests {
     fn dispatch_query_returns_entries() {
         let state = test_state();
         seed(&state, "c1", "s1", "/repo/a.rs");
-        let resp = dispatch(
+        let resp = call(
             &state,
             r#"{"id":2,"method":"cacm.query","params":{"project":"/repo","limit":10}}"#,
         );
@@ -448,11 +511,11 @@ mod tests {
                 AgentSession::new("abc", AgentType::Jcode, "/repo/abc", Utc::now()),
             );
         }
-        let resp = dispatch(&state, r#"{"id":3,"method":"cacm.sessions","params":{}}"#);
+        let resp = call(&state, r#"{"id":3,"method":"cacm.sessions","params":{}}"#);
         let value: Value = serde_json::from_str(&resp).unwrap();
         assert_eq!(value["result"]["sessions"].as_array().unwrap().len(), 1);
 
-        let resp = dispatch(
+        let resp = call(
             &state,
             r#"{"id":4,"method":"cacm.inject","params":{"sessionId":"abc","agent":"claude-code"}}"#,
         );
@@ -466,11 +529,11 @@ mod tests {
     #[test]
     fn dispatch_unknown_method_and_missing_id() {
         let state = test_state();
-        let resp = dispatch(&state, r#"{"id":1,"method":"cacm.nope","params":{}}"#);
+        let resp = call(&state, r#"{"id":1,"method":"cacm.nope","params":{}}"#);
         let value: Value = serde_json::from_str(&resp).unwrap();
         assert_eq!(value["error"]["code"], -32601);
 
-        let resp = dispatch(&state, r#"{"method":"cacm.ping"}"#);
+        let resp = call(&state, r#"{"method":"cacm.ping"}"#);
         let value: Value = serde_json::from_str(&resp).unwrap();
         assert_eq!(value["error"]["code"], -32600);
         assert_eq!(value["id"], Value::Null);
@@ -479,7 +542,7 @@ mod tests {
     #[test]
     fn dispatch_malformed_json_returns_parse_error() {
         let state = test_state();
-        let resp = dispatch(&state, "not json {");
+        let resp = call(&state, "not json {");
         let value: Value = serde_json::from_str(&resp).unwrap();
         assert_eq!(value["error"]["code"], -32700);
         assert_eq!(value["id"], Value::Null);
@@ -491,14 +554,14 @@ mod tests {
         {
             let mut pending = state.pending.lock().unwrap();
             pending.insert(
-                "7".into(),
+                "0:7".into(),
                 PendingRequest {
                     method: "cacm.ping".into(),
                     started_at: Instant::now(),
                 },
             );
         }
-        let resp = dispatch(&state, r#"{"id":7,"method":"cacm.ping","params":{}}"#);
+        let resp = call(&state, r#"{"id":7,"method":"cacm.ping","params":{}}"#);
         let value: Value = serde_json::from_str(&resp).unwrap();
         assert_eq!(value["error"]["code"], -32600);
         assert!(value["error"]["message"]
@@ -510,16 +573,29 @@ mod tests {
     }
 
     #[test]
+    fn dispatch_ids_are_scoped_per_connection() {
+        let state = test_state();
+        // Two connections both using id 1 concurrently must both succeed.
+        let a = dispatch(&state, 1, r#"{"id":1,"method":"cacm.ping","params":{}}"#);
+        let b = dispatch(&state, 2, r#"{"id":1,"method":"cacm.ping","params":{}}"#);
+        let va: Value = serde_json::from_str(&a).unwrap();
+        let vb: Value = serde_json::from_str(&b).unwrap();
+        assert_eq!(va["result"], "pong");
+        assert_eq!(vb["result"], "pong");
+        assert_eq!(state.pending_count(), 0);
+    }
+
+    #[test]
     fn dispatch_clears_pending_after_success() {
         let state = test_state();
-        dispatch(&state, r#"{"id":9,"method":"cacm.ping","params":{}}"#);
+        call(&state, r#"{"id":9,"method":"cacm.ping","params":{}}"#);
         assert_eq!(state.pending_count(), 0);
     }
 
     #[test]
     fn dispatch_store_context_extension() {
         let state = test_state();
-        let resp = dispatch(
+        let resp = call(
             &state,
             r#"{"id":5,"method":"cacm.context.store","params":{"context":{
                 "id":"ctx-5","session_id":"s5","agent_type":"codex","context_type":"pattern",
@@ -529,12 +605,29 @@ mod tests {
         );
         let value: Value = serde_json::from_str(&resp).unwrap();
         assert_eq!(value["result"]["stored"], "ctx-5");
-        let resp = dispatch(
+        let resp = call(
             &state,
             r#"{"id":6,"method":"cacm.query","params":{"project":"/repo"}}"#,
         );
         let value: Value = serde_json::from_str(&resp).unwrap();
         assert_eq!(value["result"]["entries"][0]["id"], "ctx-5");
+    }
+
+    #[test]
+    fn origin_allowed_checks_allow_list() {
+        let allow = vec!["http://localhost:5173".to_string()];
+        // Non-browser clients (no Origin) are always allowed.
+        assert!(origin_allowed(None, &allow));
+        // Allowed browser origin passes.
+        assert!(origin_allowed(Some("http://localhost:5173"), &allow));
+        // Anything else is rejected.
+        assert!(!origin_allowed(Some("http://evil.example"), &allow));
+        assert!(!origin_allowed(
+            Some("http://localhost:5173.evil.example"),
+            &allow
+        ));
+        // Empty allow-list: no browser origins accepted.
+        assert!(!origin_allowed(Some("http://localhost:5173"), &[]));
     }
 
     #[test]

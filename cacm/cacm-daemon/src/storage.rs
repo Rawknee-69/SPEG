@@ -99,8 +99,9 @@ pub trait Storage: Send + Sync {
 ///
 /// Matching is best-effort until parsers extract real project paths (task
 /// 1.5+): a context matches when its `session_id` equals `project`, when any
-/// of its `file_paths` starts with `project`, or when `project` is the
-/// wildcard `"*"` / empty (match everything).
+/// of its `file_paths` is `project` or lies under it (path-separator aware —
+/// `/repo` does NOT match `/repo2/x`), or when `project` is the wildcard
+/// `"*"` / empty (match everything).
 pub fn context_matches_project(ctx: &CrossAgentContext, project: &str) -> bool {
     if project.is_empty() || project == "*" {
         return true;
@@ -110,7 +111,24 @@ pub fn context_matches_project(ctx: &CrossAgentContext, project: &str) -> bool {
     }
     ctx.file_paths
         .iter()
-        .any(|p| p.starts_with(project) || project.starts_with(p))
+        .any(|p| path_within(p, project) || path_within(project, p))
+}
+
+/// Is `path` equal to `base`, or under it (separator-aware)?
+///
+/// `"a/b/c".within("a/b")` → true; `"a/bc".within("a/b")` → false. A base
+/// ending in a separator (including the root `"/"`) matches every path under
+/// it.
+fn path_within(path: &str, base: &str) -> bool {
+    if path == base {
+        return true;
+    }
+    if base.ends_with('/') || base.ends_with('\\') {
+        // Directory-style base (e.g. "/" or "/repo/"): any path below it.
+        return path.strip_prefix(base).is_some_and(|rest| !rest.is_empty());
+    }
+    path.strip_prefix(base)
+        .is_some_and(|rest| rest.starts_with('/') || rest.starts_with('\\'))
 }
 
 /// Shared in-memory store used by [`JcodeBackend`] (and tests).
@@ -136,13 +154,17 @@ impl MemoryGraph {
     }
 
     pub fn query_context(&self, project: &str, limit: usize) -> Vec<CrossAgentContext> {
-        self.contexts
+        // Order by timestamp descending — the same ordering the SQLite
+        // backend uses — so both backends rank identically.
+        let mut matching: Vec<CrossAgentContext> = self
+            .contexts
             .iter()
-            .rev() // newest insertion first
             .filter(|ctx| context_matches_project(ctx, project))
-            .take(limit)
             .cloned()
-            .collect()
+            .collect();
+        matching.sort_by_key(|c| std::cmp::Reverse(c.timestamp));
+        matching.truncate(limit);
+        matching
     }
 
     pub fn list_sessions(&self) -> Vec<AgentSession> {
@@ -599,25 +621,68 @@ mod tests {
         assert!(context_matches_project(&ctx, "*"));
         assert!(context_matches_project(&ctx, ""));
         assert!(!context_matches_project(&ctx, "/other"));
+        // Separator-aware: /repo must not match /repo2 or /repository.
+        let sibling = sample_context("c2", "sess-b", "/repo2/src/lib.rs");
+        assert!(!context_matches_project(&sibling, "/repo"));
+        assert!(context_matches_project(&sibling, "/repo2"));
+        // Querying a specific file matches that file's context.
+        assert!(context_matches_project(&ctx, "/repo/src/lib.rs"));
+    }
+
+    #[test]
+    fn path_within_is_separator_aware() {
+        assert!(path_within("/repo/src/lib.rs", "/repo"));
+        assert!(path_within("/repo", "/repo"));
+        assert!(path_within("/repo/src/lib.rs", "/repo/src/lib.rs"));
+        assert!(!path_within("/repo2/x", "/repo"));
+        assert!(!path_within("/repository/x", "/repo"));
+        assert!(path_within("/repo/x", "/repo"));
+        // Directional: "a under b". The reverse direction (querying a specific
+        // file) is handled by context_matches_project's second check.
+        assert!(!path_within("/repo", "/repo/src/lib.rs"));
+        // Root and trailing-separator bases match everything under them.
+        assert!(path_within("/repo/src/lib.rs", "/"));
+        assert!(path_within("/repo", "/"));
+        assert!(path_within("/repo/src/lib.rs", "/repo/"));
+        assert!(!path_within("/repo2", "/repo/"));
+        // Windows-style separators count too.
+        assert!(path_within("C:/repo/src/lib.rs", "C:/repo"));
+        assert!(!path_within("C:/repo2/x", "C:/repo"));
     }
 
     #[test]
     fn memory_graph_store_query_and_limit() {
         let mut graph = MemoryGraph::new();
-        graph.store_context(&sample_context("c1", "s1", "/a/f1.rs"));
-        graph.store_context(&sample_context("c2", "s2", "/b/f2.rs"));
-        graph.store_context(&sample_context("c3", "s1", "/a/f3.rs"));
+        let t0 = chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let t1 = t0 + chrono::Duration::minutes(1);
+        let t2 = t0 + chrono::Duration::minutes(2);
+        graph.store_context(&CrossAgentContext {
+            timestamp: t0,
+            ..sample_context("c1", "s1", "/a/f1.rs")
+        });
+        graph.store_context(&CrossAgentContext {
+            timestamp: t1,
+            ..sample_context("c2", "s2", "/b/f2.rs")
+        });
+        graph.store_context(&CrossAgentContext {
+            timestamp: t2,
+            ..sample_context("c3", "s1", "/a/f3.rs")
+        });
 
         let all = graph.query_context("*", 10);
         assert_eq!(all.len(), 3);
-        // Newest insertion first.
+        // Newest timestamp first, matching the SQLite backend ordering.
         assert_eq!(all[0].id, "c3");
+        assert_eq!(all[2].id, "c1");
 
         let repo_a = graph.query_context("/a", 10);
         assert_eq!(repo_a.len(), 2);
 
         let limited = graph.query_context("*", 2);
         assert_eq!(limited.len(), 2);
+        assert_eq!(limited[0].id, "c3");
     }
 
     #[test]
