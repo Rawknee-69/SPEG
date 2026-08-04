@@ -13,7 +13,7 @@
 | 1.1 | @speg/core TypeScript package scaffold | ✅ | TS | `speg/package.json`, `speg/tsconfig.json`, `pnpm-workspace.yaml` | — |
 | 1.2 | SPEG wire contracts (Effect/Schema) | ✅ | TS | `packages/contracts/src/speg/` (7 files), `contracts.test.ts` | 1.1 |
 | 1.3 | cacm-core Rust crate (types, watcher, parser trait) | ✅ | Rust | `cacm/cacm-core/` | — |
-| 1.4 | cacm-daemon (HTTP+WS server, JSON-RPC API) | ⬜ | Rust | `cacm/cacm-daemon/` | 1.3 |
+| 1.4 | cacm-daemon (HTTP+WS server, JSON-RPC API) | ✅ | Rust | `cacm/cacm-daemon/` | 1.3 |
 | 1.5 | Jcode session parser | ⬜ | Rust | `cacm/cacm-core/src/parsers/jcode.rs` | 1.3 |
 | 1.6 | Context extractor (heuristics) | ⬜ | Rust | `cacm/cacm-core/src/extractor.rs` | 1.5 |
 | 1.7 | Context injector (query + rank + format) | ⬜ | Rust | `cacm/cacm-core/src/injector.rs` | 1.6 |
