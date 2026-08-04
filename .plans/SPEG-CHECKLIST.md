@@ -6,7 +6,7 @@
 
 ---
 
-## Phase 1: Foundation (12 tasks — 6 done, 6 remaining)
+## Phase 1: Foundation (12 tasks — 7 done, 5 remaining)
 
 | ID | Task | Status | Lang | Files | Depends |
 |----|------|--------|------|-------|---------|
@@ -16,7 +16,7 @@
 | 1.4 | cacm-daemon (HTTP+WS server, JSON-RPC API) | ✅ | Rust | `cacm/cacm-daemon/` | 1.3 |
 | 1.5 | Jcode session parser | ✅ | Rust | `cacm/cacm-core/src/parsers/jcode.rs` | 1.3 |
 | 1.6 | Context extractor (heuristics) | ✅ | Rust | `cacm/cacm-core/src/extractor.rs` | 1.5 |
-| 1.7 | Context injector (query + rank + format) | ⬜ | Rust | `cacm/cacm-core/src/injector.rs` | 1.6 |
+| 1.7 | Context injector (query + rank + format) | ✅ | Rust | `cacm/cacm-core/src/injector.rs` | 1.6 |
 | 1.8 | cacm-sdk-rs + jcode-cacm-bridge | ⬜ | Rust | `cacm/cacm-sdk-rs/`, `jcode/crates/jcode-cacm-bridge/` | 1.4, 1.7 |
 | 1.9 | cacm-sdk-ts (@cacm/sdk npm package) | ⬜ | TS | `cacm/cacm-sdk-ts/` | 1.4 |
 | 1.10 | SPEG web UI (React, imports @cacm/sdk) | ⬜ | TS | `speg-web/` | 1.9 |
@@ -133,14 +133,14 @@
 ## Overall Progress
 
 ```
-Phase 1: █████████░░░░░░░░░░░  6/14  (43%)
+Phase 1: ███████████░░░░░░░░░  7/14  (50%)
 Phase 2: ░░░░░░░░░░░░░░░░░░░░  0/7   (0%)
 Phase 3: ░░░░░░░░░░░░░░░░░░░░  0/8   (0%)
 Phase 4: ░░░░░░░░░░░░░░░░░░░░  0/5   (0%)
 Phase 5: ░░░░░░░░░░░░░░░░░░░░  0/5   (0%)
 Phase 6: ░░░░░░░░░░░░░░░░░░░░  0/8   (0%)
 ─────────────────────────────────────
-TOTAL:   ███░░░░░░░░░░░░░░░░░  6/47  (13%)
+TOTAL:   ███░░░░░░░░░░░░░░░░░  7/47  (15%)
 ```
 
 ## Last Updated
