@@ -6,7 +6,7 @@
 
 ---
 
-## Phase 1: Foundation (12 tasks — 2 done, 10 remaining)
+## Phase 1: Foundation (12 tasks — 6 done, 6 remaining)
 
 | ID | Task | Status | Lang | Files | Depends |
 |----|------|--------|------|-------|---------|
@@ -14,8 +14,8 @@
 | 1.2 | SPEG wire contracts (Effect/Schema) | ✅ | TS | `packages/contracts/src/speg/` (7 files), `contracts.test.ts` | 1.1 |
 | 1.3 | cacm-core Rust crate (types, watcher, parser trait) | ✅ | Rust | `cacm/cacm-core/` | — |
 | 1.4 | cacm-daemon (HTTP+WS server, JSON-RPC API) | ✅ | Rust | `cacm/cacm-daemon/` | 1.3 |
-| 1.5 | Jcode session parser | ⬜ | Rust | `cacm/cacm-core/src/parsers/jcode.rs` | 1.3 |
-| 1.6 | Context extractor (heuristics) | ⬜ | Rust | `cacm/cacm-core/src/extractor.rs` | 1.5 |
+| 1.5 | Jcode session parser | ✅ | Rust | `cacm/cacm-core/src/parsers/jcode.rs` | 1.3 |
+| 1.6 | Context extractor (heuristics) | ✅ | Rust | `cacm/cacm-core/src/extractor.rs` | 1.5 |
 | 1.7 | Context injector (query + rank + format) | ⬜ | Rust | `cacm/cacm-core/src/injector.rs` | 1.6 |
 | 1.8 | cacm-sdk-rs + jcode-cacm-bridge | ⬜ | Rust | `cacm/cacm-sdk-rs/`, `jcode/crates/jcode-cacm-bridge/` | 1.4, 1.7 |
 | 1.9 | cacm-sdk-ts (@cacm/sdk npm package) | ⬜ | TS | `cacm/cacm-sdk-ts/` | 1.4 |
