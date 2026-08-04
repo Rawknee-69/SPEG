@@ -7,11 +7,13 @@
 //! parser interface + registry that per-agent parsers plug into (`parsers`).
 
 pub mod extractor;
+pub mod injector;
 pub mod parsers;
 pub mod types;
 pub mod watcher;
 
 pub use extractor::ContextExtractor;
+pub use injector::{ContextInjector, RankedContext};
 pub use parsers::{AgentSessionParser, ParseError, ParseResult, ParserRegistry};
 pub use types::{
     AgentSession, AgentTurn, AgentType, ContextType, CrossAgentContext, FileChangeKind,
