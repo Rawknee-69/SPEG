@@ -83,12 +83,23 @@ impl Crashpad {
                 .unwrap_or_else(|_| r#"{"serialize":"failed"}"#.into()),
             "-".repeat(60)
         );
-        fs::write(&path, body)?;
-        // Crash reports contain backtraces — keep them private on Unix.
+        // Crash reports contain backtraces — create with 0600 up front on
+        // Unix (no 0644 window between write and chmod).
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(&path)?;
+            file.write_all(body.as_bytes())?;
+            file.flush()?;
+        }
+        #[cfg(not(unix))]
+        {
+            fs::write(&path, body)?;
         }
         Ok(path)
     }
