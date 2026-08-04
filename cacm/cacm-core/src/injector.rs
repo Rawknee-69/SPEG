@@ -122,7 +122,7 @@ pub struct ContextInjector<S> {
     limit: usize,
     /// Entries kept after ranking.
     top_n: usize,
-    /// Character budget for formatted output.
+    /// UTF-8 byte budget for formatted output (strict cap).
     max_chars: usize,
     /// Fixed clock (deterministic tests); `None` = `Utc::now()`.
     now: Option<DateTime<Utc>>,
@@ -391,11 +391,12 @@ fn format_entry_line(ranked: &RankedContext, target: AgentType, now: DateTime<Ut
     }
 }
 
-/// `header + line`, truncated at `max` chars if needed.
+/// `header + line`, truncated to `max` bytes if needed.
 ///
 /// The header is always kept; the line's content is cut at a char boundary
-/// with a `…` suffix when it would overflow. If even the header overflows,
-/// the header itself is cut to `max` chars.
+/// with a `…` suffix when it would overflow (unless the budget leaves no
+/// room for any content, in which case the header alone is returned). If
+/// even the header overflows, the header itself is cut to `max` bytes.
 fn truncate_entry(header: &str, line: &str, max: usize) -> String {
     let full_len = header.len() + line.len();
     if full_len <= max {
@@ -421,7 +422,7 @@ fn truncate_entry(header: &str, line: &str, max: usize) -> String {
 /// Ellipsis used when truncating an over-budget entry.
 const ELLIPSIS: &str = "…";
 
-/// Cut `s` to at most `max` chars at a UTF-8 char boundary.
+/// Cut `s` to at most `max` bytes at a UTF-8 char boundary.
 fn truncate_chars(s: &str, max: usize) -> String {
     if s.len() <= max {
         return s.to_string();
