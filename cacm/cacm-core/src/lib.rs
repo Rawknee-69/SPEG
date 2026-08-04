@@ -6,10 +6,12 @@
 //! (`types`), the filesystem watcher that feeds the daemon (`watcher`), and the
 //! parser interface + registry that per-agent parsers plug into (`parsers`).
 
+pub mod extractor;
 pub mod parsers;
 pub mod types;
 pub mod watcher;
 
+pub use extractor::ContextExtractor;
 pub use parsers::{AgentSessionParser, ParseError, ParseResult, ParserRegistry};
 pub use types::{
     AgentSession, AgentTurn, AgentType, ContextType, CrossAgentContext, FileChangeKind,
