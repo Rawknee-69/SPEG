@@ -387,6 +387,20 @@ async fn watcher_task(mut rx: mpsc::Receiver<SessionActivity>, state: AppState) 
     }
 }
 
+/// Normalize a `--host` value for binding: `localhost` → loopback address,
+/// and surrounding brackets stripped so IPv6 literals can be re-bracketed
+/// uniformly. Returns a borrowed slice of `host`.
+fn normalize_bind_host(host: &str) -> &str {
+    let host = if host == "localhost" {
+        "127.0.0.1"
+    } else {
+        host
+    };
+    host.strip_prefix('[')
+        .and_then(|h| h.strip_suffix(']'))
+        .unwrap_or(host)
+}
+
 /// Bind a TCP listener with SO_REUSEADDR so a self-heal restart can rebind
 /// while pre-crash connections are still in TIME_WAIT. (On Windows this also
 /// allows another local process to bind the same port — acceptable under the
@@ -394,16 +408,7 @@ async fn watcher_task(mut rx: mpsc::Receiver<SessionActivity>, state: AppState) 
 /// address since the binder accepts IP literals only.
 async fn bind_listener(host: &str, port: u16) -> Result<tokio::net::TcpListener, std::io::Error> {
     use tokio::net::TcpSocket;
-    let host = if host == "localhost" {
-        "127.0.0.1"
-    } else {
-        host
-    };
-    // Accept "[::1]" as given to --host by stripping the brackets first.
-    let host = host
-        .strip_prefix('[')
-        .and_then(|h| h.strip_suffix(']'))
-        .unwrap_or(host);
+    let host = normalize_bind_host(host);
     // IPv6 literals need brackets in the host:port form.
     let host_port = if host.contains(':') {
         format!("[{host}]:{port}")
@@ -586,6 +591,15 @@ mod tests {
         assert!(!is_loopback_host("192.168.1.10"));
         assert!(!is_loopback_host("127.evil.com"));
         assert!(!is_loopback_host(""));
+    }
+
+    #[test]
+    fn normalize_bind_host_shapes() {
+        assert_eq!(normalize_bind_host("localhost"), "127.0.0.1");
+        assert_eq!(normalize_bind_host("127.0.0.1"), "127.0.0.1");
+        assert_eq!(normalize_bind_host("[::1]"), "::1");
+        assert_eq!(normalize_bind_host("::1"), "::1");
+        assert_eq!(normalize_bind_host("192.168.1.10"), "192.168.1.10");
     }
 
     #[test]
