@@ -265,6 +265,22 @@ fn oversized_turn_line_is_rejected() {
 }
 
 #[test]
+fn oversized_session_file_is_rejected_before_parsing() {
+    // MAX_SESSION_FILE_BYTES = 64 MiB (see jcode.rs); a file just over the cap
+    // must be rejected by the metadata pre-check, before any JSON parsing.
+    let dir = temp_dir("oversize");
+    let snapshot = dir.join("big.json");
+    fs::write(&snapshot, vec![b'x'; 64 * 1024 * 1024 + 1]).unwrap();
+
+    let parser = cacm_core::parsers::jcode::JcodeSessionParser::new();
+    assert!(matches!(
+        parser.parse_session_manifest(&snapshot),
+        Err(ParseError::InvalidFormat(_))
+    ));
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn parse_turn_rejects_garbage() {
     let parser = cacm_core::parsers::jcode::JcodeSessionParser::new();
     assert!(matches!(
