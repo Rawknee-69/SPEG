@@ -399,6 +399,11 @@ async fn bind_listener(host: &str, port: u16) -> Result<tokio::net::TcpListener,
     } else {
         host
     };
+    // Accept "[::1]" as given to --host by stripping the brackets first.
+    let host = host
+        .strip_prefix('[')
+        .and_then(|h| h.strip_suffix(']'))
+        .unwrap_or(host);
     // IPv6 literals need brackets in the host:port form.
     let host_port = if host.contains(':') {
         format!("[{host}]:{port}")
