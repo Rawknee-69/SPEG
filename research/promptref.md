@@ -1,74 +1,44 @@
-# SPEG — Prompt Reference
+# SPEG — Prompt Reference v5
 
-> **Copy-paste prompts** for every task. Each prompt is self-contained — an agent can read it and start working immediately.
-> After completing a task: run all tests → git commit → mark checklist ✅
+> **Copy-paste prompts** for every task. Each prompt is self-contained.
+> After completing: run all tests → git commit → mark checklist ✅ → write report
+> **Architecture**: CACM = standalone daemon (Rust). SPEG web imports `@cacm/sdk` (TS).
+> **Jcode**: vanilla + thin `jcode-cacm-bridge` crate. Zero core modifications.
 
 ---
 
-## Task 1.1: Package Scaffolding
+## [COMPLETED] Task 1.1: @speg/core TypeScript Package Scaffold
 
 ````
 TASK: Create the @speg/core package scaffold inside the T3 Code monorepo.
 
 CONTEXT:
-- You are working in the T3 Code monorepo at the current workspace root
-- The repo uses pnpm workspaces with catalog versioning
-- Package naming: @speg/core (NOT @t3tools — this is a new project)
-- Subpath-only exports (no barrel index.ts — follow @t3tools/shared pattern)
+- Working in the T3 Code monorepo at the current workspace root
+- pnpm workspaces with catalog versioning
+- Package naming: @speg/core (NOT @t3tools)
+- Subpath-only exports (no barrel index — follow @t3tools/shared pattern)
+- jcode-sdk version: ^1.1.0 (npm latest GA; v0.67.0 does not exist on npm)
+- tsconfig extends: ../tsconfig.base.json (speg/ is ONE level from root, not two)
 
-FILES TO CREATE:
-1. speg/package.json — new package manifest:
-   - name: "@speg/core"
-   - version: "0.1.0"
-   - type: "module"
-   - exports: { "./jcode": "./src/jcode/index.ts", "./cacm": "./src/cacm/index.ts", ... }
-   - dependencies: "effect": "catalog:", "@1jehuang/jcode-sdk": "^0.67.0", "@t3tools/contracts": "workspace:*", "@t3tools/shared": "workspace:*"
-   - devDependencies: "@effect/vitest": "catalog:", "vite-plus": "catalog:", "typescript": "catalog:"
-
-2. speg/tsconfig.json:
-   - extends: "../../tsconfig.base.json"
-   - compilerOptions: { outDir: "./dist", rootDir: "./src" }
-   - include: ["src/**/*.ts"]
-
-3. speg/src/index.ts — empty entry (add exports as we build)
-
-4. speg/src/jcode/index.ts — placeholder: export {}
-
-5. speg/src/cacm/index.ts — placeholder: export {}
-
-6. Update pnpm-workspace.yaml: add "speg" to packages array
-
-STYLE REQUIREMENTS (from research/08-style-guide.md and AGENTS.md):
-- ALL imports use .ts extension on relative paths
-- import type for type-only imports
-- NEVER use any — determine true types
-- Minimal code: if 5 lines do what 20 do, use 5
+FILES:
+1. speg/package.json — name @speg/core, type module, subpath exports, catalog deps
+2. speg/tsconfig.json — extends ../tsconfig.base.json
+3. speg/src/index.ts, speg/src/jcode/index.ts, speg/src/cacm/index.ts — placeholders
+4. pnpm-workspace.yaml — add "speg" to packages
 
 VERIFICATION:
 ```bash
-vp i                                    # Install dependencies
-vp run --filter @speg/core typecheck   # Must pass
+vp i
+vp run --filter @speg/core typecheck
 ````
 
-GIT COMMIT (only after verification passes):
-
-```bash
-git add -A
-git commit -m "feat(speg): scaffold @speg/core package
-
-- Create speg/ package with workspace config
-- Add dependencies: effect, jcode-sdk, contracts, shared
-- Configure TypeScript with strict mode"
-```
-
-AFTER COMMIT: Mark task 1.1 as ✅ in .plans/SPEG-CHECKLIST.md
-WRITE REPORT to research/report/1.1-scaffolding.md
+STATUS: ✅ COMPLETE (commit 8f6858de) | Report: research/report/1.1-scaffolding.md
 
 ```
 
 ---
 
-## Task 1.2: SPEG Contracts
+## [COMPLETED] Task 1.2: SPEG Wire Contracts (Effect/Schema)
 
 ```
 
@@ -76,819 +46,857 @@ TASK: Define all SPEG wire types using Effect/Schema in packages/contracts/src/s
 
 CONTEXT:
 
-- Follow EXACT patterns from packages/contracts/src/baseSchemas.ts (branded IDs)
-- Follow EXACT patterns from packages/contracts/src/rpc.ts (RPC definitions)
-- All types must have encode/decode roundtrip tests
-- Use Schema.Struct, Schema.Union, Schema.Literal — never hand-written types
-- Existing T3 Code contracts MUST NOT be modified — only new files added
+- Follow EXACT patterns from baseSchemas.ts (branded IDs) and rpc.ts (RPC definitions)
+- DO NOT modify any existing T3 Code contract file
+- Create SEPARATE SpegRpcGroup (cannot modify WsRpcGroup in existing rpc.ts)
 
-FILES TO CREATE:
+FILES:
 
-1. packages/contracts/src/speg/spegBaseSchemas.ts:
-   - Branded IDs: SpegSessionId, SpegMemoryId, SpegContextId
-   - Follow makeEntityId pattern from baseSchemas.ts
-   - Export both Schema and Type
-
-2. packages/contracts/src/speg/spegSession.ts:
-   - AgentSessionDescriptor: { sessionId, agentType, status, path, metadata }
-   - SessionStatus: "active" | "idle" | "completed" | "failed"
-   - AgentType: "jcode" | "claude-code" | "codex" | "opencode" | "cursor" | "speg"
-
-3. packages/contracts/src/speg/spegContext.ts:
-   - CrossAgentContext: { id, sessionId, agentType, contentType, content, filePaths, decisions, errors, timestamp }
-   - ContextType: "task" | "decision" | "file-change" | "error" | "pattern"
-   - ContextQuery: { projectPath, limit, recencyHours, agentTypes }
-
-4. packages/contracts/src/speg/spegMemory.ts:
-   - MemoryQueryParams: { query, limit, threshold, tags, scope }
-   - MemorySearchResult: { entries, totalCount, searchTimeMs }
-   - MemoryEntrySummary: { id, content, memoryType, confidence, tags, source }
-
-5. packages/contracts/src/speg/spegChat.ts:
-   - SpegChatMessage: { role, content, timestamp, metadata }
-   - SpegTurnRequest: { sessionId, message, modelSelection, skills }
-   - SpegTurnResponse: { turnId, messages, toolCalls, usage }
-
-6. packages/contracts/src/speg/spegRpc.ts:
-   - RPC methods using Rpc.make() pattern:
-     - speg.chat.sendMessage: SpegTurnRequest → SpegTurnResponse
-     - speg.chat.subscribe: () → Stream<SpegChatEvent>
-     - speg.cacm.queryContext: ContextQuery → MemorySearchResult
-     - speg.cacm.listSessions: () → AgentSessionDescriptor[]
-     - speg.cacm.injectContext: { sessionId, targetAgent } → void
-   - Add to WsRpcGroup (or create SpegRpcGroup — research if separate group is cleaner)
-
-7. packages/contracts/src/speg/index.ts — re-export all
-
-8. packages/contracts/test/speg/contracts.test.ts:
-   - Roundtrip tests for EVERY schema
-   - Test encode → decode for each type
-   - Test invalid input rejection
-
-RESEARCH BEFORE IMPLEMENTING:
-
-- Read packages/contracts/src/baseSchemas.ts to understand branded ID pattern
-- Read packages/contracts/src/rpc.ts to understand RPC registration pattern
-- Search: "Effect Schema branded types best practices"
+1. packages/contracts/src/speg/spegBaseSchemas.ts — SpegSessionId, SpegMemoryId, SpegContextId
+2. packages/contracts/src/speg/spegSession.ts — AgentSessionDescriptor, SessionStatus, AgentType
+3. packages/contracts/src/speg/spegContext.ts — CrossAgentContext, ContextQuery
+4. packages/contracts/src/speg/spegMemory.ts — MemoryQueryParams, MemorySearchResult
+5. packages/contracts/src/speg/spegChat.ts — SpegTurnRequest, SpegTurnResponse
+6. packages/contracts/src/speg/spegRpc.ts — SpegRpcGroup with 5 RPC methods
+7. packages/contracts/src/speg/index.ts — re-export barrel
+8. packages/contracts/test/speg/contracts.test.ts — 64 roundtrip + rejection tests
 
 VERIFICATION:
 
 ```bash
 vp run --filter @t3tools/contracts typecheck
-vp run test packages/contracts/test/speg/contracts.test.ts
+vp run --filter @t3tools/contracts test test/speg/contracts.test.ts
 ```
 
-GIT COMMIT:
-
-```bash
-git add -A
-git commit -m "feat(speg): define wire contracts for cross-agent platform
-
-- Branded IDs: SpegSessionId, SpegMemoryId, SpegContextId
-- Agent session, context, memory, chat schemas
-- RPC method definitions for SPEG chat and CACM
-- Full encode/decode roundtrip tests"
-```
-
-AFTER: Mark ✅ in checklist. Write report to research/report/1.2-contracts.md
+STATUS: ✅ COMPLETE | Report: research/report/1.2-contracts.md
 
 ```
 
 ---
 
-## Task 1.3: Jcode Harness API Client (Build from Source)
+## Task 1.3: cacm-core Rust Crate
 
 ```
 
-TASK: Build our own TypeScript client that speaks the Jcode harness API protocol.
-NO external SDK dependency. We write the client from scratch against the protocol spec.
+TASK: Create the cacm-core Rust crate — types, watcher infrastructure, parser trait.
 
 CONTEXT:
 
-- Jcode uses a simple NDJSON protocol over a local socket
-- Protocol is defined in jcode/crates/jcode-harness-api/src/ (Rust types)
-- 31 request types, 30 event types — we implement the ones we need
-- Transport: Unix socket (Linux/macOS) or Windows named pipe
-- We build Jcode from source: jcode/ directory is already in the repo
-- Run Jcode: spawn `jcode serve` (daemon) + `jcode api-bridge` (API access)
-
-REFERENCE FILES (read these first):
-
-- jcode/crates/jcode-harness-api/src/lib.rs — protocol types, version constants
-- jcode/crates/jcode-harness-api/src/requests.rs — all 31 request types
-- jcode/crates/jcode-harness-api/src/events.rs — all 30 event types
-- jcode/crates/jcode-harness-api/src/sockets.rs — socket path resolution
-- jcode/crates/jcode-transport/src/unix.rs — Unix socket implementation
-- jcode/crates/jcode-transport/src/windows.rs — Windows named pipe implementation
-
-PROTOCOL SPEC:
-
-- Framing: NDJSON — one JSON object per line, '\n' delimited, blank lines skipped
-- Every frame: {"v": 1, ...} (protocol version)
-- Client → Server: {"v":1, "id":<monotonic>, "req":"<kind>", ...params}\n
-- Server → Client (reply): {"v":1, "reply_to":<id>, "ev":"<kind>", ...data}\n
-- Server → Client (streaming): {"v":1, "ev":"<kind>", "session_id":"...", ...data}\n
-- Max frame size: 16 MiB
-
-SOCKET PATH:
-
-- Env override: $JCODE_API_SOCKET
-- Default: $JCODE_RUNTIME_DIR/jcode-api.sock or $XDG_RUNTIME_DIR/jcode-api.sock
-- Fallback: $TMPDIR/jcode-<user>/jcode-api.sock
-- Windows: named pipe derived via SHA256 of path stem
-
-HANDSHAKE:
-Client: {"v":1,"id":1,"req":"hello","min_version":1,"max_version":1,"client":"speg/0.1"}
-Server: {"v":1,"reply_to":1,"ev":"hello_ok","version":1,"server":"...","capabilities":[...]}
+- CACM is a STANDALONE package at t3code/cacm/ — not inside jcode/crates/
+- This crate defines the core types and traits that cacm-daemon and parsers use
+- Add to root Cargo.toml as workspace member
+- Reference: jcode/crates/jcode-memory-types/src/ for MemoryEntry patterns
+- Reference: jcode/crates/jcode-import-core/src/ for session parsing patterns
 
 FILES TO CREATE:
 
-1. speg/src/jcode/protocol.ts:
-   - TypeScript types matching jcode-harness-api exactly
-   - ApiRequest union: all 31 request kinds
-   - ApiEvent union: all 30 event kinds
-   - Frame types: ClientFrame, ServerFrame
-   - Version constants: API_VERSION = 1
-   - Helper: isKnownEvent(), isKnownRequest()
-   - Reference every field from the Rust source — no guessing
+1. cacm/cacm-core/Cargo.toml:
+   - name: "cacm-core", version: "0.1.0", edition: "2021"
+   - dependencies: serde, serde_json, chrono, tokio, notify (fs watcher)
 
-2. speg/src/jcode/framing.ts:
-   - NdjsonEncoder: serialize frame → JSON line
-   - NdjsonDecoder: incremental line-by-line decoder
-   - Handle partial lines (buffer remainder)
-   - Skip blank lines
-   - Enforce 16 MiB max frame size
-   - Pure functions, no dependencies
+2. cacm/cacm-core/src/lib.rs — crate root, re-export modules
 
-3. speg/src/jcode/sockets.ts:
-   - resolveApiSocketPath(): platform-specific path resolution
-   - Unix: read $JCODE_API_SOCKET or compute default path
-   - Windows: compute named pipe path from socket path stem
-   - Reference jcode-transport for exact logic
+3. cacm/cacm-core/src/types.rs:
+   - AgentType enum: Jcode, ClaudeCode, Codex, OpenCode, Cursor, Speg
+   - AgentSession { session_id, agent_type, path, created_at, status }
+   - AgentTurn { turn_index, timestamp, user_message, assistant_response, tool_calls, file_modifications }
+   - CrossAgentContext { id, session_id, agent_type, context_type, content, file_paths, decisions, errors, timestamp }
+   - ContextType enum: Task, Decision, FileChange, Error, Pattern
+   - All types derive Serialize, Deserialize, Debug, Clone
 
-4. speg/src/jcode/client.ts:
-   - JcodeClient class:
-     - constructor(socketPath): connect to api-bridge
-     - connect(): open socket, send hello, await hello_ok
-     - request(req): send request, await correlated reply
-     - events(sessionId?): async iterator over streaming events
-     - close(): close socket
-   - Request/reply correlation via pending Map<id, Deferred>
-   - Event routing: events with reply_to → resolve pending; without → streaming iterator
-   - Auto-reconnect with exponential backoff (1s → 16s cap)
-   - High-level methods mirroring protocol:
-     - createSession(workingDir) → session info
-     - sendMessage(id, content, opts?) → void
-     - run(id, content, opts?) → collected turn
-     - cancel(id) / softInterrupt(id, msg) → void
-     - listModels(id) / setModel(id, model) → models
-     - getHistory(id) / peekSession(id, limit?) → messages
-     - listSessions() → session list
-     - ping() → boolean
+4. cacm/cacm-core/src/watcher.rs:
+   - SessionWatcher struct: watch paths, detect changes, emit events
+   - Uses notify crate (cross-platform: inotify/FSEvents/ReadDirectoryChangesW)
+   - Event type: SessionActivity { session_id, agent_type, event_type, turn, timestamp }
+   - tokio::mpsc channel for event emission
+   - Platform path resolution: ~/.jcode/sessions/, ~/.claude/projects/, etc.
 
-5. speg/src/jcode/launch.ts:
-   - launchJcodeDaemon(opts): spawn `jcode serve` as child process
-   - Build Jcode first: run `cargo build --release` in jcode/ dir
-   - Find binary: jcode/target/release/jcode
-   - Wait for daemon socket to appear (poll with timeout)
-   - launchApiBridge(): spawn `jcode api-bridge` after daemon ready
-   - Health check: ping the bridge
-   - Shutdown: kill processes gracefully (SIGTERM → SIGKILL after timeout)
-   - Platform: Unix uses setsid() to detach, Windows uses CREATE_NEW_PROCESS_GROUP
+5. cacm/cacm-core/src/parsers/mod.rs:
+   - AgentSessionParser trait:
+     fn agent_type() -> AgentType;
+     fn parse_session_manifest(path: &Path) -> Result<AgentSession>;
+     fn parse_turn(raw: &str) -> Result<AgentTurn>;
+     fn detect_activity(path: &Path) -> bool;
+   - ParserRegistry: HashMap<AgentType, Box<dyn AgentSessionParser>>
+   - register() and get() methods
 
-6. speg/src/jcode/Errors.ts:
-   - JcodeNotFoundError: { searchedPaths: string[] }
-   - JcodeBuildError: { reason: string, stderr: string }
-   - JcodeLaunchError: { reason: string }
-   - ProtocolError: { code: string, message: string }
-   - ConnectionError: { socketPath: string, reason: string }
-   - All extend Schema.TaggedErrorClass
-
-7. speg/src/jcode/Services/JcodeService.ts:
-   - Effect service wrapping JcodeClient lifecycle
-   - Shape: launch, healthCheck, shutdown, createSession, sendMessage, streamEvents
-   - Service tag: "speg/jcode/JcodeService"
-
-8. speg/src/jcode/Layers/JcodeServiceLive.ts:
-   - Layer.effect(JcodeService, ...)
-   - Launch Jcode daemon + api-bridge on startup
-   - Health check periodically (every 30s)
-   - Graceful shutdown on server stop
-   - Fork-parked behind ServerActivation
-
-9. speg/test/jcode/protocol.test.ts:
-   - Test frame encode/decode roundtrip
-   - Test all request types serialize correctly
-   - Test all event types deserialize correctly
-   - Test NDJSON decoder handles partial lines
-   - Test unknown event kinds don't crash
-
-10. speg/test/jcode/client.test.ts:
-    - Mock Unix socket for unit tests
-    - Test handshake flow
-    - Test request/reply correlation
-    - Test streaming events
-    - Test reconnect behavior
-    - Test error handling (connection refused, timeout)
+6. cacm/Cargo.toml (workspace root for cacm):
+   - [workspace] members: ["cacm-core", "cacm-daemon", "cacm-sdk-rs"]
 
 RESEARCH:
 
-- Read ALL files in jcode/crates/jcode-harness-api/src/
-- Read jcode/crates/jcode-transport/src/unix.rs for socket details
-- Read jcode/crates/jcode-transport/src/windows.rs for named pipe details
-- Search: "Node.js Unix domain socket client"
-- Search: "Windows named pipe Node.js"
-- Search: "NDJSON streaming parser TypeScript"
+- Read jcode/crates/jcode-memory-types/src/lib.rs for MemoryEntry.source pattern
+- Read jcode/crates/jcode-import-core/src/lib.rs for Claude Code parsing patterns
+- Search: "notify crate Rust file watcher example"
+- Search: "Rust trait object registry pattern"
 
 VERIFICATION:
 
 ```bash
-vp run --filter @speg/core typecheck
-vp run test speg/test/jcode/protocol.test.ts
-vp run test speg/test/jcode/client.test.ts
-
-# Integration test (requires Jcode built):
-cd jcode && cargo build --release
-cd .. && node -e "
-  const { JcodeClient } = require('./speg/dist/jcode/client.js');
-  // ... test full flow
-"
+cd cacm && cargo build -p cacm-core
+cd cacm && cargo test -p cacm-core
+cd cacm && cargo clippy -p cacm-core
 ```
 
 GIT COMMIT:
 
 ```bash
-git add -A
-git commit -m "feat(speg): build Jcode harness API client from protocol spec
+git add cacm/
+git commit -m "feat(cacm): add cacm-core crate with types, watcher, parser trait
 
-- TypeScript types matching jcode-harness-api Rust crate exactly
-- NDJSON encoder/decoder with incremental parsing
-- Platform socket resolution (Unix + Windows named pipe)
-- JcodeClient: connect, request/reply, streaming events, reconnect
-- Jcode daemon + api-bridge lifecycle management
-- Effect service wrapper with health checks and graceful shutdown
-- Zero external SDK dependencies — pure protocol implementation
-- Unit tests with mock socket; integration test with real Jcode"
+- Core types: AgentSession, AgentTurn, CrossAgentContext
+- SessionWatcher using notify crate (cross-platform fs events)
+- AgentSessionParser trait + ParserRegistry
+- Workspace member in cacm/Cargo.toml"
 ```
 
-AFTER: Mark ✅ in checklist. Write report to research/report/1.3-jcode-client.md
+AFTER: Mark ✅, write report to research/report/1.1-cacm-core.md
 
 ```
 
 ---
 
-## Task 1.4: CACM Session Watcher
+## Task 1.4: cacm-daemon (HTTP + WebSocket Server)
 
 ```
 
-TASK: Build a cross-platform filesystem watcher that monitors agent session directories.
+TASK: Build the CACM daemon — a standalone Rust binary exposing CACM over WebSocket.
 
 CONTEXT:
 
-- CACM = Cross-Agent Context Manager
-- Watch multiple agent session directories for new activity
-- Parse each agent's session format into canonical AgentTurn
-- Emit SessionActivity events via PubSub
-- Use chokidar (NOT fs.watch — buggy on Windows)
-- Pluggable parser interface for different agent types
+- The daemon is the RUNNING PROCESS that watches agent sessions and serves queries
+- Depends on cacm-core for all logic
+- Uses axum or warp for HTTP + WebSocket (research which is lighter)
+- JSON-RPC style API over WebSocket
+- One daemon serves all clients (Jcode, SPEG web, any tool)
 
 FILES TO CREATE:
 
-1. speg/src/cacm/Errors.ts:
-   - SessionWatchError: { path: string, reason: string }
-   - SessionParseError: { sessionPath: string, agentType: string, reason: string }
-   - ParserNotFoundError: { agentType: string }
+1. cacm/cacm-daemon/Cargo.toml:
+   - depends on: cacm-core (path), tokio, axum (or warp), serde_json, tower-http (cors)
+   - [[bin]] name: "cacm-daemon", path: "src/main.rs"
 
-2. speg/src/cacm/AgentSessionParser.ts:
-   - Interface: { readonly agentType: AgentType; readonly parseSessionManifest: (path) => SessionManifest; readonly parseTurn: (raw) => AgentTurn; readonly detectActivity: (path) => boolean }
-   - SessionManifest: { sessionId, agentType, createdAt, turns: number, status }
+2. cacm/cacm-daemon/src/main.rs:
+   - Parse CLI args: --port (default 9786), --jcode-home, --db-path
+   - Initialize: start SessionWatcher, register parsers
+   - Start HTTP server with WebSocket upgrade
+   - Graceful shutdown on SIGTERM/SIGINT
 
-3. speg/src/cacm/parsers/JcodeSessionParser.ts:
-   - Implements AgentSessionParser for agentType: "jcode"
-   - Parse ~/.jcode/sessions/<id>/transcript.jsonl (NDJSON)
-   - Each line = one JSON object (Message type from jcode-message-types)
-   - Extract: user messages, assistant responses, tool calls
-   - Canonical AgentTurn: { turnIndex, timestamp, userMessage, assistantResponse, toolCalls, fileModifications }
+3. cacm/cacm-daemon/src/server.rs:
+   - WebSocket handler: upgrade, parse JSON frames, route to handlers
+   - Request format: {"id": 1, "method": "cacm.query", "params": {...}}
+   - Response format: {"id": 1, "result": {...}} or {"id": 1, "error": {...}}
+   - Notification format: {"event": "cacm.session_activity", "data": {...}}
+   - Request/reply correlation via pending HashMap
 
-4. speg/src/cacm/parsers/ClaudeCodeParser.ts (STUB):
-   - Implement AgentSessionParser interface
-   - Throw ParserNotFoundError with message "Claude Code parser — Phase 2"
+4. cacm/cacm-daemon/src/handlers.rs:
+   - handle_query(params) → Vec<CrossAgentContext>
+   - handle_sessions(params) → Vec<AgentSession>
+   - handle_inject(params) → String (formatted context)
+   - handle_ping() → "pong"
 
-5. speg/src/cacm/parsers/CodexParser.ts (STUB): same pattern
+5. cacm/cacm-daemon/src/storage.rs:
+   - Storage trait: store_context(), query_context(), list_sessions()
+   - JcodeBackend: connects to Jcode daemon via harness API, stores in memory graph
+   - SqliteBackend: fallback local storage if Jcode unavailable
+   - Auto-select: try Jcode first, fall back to SQLite
 
-6. speg/src/cacm/parsers/OpenCodeParser.ts (STUB): same pattern
+API SPEC:
 
-7. speg/src/cacm/parsers/CursorParser.ts (STUB): same pattern
+```
+→ {"id":1,"method":"cacm.query","params":{"project":"/path/to/repo","limit":10}}
+← {"id":1,"result":{"entries":[...]}}
 
-8. speg/src/cacm/Services/SessionWatcher.ts:
-   - Shape: { readonly watch: (projectPath) => Effect<void>; readonly streamActivity: Stream<SessionActivity>; readonly registerParser: (parser) => Effect<void> }
-   - SessionActivity: { sessionId, agentType, eventType: "started"|"turn"|"ended", turn?, timestamp }
-   - Service tag: "speg/cacm/SessionWatcher"
+→ {"id":2,"method":"cacm.sessions","params":{"project":"/path/to/repo"}}
+← {"id":2,"result":{"sessions":[...]}}
 
-9. speg/src/cacm/Layers/SessionWatcherLive.ts:
-   - Use chokidar.watch() for each agent directory
-   - Platform-specific paths:
-     - Windows: %LOCALAPPDATA%\jcode\sessions\, %USERPROFILE%\.claude\projects\
-     - Unix: ~/.jcode/sessions/, ~/.claude/projects/
-   - On file change → detect new activity → parse → publish to PubSub
-   - Debounce: 500ms (don't emit on every write)
-   - Register default parsers on init (Jcode parser + stubs)
+→ {"id":3,"method":"cacm.inject","params":{"sessionId":"abc","agent":"claude-code"}}
+← {"id":3,"result":{"formatted":"[Cross-Agent Context]\n• ..."}}
 
-10. speg/test/cacm/SessionWatcher.test.ts:
-    - Create mock session directories with sample JSONL
-    - Test watch detects new files
-    - Test Jcode parser extracts correct turns
-    - Test PubSub subscribers receive events
-    - Test stub parsers throw ParserNotFoundError
-    - Test debounce behavior
-
-11. speg/src/cacm/index.ts — export all
+← {"event":"cacm.session_activity","data":{"agent":"jcode","session":"fox","turn":{...}}}
+```
 
 RESEARCH:
 
-- Search: "chokidar vs fs.watch Windows reliability"
-- Search: "best way to watch multiple directories Node.js"
-- Read Jcode transcript.jsonl format (sample in ~/.jcode/sessions/ if available)
-- Search: "NDJSON parsing streaming Node.js"
+- Search: "axum websocket example Rust"
+- Search: "warp vs axum Rust websocket performance"
+- Search: "Rust JSON-RPC over websocket pattern"
 
 VERIFICATION:
 
 ```bash
-vp run --filter @speg/core typecheck
-vp run test speg/test/cacm/SessionWatcher.test.ts
+cd cacm && cargo build -p cacm-daemon
+cargo test -p cacm-daemon
+./target/debug/cacm-daemon --port 9787 &
+# Test with websocat or node script
 ```
 
 GIT COMMIT:
 
 ```bash
-git add -A
-git commit -m "feat(speg): add CACM session watcher with Jcode parser
+git add cacm/cacm-daemon/
+git commit -m "feat(cacm): add cacm-daemon with WebSocket JSON-RPC API
 
-- Cross-platform fs watcher using chokidar
-- Pluggable agent session parser interface
-- Jcode JSONL parser: extracts turns from transcript
+- HTTP + WebSocket server using axum
+- JSON-RPC style API: cacm.query, cacm.sessions, cacm.inject
+- Jcode memory graph backend + SQLite fallback
+- Session activity push notifications
+- Graceful shutdown"
+```
+
+AFTER: Mark ✅, write report to research/report/1.2-cacm-daemon.md
+
+```
+
+---
+
+## Task 1.5: Jcode Session Parser
+
+```
+
+TASK: Implement the Jcode session parser for cacm-core.
+
+CONTEXT:
+
+- Implements AgentSessionParser trait for AgentType::Jcode
+- Parses Jcode session directories: ~/.jcode/sessions/<id>/
+- Reads transcript JSONL files
+- Reference: jcode/crates/jcode-session-types/src/ for message format
+- Reference: jcode/crates/jcode-import-core/src/ for parsing patterns
+
+FILES TO CREATE:
+
+1. cacm/cacm-core/src/parsers/jcode.rs:
+   - JcodeSessionParser struct implementing AgentSessionParser
+   - agent_type() → AgentType::Jcode
+   - parse_session_manifest(path) → reads session metadata, returns AgentSession
+   - parse_turn(raw) → parses one JSONL line into AgentTurn
+     - Extract: user message (role="user"), assistant response (role="assistant")
+     - Extract: tool calls from message content blocks
+     - Extract: file modifications from tool call results
+   - detect_activity(path) → checks for new/modified transcript files
+
+2. Register in parsers/mod.rs:
+   - Add JcodeSessionParser to default ParserRegistry
+
+3. cacm/cacm-core/tests/jcode_parser_test.rs:
+   - Test with sample Jcode transcript JSONL
+   - Test parsing user messages, assistant responses, tool calls
+   - Test session manifest extraction
+   - Test activity detection
+
+4. Stub parsers (placeholder — Phase 2):
+   - parsers/claude.rs — returns NotImplemented error
+   - parsers/codex.rs — returns NotImplemented error
+   - parsers/opencode.rs — returns NotImplemented error
+   - parsers/cursor.rs — returns NotImplemented error
+
+RESEARCH:
+
+- Read jcode/crates/jcode-session-types/src/lib.rs for session format
+- Read jcode/crates/jcode-message-types/src/lib.rs for Message type
+- Search: "Rust serde JSONL streaming parser"
+
+VERIFICATION:
+
+```bash
+cd cacm && cargo test -p cacm-core
+```
+
+GIT COMMIT:
+
+```bash
+git add cacm/cacm-core/src/parsers/
+git commit -m "feat(cacm): add Jcode session parser with stub parsers
+
+- JcodeSessionParser: parses transcript JSONL → AgentTurn
+- Extracts user messages, assistant responses, tool calls
 - Stub parsers for Claude Code, Codex, OpenCode, Cursor
-- PubSub-based activity streaming
-- Platform-specific watch paths (Windows/Unix)
-- Unit tests with mock filesystem"
+- Registered in default ParserRegistry"
 ```
 
-AFTER: Mark ✅ in checklist. Write report to research/report/1.4-session-watcher.md
+AFTER: Mark ✅, write report to research/report/1.3-jcode-parser.md
 
 ```
 
 ---
 
-## Task 1.5: CACM Context Extractor
+## Task 1.6: Context Extractor
 
 ```
 
-TASK: Extract context from agent turns and store in Jcode memory graph.
+TASK: Implement heuristic context extraction from AgentTurn data.
 
 CONTEXT:
 
-- Subscribe to SessionWatcher's activity stream
-- For each new turn, extract key context
-- Batch turns within a session (every 5 turns or at session end)
-- MVP: template-based heuristics (no LLM dependency yet)
-- Store extracted context in Jcode memory graph via JcodeMemoryAccess
-- Use KeyedCoalescingWorker from @t3tools/shared for per-session batching
+- Pure functions — receive AgentTurn, return extracted context
+- MVP: template-based heuristics (no LLM dependency)
+- Later: integrate with Jcode's sidecar model for LLM-based extraction
+- Stores context in cacm-daemon's storage backend
 
 FILES TO CREATE:
 
-1. speg/src/cacm/ExtractionHeuristics.ts:
-   - extractTaskDescription(turn): string | null
-     - First user message in session = task description
-     - Look for: "I want to", "I need to", "Help me", "Build", "Create", "Fix"
-   - extractDecisions(turn): string[]
-     - Messages containing: "decided", "chose", "going with", "will use", "using"
-     - Assistant response that states a choice or approach
-   - extractFileChanges(turn): string[]
-     - Parse tool call output for file paths
-     - Common patterns: "Modified:", "Created:", "Wrote to:", file extensions
-   - extractErrors(turn): string[]
-     - Messages containing: "error", "failed", "broke", "exception", "cannot"
-     - Tool call errors
-   - extractPatterns(turn): string[]
-     - Repeated file patterns
-     - Convention mentions: "always", "never", "convention", "best practice"
-   - ALL functions are PURE (no side effects) — return extracted data, don't store
+1. cacm/cacm-core/src/extractor.rs:
+   - ContextExtractor struct
+   - extract_context(turns: Vec<AgentTurn>) → Vec<CrossAgentContext>
+   - Heuristic functions (pure, testable):
+     - extract_task(turns): first user message = task description
+       - Keywords: "I want to", "build", "create", "fix", "implement", "refactor"
+     - extract_decisions(turns): messages containing decision keywords
+       - Keywords: "decided", "chose", "going with", "will use", "using"
+     - extract_file_changes(turns): parse tool calls for file paths
+       - Patterns: "Modified:", "Created:", "Wrote to:", file extensions
+     - extract_errors(turns): messages containing error keywords
+       - Keywords: "error", "failed", "broke", "exception", "cannot"
+     - extract_patterns(turns): repeated file patterns, convention mentions
+       - Keywords: "always", "never", "convention", "best practice", "pattern"
+   - Batching: accumulate turns, extract every 5 turns or at session end
 
-2. speg/src/cacm/Services/ContextExtractor.ts:
-   - Shape: { readonly start: () => Effect<void>; readonly extractFromTurn: (turn) => Effect<ContextExtractResult> }
-   - ContextExtractResult: { contexts: CrossAgentContext[] }
-   - Service tag: "speg/cacm/ContextExtractor"
-
-3. speg/src/cacm/Layers/ContextExtractorLive.ts:
-   - Subscribe to SessionWatcher.streamActivity via Stream.runForEach
-   - On each turn: call ExtractionHeuristics → produce CrossAgentContext entries
-   - Batch: accumulate turns per session, extract at threshold (5 turns) or session end
-   - Use KeyedCoalescingWorker keyed by sessionId for batching
-   - Store entries via JcodeMemoryAccess.store()
-   - Each entry gets: provenance: "Observed", source: { agent, sessionId, turnIndex }
-   - Handle errors gracefully: log warning, continue (don't crash on one bad parse)
-
-4. speg/test/cacm/ContextExtractor.test.ts:
-   - Test each extraction heuristic with sample turns
-   - Test batching behavior (extracts at threshold)
-   - Test storage via mock JcodeMemoryAccess
-   - Test error resilience (bad turn data doesn't crash)
+2. cacm/cacm-core/tests/extractor_test.rs:
+   - Test each heuristic with sample turns
+   - Test batching behavior
+   - Test edge cases (empty turns, single turn, malformed data)
 
 RESEARCH:
 
-- Search: "NLP keyword extraction JavaScript without ML"
-- Search: "extract file paths from text regex"
-- Read @t3tools/shared KeyedCoalescingWorker pattern
-- Read Jcode MemoryEntry schema from research/06-jcode-internals.md
+- Search: "keyword extraction algorithm Rust"
+- Search: "regex file path extraction"
+- Read jcode/crates/jcode-base/src/sidecar.rs for LLM integration pattern (future)
 
 VERIFICATION:
 
 ```bash
-vp run --filter @speg/core typecheck
-vp run test speg/test/cacm/ContextExtractor.test.ts
+cd cacm && cargo test -p cacm-core
 ```
 
 GIT COMMIT:
 
 ```bash
-git add -A
-git commit -m "feat(speg): add CACM context extractor with heuristics
+git add cacm/cacm-core/src/extractor.rs cacm/cacm-core/tests/
+git commit -m "feat(cacm): add heuristic context extractor
 
-- Template-based extraction: tasks, decisions, files, errors, patterns
-- Batched extraction per session (every 5 turns or session end)
-- KeyedCoalescingWorker for per-session batching
-- Stores in Jcode memory graph with Observed provenance
-- Pure extraction functions — testable independently
-- Error-resilient: bad turns logged, processing continues"
+- Pure extraction functions: tasks, decisions, files, errors, patterns
+- Keyword-based heuristics (MVP — LLM upgrade path defined)
+- Batched extraction (every 5 turns or session end)
+- Unit tests for each heuristic and edge cases"
 ```
 
-AFTER: Mark ✅ in checklist. Write report to research/report/1.5-context-extractor.md
+AFTER: Mark ✅, write report to research/report/1.4-extractor.md
 
 ```
 
 ---
 
-## Task 1.6: CACM Context Injector
+## Task 1.7: Context Injector
 
 ```
 
-TASK: Query memory graph, format context, inject into new agent sessions.
+TASK: Implement context injection — query memory, rank, format for target agent.
 
 CONTEXT:
 
-- When user starts a new session with any agent, inject relevant context
-- Query Jcode memory graph for recent activity in the project
+- Query cacm-daemon storage for recent cross-agent context
 - Rank by recency × relevance × confidence
 - Format per target agent type
-- Inject via appropriate mechanism per agent
+- Return formatted string for injection
 
 FILES TO CREATE:
 
-1. speg/src/cacm/InjectionFormatters.ts:
-   - formatForSpeg(contexts: CrossAgentContext[]): string
-     - Format: bullet list with agent name + time ago
-     - Template: "[Cross-Agent Context]\n• Task: {content} ({agent}, {timeAgo})\n..."
-     - Max 2000 chars (~500 tokens)
-   - formatForClaudeCode(contexts): string
-     - Append format for CLAUDE.md: "\n\n[SPEG Context — recent cross-agent activity]\n..."
-   - formatForCodex(contexts): string
-     - Prepend to first user message: "Context from recent sessions:\n..."
-   - formatForOpenCode(contexts): string
-     - Append format for OPENCODE.md
-   - formatForCursor(contexts): string
-     - Append format for .cursorrules
-   - Truncate if over budget: drop lowest-ranked entries
+1. cacm/cacm-core/src/injector.rs:
+   - ContextInjector struct
+   - inject(project: &str, target_agent: AgentType, session_id: Option<&str>) → String
+   - query_context(project: &str, limit: usize) → Vec<CrossAgentContext>
+   - rank_context(entries: Vec<CrossAgentContext>) → Vec<CrossAgentContext>:
+     - recency_score = e^(-hours_ago / 24.0)
+     - final_score = recency_score × 0.5 + relevance × 0.3 + confidence × 0.2
+     - Sort descending, take top N
+   - format_context(entries: Vec<CrossAgentContext>, target: AgentType) → String:
+     - Speg/Jcode: "[Cross-Agent Context]\n• Task: ... (agent, time_ago)\n..."
+     - ClaudeCode: append format for CLAUDE.md
+     - Codex: prepend format for first user message
+     - OpenCode: append format for OPENCODE.md
+     - Cursor: append format for .cursorrules
+   - Budget: max 2000 chars, truncate lowest-ranked if over
 
-2. speg/src/cacm/Services/ContextInjector.ts:
-   - Shape: { readonly injectContext: (target: InjectionTarget) => Effect<void>; readonly queryContext: (project) => Effect<CrossAgentContext[]> }
-   - InjectionTarget: { projectPath, targetAgent, sessionId? }
-   - Service tag: "speg/cacm/ContextInjector"
-
-3. speg/src/cacm/Layers/ContextInjectorLive.ts:
-   - queryContext: calls JcodeMemoryAccess.search() with project context
-   - Ranking algorithm:
-     - recencyScore = e^(-hoursAgo / 24) — exponential decay over 24h
-     - relevanceScore = from Jcode's cosine similarity
-     - confidenceScore = from MemoryEntry.confidence
-     - finalScore = recencyScore × 0.5 + relevanceScore × 0.3 + confidenceScore × 0.2
-   - injectContext: format + inject per target agent
-     - SPEG: sendMessage({ noReply: true }) with formatted context
-     - Claude Code: append to CLAUDE.md file
-     - Codex: prepend to first user message (handled by caller)
-     - OpenCode: append to OPENCODE.md file
-     - Cursor: append to .cursorrules file
-   - Context window budget: 2000 chars max (truncate if over)
-   - Deduplicate: merge entries about same file/decision
-
-4. speg/test/cacm/ContextInjector.test.ts:
+2. cacm/cacm-core/tests/injector_test.rs:
    - Test ranking algorithm with known scores
    - Test formatting for each agent type
    - Test truncation when over budget
-   - Test injection via mock (verify correct method called)
-   - Test deduplication
+   - Test empty context (no entries found)
 
 RESEARCH:
 
-- Search: "exponential decay scoring algorithm"
-- Search: "LLM context injection best practices"
-- Read Jcode memory search from research/06-jcode-internals.md
-- Search: "ranking algorithm recency relevance confidence"
+- Search: "exponential decay ranking algorithm"
+- Read how Jcode formats system reminders in jcode-app-core/src/agent/prompting.rs
 
 VERIFICATION:
 
 ```bash
-vp run --filter @speg/core typecheck
-vp run test speg/test/cacm/ContextInjector.test.ts
+cd cacm && cargo test -p cacm-core
 ```
 
 GIT COMMIT:
 
 ```bash
-git add -A
-git commit -m "feat(speg): add CACM context injector with cross-agent formatting
+git add cacm/cacm-core/src/injector.rs cacm/cacm-core/tests/
+git commit -m "feat(cacm): add context injector with cross-agent formatting
 
-- Memory graph query with weighted ranking (recency×0.5 + relevance×0.3 + confidence×0.2)
-- Per-agent context formatters: SPEG, Claude Code, Codex, OpenCode, Cursor
-- 2000-char context budget with truncation
-- Deduplication of overlapping context entries
-- Unit tests for ranking, formatting, truncation, injection"
+- Weighted ranking: recency×0.5 + relevance×0.3 + confidence×0.2
+- Per-agent formatters: Speg, Claude Code, Codex, OpenCode, Cursor
+- 2000-char budget with truncation
+- Unit tests for ranking, formatting, edge cases"
 ```
 
-AFTER: Mark ✅ in checklist. Write report to research/report/1.6-context-injector.md
-
-```
-
----
-
-## Task 1.7: SPEG Server Integration
-
-```
-
-TASK: Wire SPEG services into the T3 Code server. Add WebSocket RPC routes.
-
-CRITICAL RULES:
-
-- DO NOT modify existing T3 Code RPC methods or behavior
-- Add new SPEG routes following EXISTING ws.ts patterns exactly
-- Use authorizeEffect + observeRpcEffect for all new handlers
-- SPEG services fork-parked behind ServerActivation Deferred
-- SPEG Layer composition follows existing server.ts patterns
-
-FILES TO CREATE:
-
-1. apps/server/src/speg/SpegLayer.ts:
-   - Compose all SPEG services into one Layer
-   - SpegLayer = Layer.mergeAll(
-     JcodeInstanceManagerLive,
-     SessionWatcherLive.pipe(Layer.provide(JcodeInstanceManagerLive)),
-     ContextExtractorLive.pipe(Layer.provide(SessionWatcherLive)),
-     ContextInjectorLive.pipe(Layer.provide(ContextExtractorLive)),
-     )
-   - Export as SpegLayer
-
-2. apps/server/src/speg/SpegRpcHandlers.ts:
-   - Implement all SPEG RPC methods:
-     - handleSpegChatSendMessage(wsRpcGroup, currentSession)
-     - handleSpegChatSubscribe(wsRpcGroup, currentSession)
-     - handleSpegCacmQueryContext(wsRpcGroup, currentSession)
-     - handleSpegCacmListSessions(wsRpcGroup, currentSession)
-     - handleSpegCacmInjectContext(wsRpcGroup, currentSession)
-   - Each handler: authorizeEffect(currentSession.scopes, requiredScope) → call service → return result
-   - Follow pattern from existing handlers in ws.ts
-
-3. apps/server/src/speg/SpegWsRoutes.ts:
-   - Function: registerSpegRoutes(wsRpcGroup, currentSession)
-   - Register all SPEG RPC methods
-   - Follow pattern from ws.ts route registration
-
-4. apps/server/src/ws.ts (MINIMAL addition):
-   - Import and call registerSpegRoutes() where other routes are registered
-   - Add SpegLayer to the server Layer composition
-   - This should be a 5-line diff maximum
-
-5. apps/server/src/server.ts (MINIMAL addition):
-   - Import SpegLayer
-   - Add to makeServerLayer composition
-   - 2-line diff maximum
-
-6. apps/server/test/speg/SpegIntegration.test.ts:
-   - Test: server starts with SPEG layer active
-   - Test: WebSocket accepts speg.chat.sendMessage RPC
-   - Test: WebSocket streaming for speg.chat.subscribe
-   - Test: CACM RPC methods respond correctly
-   - Test: existing T3 Code RPC still works (regression check)
-
-RESEARCH:
-
-- Read apps/server/src/ws.ts to understand EXACT route registration pattern
-- Read apps/server/src/server.ts to understand EXACT layer composition
-- Search: "Effect RPC server route registration pattern"
-
-VERIFICATION:
-
-```bash
-vp run --filter @speg/core typecheck
-vp run --filter @t3tools/server typecheck
-vp run test apps/server/test/speg/SpegIntegration.test.ts
-# Start server to verify SPEG endpoints respond
-```
-
-GIT COMMIT:
-
-```bash
-git add -A
-git commit -m "feat(speg): integrate SPEG services into T3 Code server
-
-- SpegLayer: composes all SPEG Effect services
-- SpegRpcHandlers: chat, CACM query/list/inject
-- WebSocket routes registered alongside existing RPC
-- Minimal diff: 5 lines in ws.ts, 2 in server.ts
-- Integration tests: all SPEG RPC methods respond
-- Existing T3 Code routes unaffected"
-```
-
-AFTER: Mark ✅ in checklist. Write report to research/report/1.7-server-integration.md
+AFTER: Mark ✅, write report to research/report/1.5-injector.md
 
 ```
 
 ---
 
-## Task 1.8: Desktop Build & Windows Packaging
+## Task 1.8: cacm-sdk-rs + jcode-cacm-bridge
 
 ```
 
-TASK: Package SPEG into a working Windows Electron desktop application.
+TASK: Build the Rust SDK for CACM and the thin Jcode bridge crate.
 
 CONTEXT:
 
-- Existing T3 Code desktop app wraps web in Electron
-- SPEG adds new routes + components to web → desktop inherits them
-- Windows build: NSIS installer + portable .exe
-- Jcode binary: bundled or downloaded on first launch
-- Target: Windows x64, macOS ARM64/x64, Linux x64
+- cacm-sdk-rs: Rust client library that talks to cacm-daemon via WebSocket
+- jcode-cacm-bridge: thin Jcode crate that imports cacm-sdk-rs and registers CACM tools
+- Jcode stays VANILLA — only the bridge crate is added to Jcode workspace
+- Zero modifications to jcode-app-core, jcode-harness-api, or any existing Jcode crate
 
-FILES TO CREATE/MODIFY:
+FILES TO CREATE:
 
-1. apps/desktop/src/speg/SpegDesktopBridge.ts:
-   - Desktop IPC handlers for SPEG-specific operations
-   - SpegJcodeStatus: check Jcode binary installation
-   - SpegInstallJcode: trigger Jcode download/install
-   - SpegOpenSessionDir: open session directory in file explorer
-   - Follow existing DesktopIpc pattern exactly
+1. cacm/cacm-sdk-rs/Cargo.toml:
+   - name: "cacm-sdk-rs", depends on: tokio, tokio-tungstenite, serde_json, cacm-core
 
-2. apps/desktop/src/main.ts (MINIMAL addition):
-   - Import and register SPEG desktop bridge handlers
-   - 3-5 line diff maximum
+2. cacm/cacm-sdk-rs/src/lib.rs:
+   - CacmClient struct: connect(addr), query(project, limit), sessions(project), inject(project, agent, session)
+   - WebSocket connection to cacm-daemon
+   - Request/reply correlation
+   - Reconnect with exponential backoff
+   - Public API: async fn query(...), async fn sessions(...), async fn inject(...)
 
-3. apps/desktop/electron-builder.yml (UPDATE):
-   - Add SPEG-specific build config
-   - Windows: NSIS + portable targets
-   - Include Jcode binary in extraResources (or download on first launch)
-   - App ID: com.speg.desktop
-   - Product name: SPEG
+3. jcode/crates/jcode-cacm-bridge/Cargo.toml:
+   - depends on: cacm-sdk-rs (path), jcode-app-core, jcode-base, jcode-tool-core
+   - description: "Thin bridge registering CACM as Jcode tools"
 
-4. apps/desktop/package.json (UPDATE):
-   - Add @speg/core to dependencies
-   - Add build:win script
+4. jcode/crates/jcode-cacm-bridge/src/lib.rs:
+   - register_cacm_tools(registry: &mut Registry):
+     - CacmQueryTool: implements Tool trait, calls cacm-sdk-rs query()
+     - CacmInjectTool: implements Tool trait, calls cacm-sdk-rs inject()
+   - init_cacm_hook(): registers turn_start hook via jcode-base::hooks
+     - Before each turn: call cacm-sdk-rs inject() → set system_reminder
+   - ~200 lines total
 
-5. scripts/build-speg-desktop.ps1 (Windows build script):
-   - Build server: vp run --filter @t3tools/server build
-   - Build web: vp run --filter @t3tools/web build
-   - Build desktop: vp run --filter @t3tools/desktop build
-   - Package: electron-builder --win --x64
-   - Verify: check .exe exists and has expected size
+5. jcode/Cargo.toml: add "crates/jcode-cacm-bridge" to workspace members
 
-6. scripts/build-speg-desktop.sh (Unix build script):
-   - Same as above but for macOS/Linux targets
+6. jcode/src/cli/startup.rs or equivalent: call register_cacm_tools() + init_cacm_hook()
+   - Find the right init point — research Jcode's startup sequence
 
 RESEARCH:
 
-- Read apps/desktop/src/main.ts to understand EXACT initialization
-- Read existing electron-builder.yml for config patterns
-- Search: "electron-builder Windows NSIS configuration"
-- Search: "bundle external binary with Electron app"
+- Read jcode-app-core/src/tool/mod.rs to understand Registry::base_tools() pattern
+- Read jcode-base/src/hooks.rs for turn_start hook registration
+- Read jcode/src/main.rs or cli/startup.rs for initialization sequence
+- Search: "Rust tungstenite websocket client example"
 
 VERIFICATION:
 
 ```bash
-# On Windows:
-powershell -File scripts/build-speg-desktop.ps1
-# Verify .exe produced at dist/speg-setup-*.exe
+# Build cacm-sdk-rs
+cd cacm && cargo build -p cacm-sdk-rs
 
-# Type check:
-vp run --filter @t3tools/desktop typecheck
+# Build Jcode with bridge
+cd jcode && cargo build --workspace
+cargo test -p jcode-cacm-bridge
+
+# Verify CACM tools appear in Jcode
+./target/debug/jcode --list-tools | grep cacm
 ```
 
 GIT COMMIT:
 
 ```bash
-git add -A
-git commit -m "feat(speg): add desktop packaging with Windows build
+git add cacm/cacm-sdk-rs/ jcode/crates/jcode-cacm-bridge/ jcode/Cargo.toml
+git commit -m "feat(cacm): add cacm-sdk-rs and jcode-cacm-bridge
 
-- SPEG desktop bridge: Jcode status, install, session dir IPC
-- electron-builder config: NSIS + portable for Windows
-- Build scripts for Windows (PowerShell) and Unix (bash)
-- Jcode binary bundling strategy
-- Desktop inherits SPEG web routes automatically"
+- cacm-sdk-rs: Rust client for cacm-daemon (WebSocket)
+- jcode-cacm-bridge: thin crate registering CACM tools in Jcode
+- CacmQueryTool + CacmInjectTool registered in Jcode tool registry
+- turn_start hook for automatic context injection
+- Zero modifications to existing Jcode crates"
 ```
 
-AFTER: Mark ✅ in checklist. Write report to research/report/1.8-desktop-build.md
+AFTER: Mark ✅, write report to research/report/1.6-sdk-bridge.md
 
 ```
 
 ---
 
-## Task 1.9: Phase 1 Integration Test & Cleanup
+## Task 1.9: cacm-sdk-ts (@cacm/sdk)
 
 ```
 
-TASK: End-to-end verification that Phase 1 is complete and production-ready.
+TASK: Build the TypeScript SDK for CACM — npm package @cacm/sdk.
 
-WHAT TO DO:
+CONTEXT:
 
-1. Run full typecheck on all SPEG files:
+- TypeScript client that talks to cacm-daemon via WebSocket
+- Used by speg-web and any Node.js tool
+- Published as npm package (or workspace package for now)
+- Zero dependencies beyond the platform (use native WebSocket)
 
-   ```bash
-   vp run --filter @speg/core typecheck
-   vp run --filter @t3tools/contracts typecheck
-   vp run --filter @t3tools/server typecheck
-   vp run --filter @t3tools/web typecheck
-   vp run --filter @t3tools/desktop typecheck
-   ```
+FILES TO CREATE:
 
-2. Run all SPEG tests:
+1. cacm/cacm-sdk-ts/package.json:
+   - name: "@cacm/sdk", version: "0.1.0", type: "module"
+   - main: "./dist/index.js", types: "./dist/index.d.ts"
+   - scripts: { build, typecheck, test }
 
-   ```bash
-   vp run test speg/test/
-   vp run test packages/contracts/test/speg/
-   vp run test apps/server/test/speg/
-   ```
+2. cacm/cacm-sdk-ts/tsconfig.json
 
-3. Run lint on changed files:
+3. cacm/cacm-sdk-ts/src/index.ts — public API exports
 
-   ```bash
-   vp lint
-   ```
+4. cacm/cacm-sdk-ts/src/types.ts:
+   - TypeScript types matching cacm-core Rust types
+   - AgentType, AgentSession, AgentTurn, CrossAgentContext, ContextType
+   - CacmQueryParams, CacmQueryResult, CacmSessionResult, CacmInjectResult
 
-4. Start dev server to verify SPEG endpoints:
+5. cacm/cacm-sdk-ts/src/client.ts:
+   - CacmClient class:
+     - constructor(url: string = "ws://localhost:9786")
+     - connect(): Promise<void> — open WebSocket, await ready
+     - query(params): Promise<CacmQueryResult>
+     - sessions(params): Promise<CacmSessionResult>
+     - inject(params): Promise<CacmInjectResult>
+     - onActivity(callback): void — listen for push notifications
+     - close(): void
+   - Request/reply correlation via pending Map
+   - Auto-reconnect with exponential backoff
 
-   ```bash
-   vp run dev
-   # Verify in another terminal:
-   # - WebSocket accepts speg.* RPC methods
-   # - Jcode daemon launches and responds to ping
-   ```
+6. cacm/cacm-sdk-ts/test/client.test.ts:
+   - Mock WebSocket for unit tests
+   - Test query, sessions, inject
+   - Test reconnect behavior
 
-5. Build desktop for Windows:
+RESEARCH:
 
-   ```bash
-   powershell -File scripts/build-speg-desktop.ps1
-   # Verify .exe exists and can launch
-   ```
+- Search: "TypeScript WebSocket client class pattern"
+- Read existing Jcode harness API client pattern for inspiration
 
-6. Git tag the phase:
-   ```bash
-   git tag -a speg-v0.1.0-phase1 -m "SPEG Phase 1: Foundation complete"
-   ```
+VERIFICATION:
 
-FILES CHANGED: None (verification only)
+```bash
+cd cacm/cacm-sdk-ts
+npm install
+npm run typecheck
+npm test
+```
+
+GIT COMMIT:
+
+```bash
+git add cacm/cacm-sdk-ts/
+git commit -m "feat(cacm): add cacm-sdk-ts TypeScript client
+
+- @cacm/sdk npm package
+- CacmClient: connect, query, sessions, inject, activity events
+- TypeScript types matching cacm-core Rust types
+- Auto-reconnect with exponential backoff
+- Unit tests with mock WebSocket"
+```
+
+AFTER: Mark ✅, write report to research/report/1.7-cacm-sdk-ts.md
+
+```
+
+---
+
+## Task 1.10: SPEG Web UI
+
+```
+
+TASK: Build the SPEG web UI — React app that imports @cacm/sdk.
+
+CONTEXT:
+
+- React + Vite + Tailwind (follow T3 Code web patterns where applicable)
+- Connects to cacm-daemon via @cacm/sdk
+- Connects to Jcode daemon via harness API for chat
+- Minimal components — keep it simple, production quality
+
+FILES TO CREATE:
+
+1. speg-web/package.json:
+   - React 19, Vite, Tailwind, @cacm/sdk (workspace:\*)
+   - react-router for routing
+
+2. speg-web/src/client.ts:
+   - Jcode harness API client (talk to Jcode daemon for chat)
+   - Reuse or adapt speg/src/jcode/client.ts patterns if already built
+   - OR use @1jehuang/jcode-sdk directly (already installed in speg/)
+
+3. speg-web/src/components/ChatView.tsx:
+   - Message timeline (virtualized list)
+   - Composer bar (text input + send)
+   - Agent status indicator
+   - Provider/model selector
+
+4. speg-web/src/components/CacmTimeline.tsx:
+   - Cross-agent session timeline
+   - Shows recent sessions from all agents (via @cacm/sdk)
+   - Color-coded by agent type
+   - Click to view session details
+
+5. speg-web/src/components/ProviderPicker.tsx:
+   - Model/provider selector (uses Jcode's listModels API)
+
+6. speg-web/src/routes/ — React Router routes
+   - /chat — main chat view
+   - /cacm — cross-agent timeline
+   - /settings — settings
+
+7. speg-web/src/App.tsx — root component, router setup
+
+RESEARCH:
+
+- Search: "React virtualized message list"
+- Read T3 Code apps/web/src for component patterns (ChatView, composer)
+- Keep components SIMPLE — no 6189-line monsters
+
+VERIFICATION:
+
+```bash
+cd speg-web
+npm install
+npm run typecheck
+npm run build
+npm run dev  # verify UI renders
+```
+
+GIT COMMIT:
+
+```bash
+git add speg-web/
+git commit -m "feat(speg): add SPEG web UI with chat and CACM timeline
+
+- React + Vite + Tailwind web app
+- ChatView with message timeline and composer
+- CacmTimeline showing cross-agent sessions via @cacm/sdk
+- Provider/model picker
+- Minimal components, production quality"
+```
+
+AFTER: Mark ✅, write report to research/report/1.8-speg-web.md
+
+```
+
+---
+
+## Task 1.11: Compactor
+
+```
+
+TASK: Implement cross-session context compaction.
+
+CONTEXT:
+
+- Runs during cacm-daemon's ambient cycles (or on-demand)
+- Deduplicates similar entries from different agents
+- Summarizes multi-turn sessions into milestone entries
+- Links related entries in the memory graph
+
+FILES TO CREATE:
+
+1. cacm/cacm-core/src/compactor.rs:
+   - Compactor struct
+   - compact(entries: Vec<CrossAgentContext>) → Vec<CrossAgentContext>
+   - Deduplication:
+     - Group entries by file_path or decision content
+     - Keep highest-confidence entry, merge metadata
+     - Mark superseded entries
+   - Summarization:
+     - Group entries by session
+     - Generate milestone summary (task + outcome)
+     - Replace detailed entries with summary
+   - Linking:
+     - Find entries about same topic across agents
+     - Add related_to metadata
+   - Staleness:
+     - Apply confidence decay to entries older than threshold
+     - Prune entries below confidence threshold
+
+2. cacm/cacm-core/tests/compactor_test.rs:
+   - Test deduplication: 3 entries about same file → 1 merged entry
+   - Test summarization: 10 turn-level entries → 1 milestone entry
+   - Test staleness pruning
+   - Test empty input
+
+RESEARCH:
+
+- Search: "text deduplication algorithm Rust"
+- Search: "confidence decay formula"
+- Read jcode-base/src/memory/ for consolidation patterns
+
+VERIFICATION:
+
+```bash
+cd cacm && cargo test -p cacm-core
+```
+
+GIT COMMIT:
+
+```bash
+git add cacm/cacm-core/src/compactor.rs cacm/cacm-core/tests/
+git commit -m "feat(cacm): add cross-session context compactor
+
+- Deduplicates entries from different agents
+- Summarizes multi-turn sessions into milestones
+- Links related entries across agents
+- Confidence decay and staleness pruning
+- Unit tests for all operations"
+```
+
+AFTER: Mark ✅, write report to research/report/1.9-compactor.md
+
+```
+
+---
+
+## Task 1.12: Phase 1 Integration Gate
+
+```
+
+TASK: End-to-end verification. All builds pass, all tests pass, Windows .exe produced.
+
+STEPS:
+
+1. Full Rust build:
+   cd cacm && cargo build --workspace
+   cd jcode && cargo build --workspace
+
+2. All Rust tests:
+   cd cacm && cargo test --workspace
+   cd jcode && cargo test --workspace
+
+3. Clippy + fmt:
+   cd cacm && cargo clippy --workspace && cargo fmt --check
+   cd jcode && cargo clippy --workspace && cargo fmt --check
+
+4. TypeScript build:
+   cd cacm/cacm-sdk-ts && npm run typecheck && npm test
+   cd speg-web && npm run typecheck && npm run build
+
+5. Integration test:
+   - Start cacm-daemon
+   - Start Jcode daemon (jcode serve + jcode api-bridge)
+   - Start speg-web dev server
+   - Verify: chat works, CACM timeline populated
+
+6. Windows build:
+   - Build speg-desktop Electron app
+   - Bundle cacm-daemon + jcode binaries
+   - Produce Windows .exe
+
+7. Git tag:
+   git tag -a speg-v0.1.0-phase1 -m "SPEG Phase 1 complete"
 
 EXIT CRITERIA:
 
-- [ ] All typecheck passes
-- [ ] All tests pass (0 failures)
-- [ ] Lint clean (0 errors)
-- [ ] Dev server starts with SPEG active
-- [ ] Windows .exe builds successfully
+- [ ] cargo build --workspace (both cacm + jcode) → PASS
+- [ ] cargo test --workspace → all pass
+- [ ] cargo clippy → no warnings
+- [ ] cargo fmt --check → clean
+- [ ] cacm-sdk-ts: typecheck + tests → PASS
+- [ ] speg-web: typecheck + build → PASS
+- [ ] cacm-daemon starts and responds to WebSocket queries
+- [ ] Jcode builds with cacm-bridge, CACM tools visible
+- [ ] Windows .exe produced
 - [ ] Git tag created
 
-GIT COMMIT:
-
-```bash
-# Only if there are lint/type fixes needed
-git add -A
-git commit -m "chore(speg): phase 1 integration fixes"
-git push origin --tags
-```
-
-AFTER: Write final Phase 1 report to research/report/1.9-phase1-complete.md
-Mark Phase 1 header as ✅ in SPEG-CHECKLIST.md
-
-PHASE 1 COMPLETE. Ready for Phase 2.
+AFTER: Write report to research/report/1.12-phase1-complete.md
+Mark Phase 1 as complete. Ready for Phase 2.
 
 ```
 
 ---
 
-## Notes for Future Phases
+## Task 1.13: CACM Daemon WebSocket Protocol Types
 
-Phases 2-6 follow the same pattern. Each task gets:
-1. Self-contained prompt in this file
-2. Files to create with exact paths
-3. Research directions
-4. Verification commands
-5. Git commit template
-6. Report instructions
+```
 
-Copy the pattern above for each new task.
+TASK: Define TypeScript types for the CACM daemon WebSocket protocol.
+
+CONTEXT:
+
+- CACM daemon (1.4) uses a simple JSON WebSocket protocol, NOT Effect RPC
+- These types are for cacm-sdk-ts to use when talking to cacm-daemon
+- Must mirror the Rust types in cacm-core/src/types.rs exactly
+- Separate from the Effect/Schema contracts in 1.2 (for SPEG web ↔ T3 Code server)
+
+FILES TO CREATE:
+
+1. cacm/cacm-sdk-ts/src/types.ts:
+   - AgentType: "jcode" | "claude-code" | "codex" | "opencode" | "cursor" | "speg"
+   - AgentSession, AgentTurn, CrossAgentContext, ContextType
+   - CacmQueryParams/Result, CacmSessionsParams/Result, CacmInjectParams/Result
+   - CacmSessionActivity push notification type
+   - All plain TypeScript interfaces (not Effect/Schema)
+
+VERIFICATION:
+
+```bash
+cd cacm/cacm-sdk-ts && npm run typecheck
+```
+
+GIT COMMIT:
+
+```bash
+git add cacm/cacm-sdk-ts/src/types.ts
+git commit -m "feat(cacm): add CACM daemon WebSocket protocol types"
+```
+
+AFTER: Mark ✅, write report to research/report/1.13-protocol-types.md
+
+```
+
+---
+
+## Task 1.14: Wire Contracts Barrel Export
+
+```
+
+TASK: Wire the SPEG contracts barrel into the @t3tools/contracts package entry.
+
+CONTEXT:
+
+- Task 1.2 created SPEG contracts but intentionally did NOT export them from the package
+- Now that contracts are stable, add the barrel export
+- ONE-LINE change
+
+FILES TO MODIFY:
+
+1. packages/contracts/src/index.ts:
+   - Add: export \* from "./speg/index.ts";
+
+VERIFICATION:
+
+```bash
+vp run --filter @t3tools/contracts typecheck
+vp run --filter @t3tools/contracts test
+```
+
+GIT COMMIT:
+
+```bash
+git add packages/contracts/src/index.ts
+git commit -m "feat(speg): wire SPEG contracts barrel into package entry"
+```
+
+AFTER: Mark ✅, write report to research/report/1.14-barrel-export.md
+
+```
+
 ```
