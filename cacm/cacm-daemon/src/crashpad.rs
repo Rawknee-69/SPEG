@@ -25,8 +25,9 @@ pub const CRASH_REPORT_MIN_INTERVAL: Duration = Duration::from_secs(30);
 /// Maximum crash reports written per process.
 pub const CRASH_REPORT_MAX: usize = 1000;
 /// Maximum `PANIC:` lines appended to `daemon.log` per process — bounds the
-/// log stream against a flood of throttled panics (the file log itself is
-/// also rotated daily).
+/// hook's own log stream against a flood of throttled panics. (The hook's
+/// bare `daemon.log` is per-process capped; the tracing sink's mirrored log
+/// is rotated daily by `main`.)
 pub const MAX_PANIC_LOG_LINES: usize = 1000;
 
 /// Latest memory footprint (bytes), updated by the server's stats path so the
@@ -183,7 +184,7 @@ impl Crashpad {
                     }
                 }
             } else {
-                eprintln!("cacm-daemon panic — {message} (crash report throttled)");
+                eprintln!("cacm-daemon panic — {message} (crash report suppressed: throttled or cap reached)");
             }
             previous(info);
         }));
@@ -310,15 +311,17 @@ mod tests {
             "repeated panics must be throttled to at most one report, got {with_ours}"
         );
         // Log-stream bound: a flood of panics must not grow daemon.log past
-        // the per-process line cap.
+        // the per-process line cap. The cap is exact (atomic RMW gates every
+        // append), so once ≥1000 panics reach the hook the count is exactly
+        // MAX regardless of concurrent panics from other tests.
         for i in 0..(MAX_PANIC_LOG_LINES + 5) {
             let _ = std::panic::catch_unwind(|| panic!("flood {i}"));
         }
         let log = fs::read_to_string(dir.join("daemon.log")).unwrap();
         let panic_lines = log.lines().filter(|l| l.starts_with("PANIC:")).count();
-        assert!(
-            panic_lines <= MAX_PANIC_LOG_LINES + 10,
-            "panic log lines must be capped, got {panic_lines}"
+        assert_eq!(
+            panic_lines, MAX_PANIC_LOG_LINES,
+            "panic log lines must be capped exactly"
         );
         // The report-writing path itself is covered by
         // `write_report_contains_panic_details`.
