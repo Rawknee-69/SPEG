@@ -862,6 +862,65 @@ mod tests {
     }
 
     #[test]
+    fn dispatch_rejects_store_under_hard_pressure() {
+        let mut state = test_state();
+        // Hard limit 0 → every store is rejected with -32002.
+        state.memory = MemoryManager::new(0, 0);
+        let resp = call(
+            &state,
+            r#"{"id":1,"method":"cacm.context.store","params":{"context":{
+                "id":"ctx-p1","session_id":"s1","agent_type":"jcode","context_type":"task",
+                "content":"x","file_paths":[],"decisions":[],"errors":[],
+                "timestamp":"2026-01-01T00:00:00Z"
+            }}}"#,
+        );
+        let value: Value = serde_json::from_str(&resp).unwrap();
+        assert_eq!(value["error"]["code"], -32002);
+        assert!(value["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("memory pressure"));
+    }
+
+    #[test]
+    fn dispatch_shrinks_before_store_under_soft_pressure() {
+        let mut state = test_state();
+        // Tiny soft budget so seeding three entries trips soft pressure.
+        state.memory = MemoryManager::new(50, 10_000);
+        seed(&state, "c1", "s1", "/repo/a.rs");
+        seed(&state, "c2", "s2", "/repo/b.rs");
+        seed(&state, "c3", "s3", "/repo/c.rs");
+        // The store arm must shrink (evicting the oldest entries) then admit.
+        let resp = call(
+            &state,
+            r#"{"id":2,"method":"cacm.context.store","params":{"context":{
+                "id":"ctx-new","session_id":"s9","agent_type":"jcode","context_type":"task",
+                "content":"fresh","file_paths":["/repo/d.rs"],"decisions":[],"errors":[],
+                "timestamp":"2026-01-02T00:00:00Z"
+            }}}"#,
+        );
+        let value: Value = serde_json::from_str(&resp).unwrap();
+        assert_eq!(value["result"]["stored"], "ctx-new");
+        // The two oldest entries were evicted; the newest + the new one remain.
+        let resp = call(
+            &state,
+            r#"{"id":3,"method":"cacm.query","params":{"project":"*"}}"#,
+        );
+        let value: Value = serde_json::from_str(&resp).unwrap();
+        let entries = value["result"]["entries"].as_array().unwrap();
+        let ids: Vec<&str> = entries.iter().map(|e| e["id"].as_str().unwrap()).collect();
+        assert!(
+            ids.contains(&"c3"),
+            "newest pre-seed entry survives: {ids:?}"
+        );
+        assert!(ids.contains(&"ctx-new"), "new store survives: {ids:?}");
+        assert!(
+            !ids.contains(&"c1") && !ids.contains(&"c2"),
+            "oldest evicted: {ids:?}"
+        );
+    }
+
+    #[test]
     fn origin_allowed_checks_allow_list() {
         let allow = vec!["http://localhost:5173".to_string()];
         // Non-browser clients (no Origin) are always allowed.

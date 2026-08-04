@@ -65,7 +65,7 @@ impl Crashpad {
     pub fn write_report(&self, info: &CrashInfo) -> std::io::Result<PathBuf> {
         let name = format!(
             "crash-{}-{}.log",
-            info.timestamp.format("%Y%m%d-%H%M%S%.3f"),
+            info.timestamp.format("%Y%m%d-%H%M%S%.6f"),
             std::process::id()
         );
         let path = self.dir.join(name);

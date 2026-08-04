@@ -104,6 +104,11 @@ pub trait Storage: Send + Sync {
     /// `target_bytes` (evicting oldest context entries; SQLite is disk-backed
     /// so it is a no-op there). Default: no-op.
     fn shrink_memory(&mut self, _target_bytes: usize) {}
+
+    /// Align the backend's own eviction budget with the memory manager's soft
+    /// limit so pressure signals are real (Jcode's memory graph evicts at the
+    /// soft budget; SQLite is disk-backed, so a no-op there). Default: no-op.
+    fn set_budgets(&mut self, _byte_budget: usize, _count_cap: usize) {}
 }
 
 /// Does this context entry belong to `project`?
@@ -454,6 +459,10 @@ impl Storage for JcodeBackend {
 
     fn shrink_memory(&mut self, target_bytes: usize) {
         self.graph.shrink_to(target_bytes);
+    }
+
+    fn set_budgets(&mut self, byte_budget: usize, count_cap: usize) {
+        self.graph.set_budgets(byte_budget, count_cap);
     }
 }
 

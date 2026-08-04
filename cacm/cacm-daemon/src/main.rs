@@ -228,6 +228,11 @@ async fn daemon_main(
         storage::select_backend(cli.jcode_home.as_deref(), cli.db_path.as_deref()).await?;
     tracing::info!(backend = storage_box.name(), "storage backend selected");
 
+    // Align the backend's own eviction budget with the memory manager's soft
+    // limit so the jcode memory graph self-evicts at the same threshold the
+    // manager treats as "soft pressure" (SQLite is disk-backed: no-op).
+    storage_box.set_budgets(cli.memory_soft.max(1), storage::MEMORY_GRAPH_CAP);
+
     // Session index: hydrate from persisted sessions, then overlay a
     // best-effort scan of the default agent directories.
     let mut sessions: HashMap<String, AgentSession> = storage_box
@@ -316,6 +321,7 @@ async fn watcher_supervisor(
                 Err(err) => {
                     tracing::warn!(error = %err, "failed to rebuild session watcher");
                     tokio::time::sleep(backoff).await;
+                    backoff = (backoff * 2).min(Duration::from_secs(30));
                     continue;
                 }
             },
@@ -379,7 +385,7 @@ async fn watcher_task(mut rx: mpsc::Receiver<SessionActivity>, state: AppState) 
     }
 }
 
-/// Backoff between self-heal restarts: 1s, 2s, 4s, … capped at 30s.
+/// Backoff between self-heal restarts: 2s, 4s, 8s, … capped at 30s.
 fn restart_backoff(attempt: u32) -> Duration {
     let secs = 1u64 << attempt.min(5);
     Duration::from_secs(secs.min(30))
