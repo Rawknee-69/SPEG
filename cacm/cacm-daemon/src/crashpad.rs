@@ -24,6 +24,10 @@ use std::time::{Duration, Instant};
 pub const CRASH_REPORT_MIN_INTERVAL: Duration = Duration::from_secs(30);
 /// Maximum crash reports written per process.
 pub const CRASH_REPORT_MAX: usize = 1000;
+/// Maximum `PANIC:` lines appended to `daemon.log` per process — bounds the
+/// log stream against a flood of throttled panics (the file log itself is
+/// also rotated daily).
+pub const MAX_PANIC_LOG_LINES: usize = 1000;
 
 /// Latest memory footprint (bytes), updated by the server's stats path so the
 /// panic hook can include it in crash reports without a dependency cycle.
@@ -132,19 +136,17 @@ impl Crashpad {
         let previous = std::panic::take_hook();
         let last_report = Arc::new(Mutex::new(Instant::now() - CRASH_REPORT_MIN_INTERVAL));
         let report_count = Arc::new(AtomicUsize::new(0));
+        // Bounds the log stream: only the first MAX_PANIC_LOG_LINES panics
+        // append a line, and the (expensive) backtrace is captured only when
+        // a report may actually be written.
+        let panic_log_count = Arc::new(AtomicUsize::new(0));
         std::panic::set_hook(Box::new(move |info| {
             let message = panic_payload_message(info);
-            let backtrace = Backtrace::force_capture();
-            let report = CrashInfo {
-                version: env!("CARGO_PKG_VERSION"),
-                timestamp: Utc::now(),
-                uptime_secs: pad.uptime_secs(),
-                panic_message: message.clone(),
-                backtrace: backtrace.to_string(),
-                memory_used_bytes: CURRENT_MEMORY_USED.load(Ordering::Relaxed),
-            };
-            // Always keep the panic in the collectible log (cheap, one line).
-            pad.append_log(&format!("PANIC: {message}"));
+            // Always keep the panic in the collectible log (cheap, one line)
+            // while under the per-process line cap.
+            if panic_log_count.fetch_add(1, Ordering::Relaxed) < MAX_PANIC_LOG_LINES {
+                pad.append_log(&format!("PANIC: {message}"));
+            }
             let report_due = {
                 let mut last = match last_report.lock() {
                     Ok(guard) => guard,
@@ -160,6 +162,14 @@ impl Crashpad {
             // throttled panics must not silence reports for genuine crashes.
             let under_cap = report_count.load(Ordering::Relaxed) < CRASH_REPORT_MAX;
             if report_due && under_cap {
+                let report = CrashInfo {
+                    version: env!("CARGO_PKG_VERSION"),
+                    timestamp: Utc::now(),
+                    uptime_secs: pad.uptime_secs(),
+                    panic_message: message.clone(),
+                    backtrace: Backtrace::force_capture().to_string(),
+                    memory_used_bytes: CURRENT_MEMORY_USED.load(Ordering::Relaxed),
+                };
                 match pad.write_report(&report) {
                     Ok(path) => {
                         report_count.fetch_add(1, Ordering::Relaxed);
@@ -298,6 +308,17 @@ mod tests {
         assert!(
             with_ours <= 1,
             "repeated panics must be throttled to at most one report, got {with_ours}"
+        );
+        // Log-stream bound: a flood of panics must not grow daemon.log past
+        // the per-process line cap.
+        for i in 0..(MAX_PANIC_LOG_LINES + 5) {
+            let _ = std::panic::catch_unwind(|| panic!("flood {i}"));
+        }
+        let log = fs::read_to_string(dir.join("daemon.log")).unwrap();
+        let panic_lines = log.lines().filter(|l| l.starts_with("PANIC:")).count();
+        assert!(
+            panic_lines <= MAX_PANIC_LOG_LINES + 10,
+            "panic log lines must be capped, got {panic_lines}"
         );
         // The report-writing path itself is covered by
         // `write_report_contains_panic_details`.

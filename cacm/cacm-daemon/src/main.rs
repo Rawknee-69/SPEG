@@ -123,10 +123,11 @@ fn main() -> std::process::ExitCode {
     let crash_dir_for_state = crashpad.dir().to_path_buf();
     crashpad.clone().install_hook();
 
-    // Logging: console + mirrored to <crash-dir>/daemon.log (non-blocking).
+    // Logging: console + mirrored to <crash-dir>/daemon.log (non-blocking,
+    // rotated daily so the file cannot grow forever).
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("info,cacm_daemon=debug"));
-    let file_appender = tracing_appender::rolling::never(crashpad.dir(), "daemon.log");
+    let file_appender = tracing_appender::rolling::daily(crashpad.dir(), "daemon.log");
     let (file_writer, _file_guard) = tracing_appender::non_blocking(file_appender);
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().with_filter(filter.clone()))
