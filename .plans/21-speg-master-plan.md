@@ -1,8 +1,9 @@
 # SPEG — The Universal Cross-Agent AI Platform
 
-> **Plan 21** | Status: Planning | Target: Built inside `t3code/` as a sibling project
+> **Plan 21** | Status: Planning | Built inside `t3code/` as sibling project
 > **Model**: Any capable coding agent | **Mode**: Goal-oriented — work until complete or halted
 > **Multi-agent**: Yes — parallel tasks on non-overlapping file paths
+> **Windows target**: Yes — Phase 1 must produce a working Windows desktop build
 
 ---
 
@@ -11,60 +12,81 @@
 This is a **goal-oriented plan**. An agent reading this should:
 
 1. Pick the next **pending** task from `SPEG-CHECKLIST.md`
-2. Read the task's full specification below
+2. Copy the task's **full prompt** from `research/promptref.md`
 3. Research best approaches (search web if unsure — never guess)
-4. Implement following ALL rules in [Style Guide](#style-guide-reference)
+4. Implement following ALL rules in `research/08-style-guide.md` and `AGENTS.md`
 5. Write tests
 6. Verify: `vp run typecheck` + `vp run test <files>` on changed files only
-7. Write report in `t3code/research/report/<task-id>.md`
-8. Mark task complete in `SPEG-CHECKLIST.md`
-9. Pick next task — **do not stop until all tasks done or human halts**
+7. **Git commit** with conventional commit message after all tests pass
+8. Write report in `research/report/<task-id>.md`
+9. Mark task ✅ in `SPEG-CHECKLIST.md` — **only after git commit succeeds**
+10. Pick next task — **do not stop until all tasks done or human halts**
 
 If you encounter blockers, dead-ends, or unclear requirements: **ask the human**. Do not invent answers.
 
 ---
 
-## Style Guide Reference
+## Naming Convention
 
-Every agent MUST follow `t3code/AGENTS.md` and the comprehensive style guide at `t3code/research/08-style-guide.md`. Key rules:
+**Everything new is SPEG**. No T3/T3 Code branding in new code:
 
-| Rule | Requirement |
-|------|-------------|
-| **Minimal code** | If same logic used >2 times → helper function. Fewer lines = better. |
-| **Production quality** | Never suppress errors/warnings — fix root cause. |
-| **Types** | NEVER use `any`. ALWAYS use proper types. Derive from Schema, not hand-written. |
-| **Imports** | `import type` for types. `.ts` extension on relative imports. Namespace for Node builtins. |
-| **Effect** | `Effect.fn("name")` for named functions. `Schema.TaggedErrorClass` for errors. |
-| **Tests** | `@effect/vitest` with `it.effect`. Wait on receipts, never timeouts. |
-| **Verification** | `vp run typecheck` + `vp run test <files>` on changed files ONLY. Never repo-wide. |
-| **Research** | Search web for best algorithms/patterns before implementing. Never guess. |
-| **Reports** | After each task: write report in `t3code/research/report/<task-id>.md` |
+| Context | Naming |
+|---------|--------|
+| Package name | `@speg/core` |
+| Service tags | `speg/cacm/SessionWatcher`, `speg/jcode/InstanceManager` |
+| RPC methods | `speg.chat.sendMessage`, `speg.cacm.queryContext` |
+| Config paths | `~/.speg/`, `%APPDATA%/speg/` |
+| Web routes | `/speg/chat`, `/speg/memory` |
+| File paths | `speg/src/`, `apps/web/src/components/speg/` |
+| Existing T3 Code | **UNTOCUHED** — no renaming of existing `@t3tools/*` packages |
 
 ---
 
-## Motivation
+## Style Guide Reference
 
-T3 Code is a multi-provider agent harness. Jcode is a 15.8K-star Rust-based coding agent with 40+ providers, swarms, semantic memory, and a GA TypeScript SDK. The opportunity: combine T3 Code's multi-surface UI architecture with Jcode's agent intelligence, and build the **first truly cross-agent context continuity system** — where switching from Claude Code → Codex → SPEG preserves all context seamlessly.
+Every agent MUST follow `AGENTS.md` and `research/08-style-guide.md`. Critical rules:
+
+| Rule | Requirement |
+|------|-------------|
+| **Minimal code** | Same logic >2 times → helper. Fewer lines = better. |
+| **Production quality** | Never suppress errors. Fix root cause. |
+| **Types** | NEVER `any`. Derive from Schema. |
+| **Imports** | `import type` for types. `.ts` extension. Namespace Node builtins. |
+| **Effect** | `Effect.fn("name")`. `Schema.TaggedErrorClass`. `Layer.effect`. |
+| **Tests** | `@effect/vitest` with `it.effect`. Wait on receipts. |
+| **Verification** | `vp run typecheck` + `vp run test <files>` on changed files ONLY. |
+| **Research** | Search web for best approach before implementing. |
+| **Commits** | Conventional commits after ALL tests pass. |
+| **Reports** | Write to `research/report/<task-id>.md` |
 
 ---
 
 ## Architecture
 
 ```
-t3code/                              ← All work happens here
+t3code/                                    ← All work happens here
 ├── apps/
-│   ├── server/     ← SPEG server (new files, Effect services)
-│   ├── web/        ← SPEG web UI (new routes + components)
-│   ├── desktop/    ← SPEG desktop (wraps web)
-│   └── mobile/     ← SPEG mobile (React Native)
+│   ├── server/src/speg/     ← SPEG server services (Effect layers)
+│   ├── web/src/
+│   │   ├── components/speg/ ← SPEG React components
+│   │   └── routes/speg/     ← SPEG routes
+│   ├── desktop/src/speg/    ← SPEG Electron integration
+│   └── mobile/src/speg/     ← SPEG React Native
 ├── packages/
-│   ├── contracts/  ← SPEG contracts (new schemas)
-│   ├── shared/     ← SPEG shared utils
-│   └── client-runtime/ ← SPEG client logic
-├── speg/           ← NEW: SPEG-specific code (Jcode SDK wrappers, CACM engine)
-├── .plans/         ← Plans (21-speg-*.md)
-└── research/       ← Analysis & reports
-    └── report/     ← Agent task reports
+│   └── contracts/src/speg/  ← SPEG wire schemas
+├── speg/                    ← NEW: Core SPEG package
+│   ├── src/
+│   │   ├── jcode/           ← Jcode SDK wrappers
+│   │   ├── cacm/            ← Cross-Agent Context Manager
+│   │   │   └── parsers/     ← Agent session parsers
+│   │   ├── memory/          ← Memory graph services
+│   │   ├── providers/       ← Provider catalog
+│   │   ├── terminal/        ← Terminal services
+│   │   └── auth/            ← Auth services
+│   ├── skills/              ← Preconfigured skills
+│   └── test/                ← Tests
+├── .plans/                  ← Plans
+└── research/                ← Analysis, reports, promptref
 ```
 
 ### Core Innovation: CACM (Cross-Agent Context Manager)
@@ -72,212 +94,287 @@ t3code/                              ← All work happens here
 ```
 Claude Code ──┐
 Codex ────────┤
-Cursor ───────┼── Session Watcher ──→ Context Extractor ──→ Jcode Memory Graph
-OpenCode ─────┤                                                    │
-SPEG/Jcode ───┘                                                    │
-       ▲                                                           │
-       └────────── Context Injector ◀────── Memory Query ◀─────────┘
+Cursor ───────┼── SessionWatcher ──→ ContextExtractor ──→ Jcode Memory Graph
+OpenCode ─────┤                                              │
+SPEG/Jcode ───┘                                              │
+       ▲                                                     │
+       └──────── ContextInjector ◀─── MemoryQuery ◀─────────┘
 ```
-
-CACM watches ALL agent sessions → extracts context → stores in Jcode memory graph → injects relevant context when switching agents → compacts over time.
 
 ---
 
-## Phase 1: Foundation (Tasks 1.1 – 1.7)
+## Phase 1: Foundation — Target: Working Windows Desktop Build
 
-### Task 1.1: Project Scaffolding
+### Task 1.1: Package Scaffolding
 
-**Files**: `speg/package.json`, `speg/tsconfig.json`, root workspace config update
+**Goal**: Create the `@speg/core` package, configure workspace, ensure it compiles.
 
-**What**: Create `t3code/speg/` as a new workspace package. Set up TypeScript, Effect, bundling. Register in pnpm workspace.
+**Files**:
+- `speg/package.json` — new package manifest
+- `speg/tsconfig.json` — TypeScript config
+- `speg/src/index.ts` — entry point
+- `pnpm-workspace.yaml` — add `speg` to workspace
 
-**Steps**:
-1. Create `speg/package.json` with dependencies: `effect`, `@1jehuang/jcode-sdk`, `@t3tools/contracts`, `@t3tools/shared`
-2. Create `speg/tsconfig.json` extending base config
-3. Update `pnpm-workspace.yaml` to include `speg`
-4. Run `vp i` to install
-5. Verify: `vp run --filter speg typecheck` passes
+**Key decisions**:
+- Package name: `@speg/core`
+- Dependencies: `effect`, `@1jehuang/jcode-sdk`, `@t3tools/contracts`, `@t3tools/shared`
+- Exports: subpath-only exports (matching `@t3tools/shared` pattern)
+- Target: ESNext, NodeNext module resolution, strict mode
 
-**Exit criteria**: `speg/` package exists, imports resolve, typecheck passes.
+**Dependencies**: None
+
+**Exit criteria**:
+- `vp i` installs without errors
+- `vp run --filter @speg/core typecheck` passes
+- Import `@speg/core` from another package resolves
 
 ---
 
 ### Task 1.2: SPEG Contracts
 
-**Files**: `packages/contracts/src/speg/` (new directory with multiple files)
+**Goal**: Define all cross-agent wire types in Effect/Schema.
 
-**What**: Define all SPEG wire types using Effect/Schema. Follow existing contract patterns exactly.
+**Files**:
+- `packages/contracts/src/speg/spegBaseSchemas.ts` — branded IDs
+- `packages/contracts/src/speg/spegSession.ts` — agent session descriptors
+- `packages/contracts/src/speg/spegContext.ts` — cross-agent context types
+- `packages/contracts/src/speg/spegMemory.ts` — memory query/result types
+- `packages/contracts/src/speg/spegRpc.ts` — RPC method definitions
+- `packages/contracts/src/speg/spegChat.ts` — chat message types
+- `packages/contracts/src/speg/index.ts` — re-exports
+- `packages/contracts/test/speg/` — contract tests
 
-**Schemas to define**:
-- `spegBaseSchemas.ts` — branded IDs: `AgentSessionId`, `MemoryEntryId`, `ContextChunkId`
-- `spegSession.ts` — `AgentSessionDescriptor` (agent type, path, status, metadata)
-- `spegContext.ts` — `CrossAgentContext` (universal context entry), `ContextChunk`, `ContextQuery`
-- `spegMemory.ts` — `MemoryQueryParams`, `MemorySearchResult`, `MemoryEntrySummary`
-- `spegRpc.ts` — RPC methods: `cacm.queryContext`, `cacm.listSessions`, `cacm.injectContext`, `speg.chat.sendMessage`, `speg.chat.subscribe`
+**Key decisions**:
+- Branded IDs: `SpegSessionId`, `SpegMemoryId`, `SpegContextId`
+- Use `Schema.Struct`, `Schema.Union`, `Schema.Literal` — no hand-written types
+- RPC follows `WsRpcGroup` pattern from existing `rpc.ts`
+- All schemas must have encode/decode roundtrip tests
+- Include `protocolVersion: 1` in ServerConfig extension
 
-**Pattern**: Follow `packages/contracts/src/baseSchemas.ts` for branded IDs. Follow `packages/contracts/src/rpc.ts` for RPC definitions.
+**Dependencies**: 1.1
 
-**Exit criteria**: All schemas defined with encode/decode tests. `vp run --filter @t3tools/contracts typecheck` passes.
+**Exit criteria**:
+- All schemas pass encode/decode roundtrip tests
+- `vp run --filter @t3tools/contracts typecheck` passes
+- `vp run test packages/contracts/test/speg/` all pass
 
 ---
 
-### Task 1.3: Jcode SDK Wrapper
+### Task 1.3: Jcode SDK Effect Wrapper
 
-**Files**: `speg/src/jcode/` (new directory)
+**Goal**: Effect-native service wrappers around `@1jehuang/jcode-sdk`.
 
-**What**: Effect-native wrapper around `@1jehuang/jcode-sdk`. Follow Layer + Service pattern from T3 Code.
+**Files**:
+- `speg/src/jcode/Services/JcodeInstanceManager.ts` — service tag + shape
+- `speg/src/jcode/Services/JcodeSessionBridge.ts` — session mapping
+- `speg/src/jcode/Services/JcodeMemoryAccess.ts` — memory graph access
+- `speg/src/jcode/Layers/JcodeInstanceManagerLive.ts` — implementation
+- `speg/src/jcode/Layers/JcodeSessionBridgeLive.ts`
+- `speg/src/jcode/Layers/JcodeMemoryAccessLive.ts`
+- `speg/src/jcode/Errors.ts` — tagged errors
+- `speg/test/jcode/` — unit tests with mock Jcode SDK
 
-**Services**:
-- `JcodeInstanceManager` — launch private Jcode instances, health checks, restart
-- `JcodeSessionBridge` — map SPEG threads ↔ Jcode sessions, stream events, route messages
-- `JcodeMemoryAccess` — read/write Jcode memory graph, query embeddings
+**Key decisions**:
+- `JcodeClient.launch()` mode — private instance per project
+- Windows: detect Jcode binary path (`%LOCALAPPDATA%\jcode\bin\jcode.exe`)
+- Linux/macOS: `~/.local/bin/jcode` or PATH
+- Health check: `ping()` via harness API
+- Session bridge: map `SpegSessionId` ↔ Jcode `session_id`
+- Memory access: read/write Jcode memory graph via SDK calls
+- Service tags use `speg/jcode/` prefix
 
-**Pattern**: Each service = `Context.Service` tag + `Layer.effect` implementation + `Schema.TaggedErrorClass` errors.
+**Dependencies**: 1.1, 1.2
 
-**Exit criteria**: Services defined with unit tests. Mock Jcode SDK for testing.
+**Exit criteria**:
+- Services defined with proper Effect Layer pattern
+- Mock Jcode SDK tests pass
+- Real Jcode integration test (requires Jcode installed): launch → create session → ping
 
 ---
 
 ### Task 1.4: CACM Session Watcher
 
-**Files**: `speg/src/cacm/SessionWatcher.ts`
+**Goal**: Filesystem watcher that monitors agent session dirs, parses activity.
 
-**What**: Filesystem watcher that monitors agent session directories and emits `SessionActivity` events when new turns appear.
+**Files**:
+- `speg/src/cacm/Services/SessionWatcher.ts` — service tag + shape
+- `speg/src/cacm/Layers/SessionWatcherLive.ts` — implementation
+- `speg/src/cacm/AgentSessionParser.ts` — parser interface
+- `speg/src/cacm/parsers/JcodeSessionParser.ts` — Jcode JSONL parser
+- `speg/src/cacm/Errors.ts` — parse errors, watch errors
+- `speg/test/cacm/SessionWatcher.test.ts` — tests with mock filesystem
 
-**Service**: `SessionWatcher`
-- Watch paths per agent type (Jcode, Claude Code, Codex — stubs for others)
-- Parse session format → canonical `AgentTurn`
-- Emit via PubSub for downstream consumers
-- Pluggable parser interface: `AgentSessionParser`
+**Key decisions**:
+- Use `chokidar` (cross-platform fs watcher) — NOT `fs.watch` (buggy on Windows)
+- Watch paths per platform:
+  - Windows: `%LOCALAPPDATA%\jcode\sessions\`, `%USERPROFILE%\.claude\projects\`
+  - Linux/macOS: `~/.jcode/sessions/`, `~/.claude/projects/`
+- Parse Jcode `transcript.jsonl` — NDJSON format with `Message` type
+- Emit `SessionActivity` via `PubSub` for downstream consumers
+- Parser interface: `AgentSessionParser` with `parseTurn(raw) -> AgentTurn`
+- Stub parsers for Claude Code, Codex, Cursor, OpenCode (throw "not implemented" — Phase 2)
 
-**Parsers**:
-- `JcodeSessionParser` — parse `~/.jcode/sessions/<id>/transcript.jsonl`
-- Stubs for Claude Code, Codex, Cursor, OpenCode (implemented in Phase 2)
+**Dependencies**: 1.3
 
-**Exit criteria**: Watcher detects new Jcode session activity. Unit tests with mock filesystem.
+**Exit criteria**:
+- Watcher detects file changes in mock Jcode session directory
+- Parser extracts turns from sample JSONL
+- `PubSub` subscribers receive `SessionActivity` events
+- All unit tests pass
 
 ---
 
 ### Task 1.5: CACM Context Extractor
 
-**Files**: `speg/src/cacm/ContextExtractor.ts`
+**Goal**: Extract context from agent turns, store in Jcode memory graph.
 
-**What**: Receives `AgentTurn` events, extracts context, stores in Jcode memory graph.
+**Files**:
+- `speg/src/cacm/Services/ContextExtractor.ts` — service tag + shape
+- `speg/src/cacm/Layers/ContextExtractorLive.ts` — implementation
+- `speg/src/cacm/ExtractionHeuristics.ts` — MVP extraction logic
+- `speg/test/cacm/ContextExtractor.test.ts` — tests
 
-**Service**: `ContextExtractor`
-- Receive turns from SessionWatcher PubSub
-- Batch turns within a session (extract every K turns or at session end)
-- Use lightweight LLM for extraction (initial: template-based heuristics; later: Jcode sidecar)
-- Produce `CrossAgentContext` entries
-- Store via `JcodeMemoryAccess` with `provenance: Observed`, `source: { agent, sessionId }`
+**Key decisions**:
+- Subscribe to `SessionWatcher.streamActivity`
+- Batch turns within session: extract every 5 turns OR at session end
+- MVP extraction: template-based heuristics (no LLM yet):
+  - Task: first user message → task description
+  - Decisions: messages containing "decided", "chose", "going with", "will use"
+  - File changes: parse tool call output for file paths
+  - Errors: messages containing "error", "failed", "broke", "exception"
+- Store via `JcodeMemoryAccess` with `provenance: "Observed"`, `source: { agent, sessionId }`
+- Use `KeyedCoalescingWorker` (from shared) for per-session batching
 
-**Extraction heuristics (MVP)**:
-- Task: first user message in session = task description
-- Decisions: messages containing "decided", "chose", "going with"
-- File changes: tool calls that modify files
-- Errors: messages containing "error", "failed", "broke"
-- Patterns: repeated file patterns, conventions mentioned
+**Dependencies**: 1.4
 
-**Exit criteria**: Extract context from mock Jcode session, verify stored entries. Unit tests.
+**Exit criteria**:
+- Subscribes to watcher, receives turns
+- Extracts task, decisions, file changes, errors from sample turns
+- Stores entries in Jcode memory graph (verified via mock)
+- Unit tests for each extraction heuristic
 
 ---
 
 ### Task 1.6: CACM Context Injector
 
-**Files**: `speg/src/cacm/ContextInjector.ts`
+**Goal**: Query memory graph, format context, inject into new sessions.
 
-**What**: Queries Jcode memory graph for relevant context and formats it for target agent.
+**Files**:
+- `speg/src/cacm/Services/ContextInjector.ts` — service tag + shape
+- `speg/src/cacm/Layers/ContextInjectorLive.ts` — implementation
+- `speg/src/cacm/InjectionFormatters.ts` — per-agent formatting
+- `speg/test/cacm/ContextInjector.test.ts` — tests
 
-**Service**: `ContextInjector`
-- Query: `JcodeMemoryAccess.search()` with current project context
-- Rank: recency × relevance × confidence
-- Format per agent type (SPEG: system context message; external: AGENTS.md snippet)
-- Inject at session start
+**Key decisions**:
+- Query: `JcodeMemoryAccess.search(projectContext, { limit: 10, recency: "24h" })`
+- Rank: `recency_score × relevance_score × confidence`
+- Format per target agent:
+  - **SPEG**: system context message via `sendMessage({ noReply: true })`
+  - **Claude Code**: append to project's `CLAUDE.md` with `[SPEG Context]` section
+  - **Codex**: prepend to first user message
+  - **OpenCode**: append to `OPENCODE.md`
+  - **Cursor**: append to `.cursorrules`
+- Context window budget: max 2000 tokens for injected context
+- Truncate: drop lowest-ranked entries if over budget
 
-**Injection format for SPEG**:
-```
-[Cross-Agent Context — from recent sessions]
-• Task: Building REST API for user management (Claude Code, 10 min ago)
-• Decision: Using JWT instead of sessions (Claude Code)
-• Files modified: src/auth/handler.ts, src/auth/middleware.ts
-• Issue resolved: CORS error fixed with middleware (Codex, 5 min ago)
-• Pick up from here.
-```
+**Dependencies**: 1.5
 
-**Exit criteria**: Query memory, format context, inject into SPEG session. Unit tests.
+**Exit criteria**:
+- Queries memory graph with project context
+- Ranks results correctly (recency × relevance)
+- Formats context for each agent type
+- Injects into SPEG session (verified via mock)
+- Unit tests for ranking, formatting, truncation
 
 ---
 
 ### Task 1.7: SPEG Server Integration
 
-**Files**: `apps/server/src/speg/` (new directory, minimal additions)
+**Goal**: Wire SPEG services into the existing server. Add WebSocket RPC routes.
 
-**What**: Wire SPEG services into the existing T3 Code server. Add SPEG WebSocket routes.
+**Files**:
+- `apps/server/src/speg/SpegLayer.ts` — compose all SPEG services
+- `apps/server/src/speg/SpegRpcHandlers.ts` — RPC handler implementations
+- `apps/server/src/speg/SpegWsRoutes.ts` — WebSocket route registration
+- `apps/server/src/ws.ts` — add SPEG routes (minimal diff — use existing pattern)
+- `apps/server/src/server.ts` — add SPEG layer to server composition
+- `apps/server/test/speg/` — integration tests
 
-**Steps**:
-1. Create `SpegLayer` composing all SPEG services
-2. Add SPEG RPC handlers to `ws.ts` (minimal additions — use existing patterns)
-3. Register SPEG routes
-4. Verify: `vp run dev` starts with SPEG services
+**Key decisions**:
+- `SpegLayer` composes: `JcodeInstanceManagerLive` + `SessionWatcherLive` + `ContextExtractorLive` + `ContextInjectorLive`
+- RPC handlers follow existing `ws.ts` patterns: `authorizeEffect` + `observeRpcEffect`
+- Server activation: SPEG services fork-parked until server activation (use existing `ServerActivation` Deferred)
+- Jcode daemon: launched on server startup, health-checked periodically
+- Windows: ensure Unix socket paths are replaced with named pipes where needed
+- Do NOT break existing T3 Code RPC methods — only add new ones
 
-**Exit criteria**: Server starts with SPEG layer. WebSocket accepts SPEG RPC calls.
+**Dependencies**: 1.3, 1.6
 
----
-
-## Phase 2: External Agent CACM (Tasks 2.1 – 2.4)
-
-### Task 2.1: Claude Code Parser
-
-**Files**: `speg/src/cacm/parsers/ClaudeCodeParser.ts`
-
-**What**: Parse Claude Code session files at `~/.claude/projects/<hash>/`.
-
-**Key challenge**: Claude Code session format. Research the actual file structure first.
-
-**Exit criteria**: Parse real Claude Code session, extract turns. Unit tests.
-
----
-
-### Task 2.2: Codex Parser
-
-**Files**: `speg/src/cacm/parsers/CodexParser.ts`
-
-**What**: Parse Codex session files at `~/.codex/sessions/`.
-
-**Exit criteria**: Parse real Codex session. Unit tests.
+**Exit criteria**:
+- `vp run dev` starts with SPEG services active
+- WebSocket accepts SPEG RPC calls
+- Jcode daemon launches and is health-checked
+- All integration tests pass
+- Existing T3 Code functionality unaffected
 
 ---
 
-### Task 2.3: OpenCode & Cursor Parsers
+### Task 1.8: Desktop Build & Windows Packaging
 
-**Files**: `speg/src/cacm/parsers/OpenCodeParser.ts`, `speg/src/cacm/parsers/CursorParser.ts`
+**Goal**: Produce a working Windows desktop application that bundles SPEG.
 
-**What**: Parse OpenCode (`~/.local/share/opencode/sessions/`) and Cursor sessions.
+**Files**:
+- `apps/desktop/src/speg/SpegDesktopBridge.ts` — SPEG desktop IPC handlers
+- `apps/desktop/src/main.ts` — add SPEG to app initialization
+- `apps/desktop/package.json` — add SPEG deps, build config
+- `apps/desktop/electron-builder.yml` — Windows NSIS/MSI config
+- `speg/scripts/build-desktop.sh` — build script
+- `speg/scripts/build-desktop.ps1` — Windows build script
 
-**Exit criteria**: Parse real sessions. Unit tests.
+**Key decisions**:
+- Electron wraps the web app (existing pattern)
+- SPEG UI routes: `/speg/chat`, `/speg/memory`, `/speg/settings`
+- Desktop IPC: expose SPEG-specific operations via `desktopBridge`
+- Windows packaging: NSIS installer + portable .exe
+- Jcode binary: bundled with the app OR downloaded on first launch
+- Auto-update: `electron-updater` with SPEG update channel
+- Build target: Windows x64, macOS ARM64/x64, Linux x64
+
+**Dependencies**: 1.7
+
+**Exit criteria**:
+- `vp run dev:desktop` starts desktop app with SPEG UI
+- Windows build produces working `.exe`
+- Desktop app: launch → see SPEG chat → send message → receive response
+- Smoke test on Windows passes
 
 ---
 
-### Task 2.4: Cross-Agent Context Injection
+### Task 1.9: Phase 1 Integration Test & Cleanup
 
-**Files**: `speg/src/cacm/CrossAgentInjector.ts`
+**Goal**: End-to-end verification that Phase 1 is complete and production-ready.
 
-**What**: When user switches agents, inject context formatted for the target agent.
+**What**:
+1. Full build: `vp run build` (all packages + apps)
+2. Lint check: `vp lint` (all SPEG files)
+3. Type check: `vp run typecheck` (all SPEG files)
+4. Test suite: `vp run test speg/` + `vp run test apps/server/test/speg/`
+5. Start server: `vp run dev` — verify SPEG endpoints respond
+6. Desktop launch: verify SPEG UI visible
+7. Windows build: verify `.exe` produced
+8. Git tag: `speg-v0.1.0-phase1`
 
-**Mechanisms per agent**:
-- SPEG: system context message
-- Claude Code: append to CLAUDE.md or initial message
-- Codex: prepend to first user message
-- OpenCode: append to OPENCODE.md
-- Cursor: append to .cursorrules
+**Files**: None (verification only)
 
-**Exit criteria**: Claude → SPEG switch preserves context. Integration test.
+**Dependencies**: 1.1–1.8
+
+**Exit criteria**:
+- All checks pass
+- Windows `.exe` launches and works
+- Git tag created
+- Phase 1 marked COMPLETE in checklist
 
 ---
-
-## Phase 3-6: See `SPEG-CHECKLIST.md` for full task list
-
-(Each phase expands into 4-6 tasks following the same pattern)
 
 ## Done Criteria (Full Plan)
 
@@ -289,7 +386,9 @@ CACM watches ALL agent sessions → extracts context → stores in Jcode memory 
 - [ ] Swarm dashboard with DAG task view
 - [ ] Terminal, VCS diff viewer, browser automation UI
 - [ ] Multi-user auth with remote access
-- [ ] Desktop (Electron) and Mobile (React Native) apps
-- [ ] Every task has unit tests
+- [ ] Desktop (Electron) — Windows, macOS, Linux
+- [ ] Mobile (React Native) — iOS, Android
+- [ ] Every task has unit tests, all pass
 - [ ] All typecheck + lint pass
-- [ ] Agent reports in `t3code/research/report/`
+- [ ] Agent reports in `research/report/`
+- [ ] Git tags at each phase completion

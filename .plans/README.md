@@ -12,3 +12,6 @@
 10. `10-unify-process-session-abstraction.md`
 19. `19-version-control-phase-1-vcs-driver-foundation.md`
 20. `20-version-control-phase-2-source-control-provider-foundation.md`
+21. `21-speg-master-plan.md` — SPEG cross-agent platform master plan
+22. `SPEG-CHECKLIST.md` — SPEG task tracking checklist
+23. `SPEG-AGENT-GUIDE.md` — Agent instructions for working on SPEG
