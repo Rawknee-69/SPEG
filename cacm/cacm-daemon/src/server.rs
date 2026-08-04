@@ -301,6 +301,31 @@ pub fn release_connection(active: &AtomicUsize) {
     active.fetch_sub(1, Ordering::Relaxed);
 }
 
+/// RAII guard that holds a connection slot until dropped, so a panic or an
+/// early return in the connection task cannot leak the slot.
+pub struct ConnectionGuard {
+    active: Arc<AtomicUsize>,
+}
+
+impl ConnectionGuard {
+    /// Acquire a slot, or return `None` when the cap is reached.
+    pub fn acquire(active: &Arc<AtomicUsize>, cap: usize) -> Option<Self> {
+        if try_acquire_connection(active, cap) {
+            Some(Self {
+                active: Arc::clone(active),
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl Drop for ConnectionGuard {
+    fn drop(&mut self) {
+        release_connection(&self.active);
+    }
+}
+
 /// WebSocket upgrade handler. Rejects requests from origins not on the
 /// allow-list (browsers send an `Origin` header; non-browser clients usually
 /// don't) and enforces the connection cap and frame-size limits.
@@ -314,18 +339,19 @@ pub async fn ws_handler(
         tracing::warn!(?origin, "rejected WebSocket upgrade from disallowed origin");
         return (StatusCode::FORBIDDEN, "origin not allowed").into_response();
     }
-    if !try_acquire_connection(&state.active_connections, MAX_CONNECTIONS) {
+    let Some(guard) = ConnectionGuard::acquire(&state.active_connections, MAX_CONNECTIONS) else {
         tracing::warn!("rejected WebSocket upgrade: connection limit reached");
         return (StatusCode::SERVICE_UNAVAILABLE, "too many connections").into_response();
-    }
+    };
     ws.max_message_size(MAX_WS_MESSAGE_SIZE)
         .max_frame_size(MAX_WS_MESSAGE_SIZE)
-        .on_upgrade(move |socket| handle_socket(socket, state))
+        .on_upgrade(move |socket| handle_socket(socket, state, guard))
 }
 
 /// Per-connection loop: dispatch incoming frames and forward replies +
-/// broadcast notifications back over the socket.
-async fn handle_socket(mut socket: WebSocket, state: AppState) {
+/// broadcast notifications back over the socket. The [`ConnectionGuard`]
+/// releases the connection slot on drop.
+async fn handle_socket(mut socket: WebSocket, state: AppState, _guard: ConnectionGuard) {
     // Scope request/reply correlation per connection so two clients can use
     // the same request ids concurrently without false "duplicate" rejections.
     let conn_id = state.next_conn.fetch_add(1, Ordering::Relaxed);
@@ -368,7 +394,6 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
             }
         }
     }
-    release_connection(&state.active_connections);
 }
 
 /// Parse a raw client frame and route it to the matching handler.
@@ -673,6 +698,22 @@ mod tests {
         release_connection(&active);
         release_connection(&active);
         assert_eq!(active.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn connection_guard_releases_on_drop() {
+        let active = Arc::new(AtomicUsize::new(0));
+        {
+            let guard = ConnectionGuard::acquire(&active, 1).unwrap();
+            assert!(!try_acquire_connection(&active, 1)); // held by the guard
+            drop(guard); // RAII release
+        }
+        assert!(try_acquire_connection(&active, 1)); // slot is free again
+        release_connection(&active);
+        // Cap reached → acquire returns None without leaking.
+        let _g1 = ConnectionGuard::acquire(&active, 1).unwrap();
+        assert!(ConnectionGuard::acquire(&active, 1).is_none());
+        assert_eq!(active.load(Ordering::Relaxed), 1);
     }
 
     /// A storage backend that always fails, to exercise server-error masking.
