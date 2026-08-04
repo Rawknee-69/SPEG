@@ -417,7 +417,13 @@ fn format_entry_line(ranked: &RankedContext, target: AgentType, now: DateTime<Ut
 /// - `\r`, `\n`, and the Unicode line/paragraph separators (`U+2028`/
 ///   `U+2029`) collapse to a single space, so content can never span lines
 ///   (this also keeps the `(agent, time_ago)` suffix on the same line).
-/// - All other C0/C1 control characters are dropped.
+/// - All other C0/C1 control characters are dropped, plus Unicode *format*
+///   characters that `is_control` misses — bidi overrides/embeddings
+///   (`U+202A`–`U+202E`), zero-width joiners/space (`U+200B`–`U+200F`),
+///   soft hyphen (`U+00AD`), Arabic letter mark (`U+061C`), invisible
+///   operators/isolates (`U+2060`–`U+206F`), BOM (`U+FEFF`), and interlinear
+///   anchors (`U+FFF9`–`U+FFFB`) — so display-order tricks cannot smuggle
+///   hidden instructions into the target prompt.
 ///
 /// Content stays on one bullet line; the target's markdown styling is only
 /// applied by the caller, so a leading `#`/`-`/`*` inside content cannot
@@ -435,7 +441,7 @@ pub fn sanitize_content(s: &str) -> String {
                 }
                 break_space = true;
             }
-            c if c.is_control() => {}
+            c if c.is_control() || is_format_char(c) => {}
             c => {
                 out.push(c);
                 break_space = false;
@@ -443,6 +449,23 @@ pub fn sanitize_content(s: &str) -> String {
         }
     }
     out
+}
+
+/// Is `c` a Unicode format character (category Cf) that could manipulate
+/// display order or parsing without being visible — not caught by
+/// [`char::is_control`]? See [`sanitize_content`] for why these are dropped.
+fn is_format_char(c: char) -> bool {
+    matches!(
+        c,
+        '\u{00AD}'                        // soft hyphen
+            | '\u{061C}'                  // Arabic letter mark
+            | '\u{200B}'..='\u{200F}'     // zero-width space/joiner, LRM/RLM
+            | '\u{202A}'..='\u{202E}'     // bidi embedding/override marks
+            | '\u{2060}'..='\u{2064}'     // word joiner, invisible operators
+            | '\u{2066}'..='\u{206F}'     // bidi isolates, invisible separators
+            | '\u{FEFF}'                  // BOM / zero-width no-break space
+            | '\u{FFF9}'..='\u{FFFB}'     // interlinear annotation anchors
+    )
 }
 
 /// `header + line`, truncated to `max` bytes if needed.
@@ -530,7 +553,11 @@ mod tests {
         assert_eq!(sanitize_content("a\u{2028}b\u{2029}c"), "a b c");
         // Other control characters are removed entirely.
         assert_eq!(sanitize_content("tab\u{0007}bell\u{001B}esc"), "tabbellesc");
-        // Ordinary text passes through unchanged.
+        // Unicode format chars (bidi overrides, zero-width joiners, soft
+        // hyphen, BOM) are dropped even though is_control misses them.
+        assert_eq!(sanitize_content("he\u{202E}llo"), "hello"); // bidi RLO
+        assert_eq!(sanitize_content("a\u{200B}b\u{FEFF}c"), "abc"); // ZWSP + BOM
+                                                                    // Ordinary text passes through unchanged.
         assert_eq!(
             sanitize_content("use the workspace resolver"),
             "use the workspace resolver"
