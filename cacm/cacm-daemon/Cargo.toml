@@ -6,4 +6,44 @@ description = "HTTP + WebSocket daemon for the Cross-Agent Context Manager (CACM
 license = "MIT"
 publish = false
 
+[[bin]]
+name = "cacm-daemon"
+path = "src/main.rs"
+
 [dependencies]
+# Core CACM types, watcher, and parser registry.
+cacm-core = { path = "../cacm-core" }
+
+# Async runtime + HTTP/WebSocket server.
+tokio = { version = "1", features = [
+  "rt-multi-thread",
+  "macros",
+  "net",
+  "io-util",
+  "sync",
+  "time",
+  "signal",
+] }
+axum = { version = "0.8", features = ["ws"] }
+tower-http = { version = "0.6", features = ["cors"] }
+
+# Serialization / protocol.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+
+# CLI parsing.
+clap = { version = "4", features = ["derive"] }
+
+# Storage backends.
+# SQLite fallback: `bundled` compiles SQLite from source (no system dependency).
+rusqlite = { version = "0.32", features = ["bundled"] }
+# Jcode harness socket probing on Windows needs the same pipe-name derivation
+# as jcode-transport (sha256 of the normalized socket path).
+sha2 = "0.10"
+hex = "0.4"
+
+# Logging + stream utilities for the WebSocket handler.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+futures-util = { version = "0.3", features = ["sink"] }
