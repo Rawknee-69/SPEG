@@ -39,6 +39,12 @@ struct Cli {
     #[arg(long, value_name = "ORIGIN")]
     allow_origin: Vec<String>,
 
+    /// Explicitly allow binding to a non-loopback `--host`. The daemon is
+    /// unauthenticated and serves raw session context, so binding off-loopback
+    /// without this flag is refused.
+    #[arg(long)]
+    expose: bool,
+
     /// Jcode home directory; the harness API socket is resolved under it as
     /// `<home>/jcode-api.sock` (default: JCODE_API_SOCKET / runtime-dir rules).
     #[arg(long)]
@@ -50,6 +56,12 @@ struct Cli {
     db_path: Option<PathBuf>,
 }
 
+/// Is `host` a loopback address? Anything else exposes the unauthenticated
+/// daemon to the network and requires `--expose`.
+fn is_loopback_host(host: &str) -> bool {
+    host == "localhost" || host == "127.0.0.1" || host == "::1" || host.starts_with("127.")
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let filter = EnvFilter::try_from_default_env()
@@ -57,9 +69,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().with_env_filter(filter).init();
 
     let cli = Cli::parse();
+    if !is_loopback_host(&cli.host) && !cli.expose {
+        return Err(format!(
+            "refusing to bind to non-loopback host '{}': the daemon is unauthenticated \
+             and serves session context; pass --expose to override",
+            cli.host
+        )
+        .into());
+    }
     tracing::info!(
         port = cli.port,
         host = %cli.host,
+        expose = cli.expose,
         allow_origin = ?cli.allow_origin,
         jcode_home = ?cli.jcode_home,
         db_path = ?cli.db_path,
@@ -246,6 +267,17 @@ mod tests {
         assert_eq!(session.session_id, "fox");
         assert_eq!(session.agent_type, AgentType::Jcode);
         assert!(session.path.ends_with(".jcode/sessions/fox"));
+    }
+
+    #[test]
+    fn is_loopback_host_classifies_addresses() {
+        assert!(is_loopback_host("127.0.0.1"));
+        assert!(is_loopback_host("127.5.5.5"));
+        assert!(is_loopback_host("localhost"));
+        assert!(is_loopback_host("::1"));
+        assert!(!is_loopback_host("0.0.0.0"));
+        assert!(!is_loopback_host("192.168.1.10"));
+        assert!(!is_loopback_host(""));
     }
 
     #[tokio::test]

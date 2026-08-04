@@ -32,7 +32,7 @@ use futures_util::SinkExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::broadcast;
@@ -40,6 +40,11 @@ use tower_http::cors::CorsLayer;
 
 /// Capacity of the session-activity broadcast channel (per daemon).
 pub const EVENT_CHANNEL_CAPACITY: usize = 128;
+/// Maximum WebSocket message/frame size (1 MiB) — the daemon is
+/// unauthenticated, so oversized frames must not be buffered.
+pub const MAX_WS_MESSAGE_SIZE: usize = 1 << 20;
+/// Maximum concurrent WebSocket connections.
+pub const MAX_CONNECTIONS: usize = 64;
 
 /// A client request frame.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,6 +163,8 @@ pub struct AppState {
     pub pending: Arc<Mutex<HashMap<String, PendingRequest>>>,
     /// Monotonic per-connection counter (used to scope the pending map).
     pub next_conn: Arc<AtomicU64>,
+    /// Currently-open WebSocket connections (bounded by [`MAX_CONNECTIONS`]).
+    pub active_connections: Arc<AtomicUsize>,
     /// Allowed WebSocket `Origin` headers. Empty = only clients that send no
     /// Origin (e.g. node, the SDK) are accepted — browsers are rejected until
     /// the operator opts in per origin. The daemon is unauthenticated, so it
@@ -181,6 +188,7 @@ impl AppState {
             registry: Arc::new(registry),
             pending: Arc::new(Mutex::new(HashMap::new())),
             next_conn: Arc::new(AtomicU64::new(0)),
+            active_connections: Arc::new(AtomicUsize::new(0)),
             allow_origins: Arc::new(Vec::new()),
             events,
             started_at: Utc::now(),
@@ -267,9 +275,35 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
     (StatusCode::OK, Json(body))
 }
 
+/// Try to reserve a connection slot. Callers must release it with
+/// [`release_connection`] when the connection ends.
+pub fn try_acquire_connection(active: &AtomicUsize, cap: usize) -> bool {
+    let mut current = active.load(Ordering::Relaxed);
+    loop {
+        if current >= cap {
+            return false;
+        }
+        match active.compare_exchange_weak(
+            current,
+            current + 1,
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        ) {
+            Ok(_) => return true,
+            Err(observed) => current = observed,
+        }
+    }
+}
+
+/// Release a connection slot previously acquired with
+/// [`try_acquire_connection`].
+pub fn release_connection(active: &AtomicUsize) {
+    active.fetch_sub(1, Ordering::Relaxed);
+}
+
 /// WebSocket upgrade handler. Rejects requests from origins not on the
 /// allow-list (browsers send an `Origin` header; non-browser clients usually
-/// don't).
+/// don't) and enforces the connection cap and frame-size limits.
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
@@ -280,7 +314,13 @@ pub async fn ws_handler(
         tracing::warn!(?origin, "rejected WebSocket upgrade from disallowed origin");
         return (StatusCode::FORBIDDEN, "origin not allowed").into_response();
     }
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
+    if !try_acquire_connection(&state.active_connections, MAX_CONNECTIONS) {
+        tracing::warn!("rejected WebSocket upgrade: connection limit reached");
+        return (StatusCode::SERVICE_UNAVAILABLE, "too many connections").into_response();
+    }
+    ws.max_message_size(MAX_WS_MESSAGE_SIZE)
+        .max_frame_size(MAX_WS_MESSAGE_SIZE)
+        .on_upgrade(move |socket| handle_socket(socket, state))
 }
 
 /// Per-connection loop: dispatch incoming frames and forward replies +
@@ -328,6 +368,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
             }
         }
     }
+    release_connection(&state.active_connections);
 }
 
 /// Parse a raw client frame and route it to the matching handler.
@@ -401,8 +442,15 @@ pub fn dispatch(state: &AppState, conn_id: u64, raw: &str) -> String {
         pending.remove(&id_key);
     }
 
+    // Client errors (-3260x) are safe to echo; server errors (-32000) may
+    // embed filesystem paths or backend internals, so log the detail and
+    // return a generic message.
     let response = match result {
         Ok(value) => RpcResponse::ok(id, value),
+        Err(error) if error.code == -32000 => {
+            tracing::warn!(method = %method, error = %error.message, "request handler failed");
+            RpcResponse::err(id, RpcError::server_error("internal server error"))
+        }
         Err(error) => RpcResponse::err(id, error),
     };
     response_json(response)
@@ -446,7 +494,7 @@ fn response_json(response: RpcResponse) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::JcodeBackend;
+    use crate::storage::{JcodeBackend, Storage};
     use cacm_core::types::{AgentType, ContextType, CrossAgentContext};
     use std::path::PathBuf;
 
@@ -611,6 +659,81 @@ mod tests {
         );
         let value: Value = serde_json::from_str(&resp).unwrap();
         assert_eq!(value["result"]["entries"][0]["id"], "ctx-5");
+    }
+
+    #[test]
+    fn try_acquire_connection_respects_cap() {
+        let active = AtomicUsize::new(0);
+        assert!(try_acquire_connection(&active, 2));
+        assert!(try_acquire_connection(&active, 2));
+        assert!(!try_acquire_connection(&active, 2)); // cap reached
+        assert_eq!(active.load(Ordering::Relaxed), 2);
+        release_connection(&active);
+        assert!(try_acquire_connection(&active, 2));
+        release_connection(&active);
+        release_connection(&active);
+        assert_eq!(active.load(Ordering::Relaxed), 0);
+    }
+
+    /// A storage backend that always fails, to exercise server-error masking.
+    struct FailingStorage;
+
+    impl Storage for FailingStorage {
+        fn name(&self) -> &'static str {
+            "failing"
+        }
+        fn store_context(
+            &mut self,
+            _ctx: &CrossAgentContext,
+        ) -> Result<(), crate::storage::StorageError> {
+            Err(crate::storage::StorageError::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "C:\\secret\\path\\detail",
+            )))
+        }
+        fn query_context(
+            &self,
+            _project: &str,
+            _limit: usize,
+        ) -> Result<Vec<CrossAgentContext>, crate::storage::StorageError> {
+            Err(crate::storage::StorageError::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "C:\\secret\\path\\detail",
+            )))
+        }
+        fn list_sessions(&self) -> Result<Vec<AgentSession>, crate::storage::StorageError> {
+            Err(crate::storage::StorageError::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "C:\\secret\\path\\detail",
+            )))
+        }
+        fn store_session(&mut self, _s: &AgentSession) -> Result<(), crate::storage::StorageError> {
+            Err(crate::storage::StorageError::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "C:\\secret\\path\\detail",
+            )))
+        }
+    }
+
+    #[test]
+    fn dispatch_masks_server_error_details() {
+        let state = AppState::new(
+            Box::new(FailingStorage),
+            ParserRegistry::new(),
+            HashMap::new(),
+        );
+        let resp = call(
+            &state,
+            r#"{"id":1,"method":"cacm.query","params":{"project":"/repo"}}"#,
+        );
+        let value: Value = serde_json::from_str(&resp).unwrap();
+        assert_eq!(value["error"]["code"], -32000);
+        // The filesystem detail must not leak to the client.
+        assert_eq!(value["error"]["message"], "internal server error");
+        assert!(!value["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("C:\\secret"));
     }
 
     #[test]

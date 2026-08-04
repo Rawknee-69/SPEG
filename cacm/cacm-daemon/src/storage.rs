@@ -135,7 +135,10 @@ fn path_within(path: &str, base: &str) -> bool {
 ///
 /// Mirrors Jcode's `MemoryGraph` in spirit: entries live in memory only. No
 /// persistence — that is what the harness write path (task 1.8) and the
-/// SQLite fallback provide.
+/// SQLite fallback provide. Storing the same id again replaces the old entry
+/// (matching SQLite's `INSERT OR REPLACE`), and the store is size-capped so
+/// an unauthenticated `cacm.context.store` loop cannot grow memory without
+/// bound.
 #[derive(Default)]
 pub struct MemoryGraph {
     /// All context entries, in insertion order.
@@ -144,12 +147,32 @@ pub struct MemoryGraph {
     sessions: HashMap<String, AgentSession>,
 }
 
+/// Maximum entries kept in a [`MemoryGraph`]; the oldest is evicted beyond
+/// this.
+pub const MEMORY_GRAPH_CAP: usize = 10_000;
+
 impl MemoryGraph {
     pub fn new() -> Self {
         Self::default()
     }
 
     pub fn store_context(&mut self, ctx: &CrossAgentContext) {
+        // Replace same-id entries so repeated stores don't duplicate results
+        // or grow the store.
+        if let Some(pos) = self.contexts.iter().position(|c| c.id == ctx.id) {
+            self.contexts.remove(pos);
+        } else if self.contexts.len() >= MEMORY_GRAPH_CAP {
+            // Evict the oldest entry to bound memory.
+            if let Some(oldest) = self
+                .contexts
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, c)| c.timestamp)
+                .map(|(i, _)| i)
+            {
+                self.contexts.remove(oldest);
+            }
+        }
         self.contexts.push(ctx.clone());
     }
 
@@ -348,6 +371,13 @@ impl SqliteBackend {
             }
         }
         let conn = Connection::open(path)?;
+        // Context transcripts are sensitive; keep the DB file private on Unix
+        // (Windows has no POSIX modes; the file inherits the user's ACLs).
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+        }
         Self::from_conn(conn)
     }
 
@@ -702,6 +732,48 @@ mod tests {
         ));
         let sessions = graph.list_sessions();
         assert_eq!(sessions.len(), 2);
+    }
+
+    #[test]
+    fn memory_graph_dedups_by_id_and_caps_size() {
+        let mut graph = MemoryGraph::new();
+        let t0 = chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        // Repeated stores of the same id replace, never duplicate.
+        graph.store_context(&CrossAgentContext {
+            id: "dup".into(),
+            timestamp: t0,
+            ..sample_context("dup", "s1", "/repo/a.rs")
+        });
+        graph.store_context(&CrossAgentContext {
+            id: "dup".into(),
+            content: "replaced".into(),
+            timestamp: t0 + chrono::Duration::minutes(1),
+            ..sample_context("dup", "s1", "/repo/a.rs")
+        });
+        let all = graph.query_context("*", 100);
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].content, "replaced");
+
+        // Beyond the cap, the oldest entries are evicted.
+        let mut graph = MemoryGraph::new();
+        for i in 0..MEMORY_GRAPH_CAP + 5 {
+            graph.store_context(&CrossAgentContext {
+                id: format!("c{i}"),
+                timestamp: t0 + chrono::Duration::seconds(i as i64),
+                ..sample_context(&format!("c{i}"), "s1", "/repo/a.rs")
+            });
+        }
+        let all = graph.query_context("*", MEMORY_GRAPH_CAP + 10);
+        assert_eq!(all.len(), MEMORY_GRAPH_CAP);
+        // The five oldest ids (c0..c4) were evicted; newer ones remain.
+        let ids: Vec<&str> = all.iter().map(|c| c.id.as_str()).collect();
+        for evicted in ["c0", "c1", "c2", "c3", "c4"] {
+            assert!(!ids.contains(&evicted), "expected {evicted} to be evicted");
+        }
+        assert!(ids.contains(&"c5"));
+        assert!(ids.contains(&"c10004"));
     }
 
     #[test]
