@@ -58,15 +58,21 @@ struct Cli {
 
 /// Is `host` a loopback address? Anything else exposes the unauthenticated
 /// daemon to the network and requires `--expose`. Conservative: unknown host
-/// names (other than `localhost`) are treated as non-loopback.
+/// names (other than `localhost`) and hostnames merely prefixed with `127.`
+/// (e.g. `127.evil.com`) are treated as non-loopback.
 fn is_loopback_host(host: &str) -> bool {
     let host = host.trim();
-    host == "localhost"
-        || host == "127.0.0.1"
-        || host == "::1"
-        || host == "[::1]"
-        || host.starts_with("127.")
-        || host.starts_with("::ffff:127.")
+    if host == "localhost" || host == "[::1]" {
+        return true;
+    }
+    // std's Ipv6Addr::is_loopback does not cover IPv4-mapped loopback
+    // (::ffff:127.0.0.1); recognize the prefix explicitly before parsing.
+    if host.starts_with("::ffff:127.") {
+        return true;
+    }
+    host.parse::<std::net::IpAddr>()
+        .map(|ip| ip.is_loopback())
+        .unwrap_or(false)
 }
 
 #[tokio::main]
@@ -286,6 +292,7 @@ mod tests {
         assert!(is_loopback_host("::ffff:127.0.0.1"));
         assert!(!is_loopback_host("0.0.0.0"));
         assert!(!is_loopback_host("192.168.1.10"));
+        assert!(!is_loopback_host("127.evil.com"));
         assert!(!is_loopback_host(""));
     }
 

@@ -53,7 +53,9 @@ pub struct RpcRequest {
     /// when absent so dispatch can reject it with `-32600` like an invalid id.
     #[serde(default)]
     pub id: Value,
-    /// Method name, e.g. `cacm.query`.
+    /// Method name, e.g. `cacm.query`. Defaults to empty so a missing method
+    /// is a `-32600` Invalid Request (not a `-32700` parse error).
+    #[serde(default)]
     pub method: String,
     /// Method-specific parameters (defaults to `{}`).
     #[serde(default)]
@@ -615,6 +617,13 @@ mod tests {
         let value: Value = serde_json::from_str(&resp).unwrap();
         assert_eq!(value["error"]["code"], -32600);
         assert_eq!(value["id"], Value::Null);
+
+        // Valid JSON but no method → Invalid Request (-32600), not a parse
+        // error (-32700).
+        let resp = call(&state, r#"{"id":1}"#);
+        let value: Value = serde_json::from_str(&resp).unwrap();
+        assert_eq!(value["error"]["code"], -32600);
+        assert_eq!(value["id"], 1);
     }
 
     #[test]
