@@ -20,7 +20,7 @@
 | 1.8 | cacm-sdk-rs + jcode-cacm-bridge | ⬜ | Rust | `cacm/cacm-sdk-rs/`, `jcode/crates/jcode-cacm-bridge/` | 1.4, 1.7 |
 | 1.9 | cacm-sdk-ts (@cacm/sdk npm package) | ✅ | TS | `cacm/cacm-sdk-ts/` | 1.4 |
 | 1.10 | **Jcode Provider Adapter** (T3 Code server) | ✅ | TS | `apps/server/src/provider/Drivers/JcodeDriver.ts`, `Layers/JcodeAdapter.ts`, `Drivers/JcodeProcessManager.ts` | 1.8 |
-| 1.11 | **CACM Right Panel Tab** (T3 Code web) | ⬜ | TS | `apps/web/src/components/speg/CacmPanel.tsx` | 1.9, 1.10 |
+| 1.11 | **CACM Right Panel Tab** (T3 Code web) | ✅ | TS | `apps/web/src/components/speg/CacmPanel.tsx` | 1.9, 1.10 |
 | 1.12 | **SPEG Settings Panel** (T3 Code web) | ⬜ | TS | `apps/web/src/components/speg/SpegSettings.tsx` | 1.10 |
 | 1.13 | Compactor (dedup + summarize + link) | ⬜ | Rust | `cacm/cacm-core/src/compactor.rs` | 1.6 |
 | 1.14 | CACM daemon WebSocket protocol types | ⬜ | TS | `cacm/cacm-sdk-ts/src/types.ts` | 1.2, 1.4 |
@@ -153,16 +153,16 @@ This is Phase 6. Not needed for MVP.
 ## Overall Progress
 
 ```
-Phase 1: ███░░░░░░░░░░░░░░░░░  4/16  (25%)
+Phase 1: ████░░░░░░░░░░░░░░░░  5/16  (31%)
 Phase 2: ░░░░░░░░░░░░░░░░░░░░  0/6   (0%)
 Phase 3: ░░░░░░░░░░░░░░░░░░░░  0/8   (0%)
 Phase 4: ░░░░░░░░░░░░░░░░░░░░  0/4   (0%)
 Phase 5: ░░░░░░░░░░░░░░░░░░░░  0/3   (0%)
 Phase 6: ░░░░░░░░░░░░░░░░░░░░  0/5   (0%)
 ─────────────────────────────────────
-TOTAL:   ██░░░░░░░░░░░░░░░░░░  4/42  (10%)
+TOTAL:   ██░░░░░░░░░░░░░░░░░░  5/42  (12%)
 ```
 
 ## Last Updated
 
-2026-08-05 | v6 — Jcode as T3 Code provider, CACM as right panel | 42 tasks · 1.1, 1.2, 1.8, 1.9, 1.10 done
+2026-08-05 | v6 — Jcode as T3 Code provider, CACM as right panel | 42 tasks · 1.1, 1.2, 1.8, 1.9, 1.10, 1.11 done

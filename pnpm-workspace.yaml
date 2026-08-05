@@ -1,5 +1,6 @@
 packages:
   - apps/*
+  - cacm/cacm-sdk-ts
   - infra/*
   - oxlint-plugin-t3code
   - packages/*

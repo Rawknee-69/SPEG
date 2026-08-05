@@ -261,6 +261,8 @@ CACM daemon stores context in:
 
 ### Task 1.11: CACM Right Panel Tab (T3 Code Web)
 
+**Status**: ✅ (report: `research/report/1.11-cacm-panel.md`)
+
 **Files**: `apps/web/src/components/speg/CacmPanel.tsx` — new right panel tab
 
 **What**: Like Cursor IDE's sidebar, T3 Code has a right panel with tabs (Plan, Diff, Files, Preview, Terminal). We add a CACM tab showing:
