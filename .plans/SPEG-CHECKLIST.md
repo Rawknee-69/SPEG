@@ -6,7 +6,7 @@
 
 ---
 
-## Phase 1: Foundation — Jcode in T3 Code (16 tasks — 7 done)
+## Phase 1: Foundation — Jcode in T3 Code (16 tasks — 8 done)
 
 | ID | Task | Status | Lang | Files | Depends |
 |----|------|--------|------|-------|---------|
@@ -23,7 +23,7 @@
 | 1.11 | **CACM Right Panel Tab** (T3 Code web) | ✅ | TS | `apps/web/src/components/speg/CacmPanel.tsx` | 1.9, 1.10 |
 | 1.12 | **SPEG Settings Panel** (T3 Code web) | ✅ | TS | `apps/web/src/components/speg/SpegSettings.tsx` | 1.10 |
 | 1.13 | Compactor (dedup + summarize + link) | ✅ | Rust | `cacm/cacm-core/src/compactor.rs` | 1.6 |
-| 1.14 | CACM daemon WebSocket protocol types | ⬜ | TS | `cacm/cacm-sdk-ts/src/types.ts` | 1.2, 1.4 |
+| 1.14 | CACM daemon WebSocket protocol types | ✅ | TS | `cacm/cacm-sdk-ts/src/types.ts` | 1.2, 1.4 |
 | 1.15 | Wire contracts barrel export | ⬜ | TS | `packages/contracts/src/index.ts` (1 line) | 1.2 |
 | 1.16 | Phase 1 integration gate | ⬜ | Both | None | 1.1–1.15 |
 
@@ -153,16 +153,16 @@ This is Phase 6. Not needed for MVP.
 ## Overall Progress
 
 ```
-Phase 1: █████░░░░░░░░░░░░░░░  7/16  (44%)
+Phase 1: ██████░░░░░░░░░░░░░░  8/16  (50%)
 Phase 2: ░░░░░░░░░░░░░░░░░░░░  0/6   (0%)
 Phase 3: ░░░░░░░░░░░░░░░░░░░░  0/8   (0%)
 Phase 4: ░░░░░░░░░░░░░░░░░░░░  0/4   (0%)
 Phase 5: ░░░░░░░░░░░░░░░░░░░░  0/3   (0%)
 Phase 6: ░░░░░░░░░░░░░░░░░░░░  0/5   (0%)
 ─────────────────────────────────────
-TOTAL:   ███░░░░░░░░░░░░░░░░  7/42  (17%)
+TOTAL:   ████░░░░░░░░░░░░░░░░  8/42  (19%)
 ```
 
 ## Last Updated
 
-2026-08-05 | v8 — cross-session compactor | 42 tasks · 1.1, 1.2, 1.8, 1.9, 1.10, 1.11, 1.12, 1.13 done
+2026-08-05 | v9 — CACM daemon WebSocket protocol types | 42 tasks · 1.1, 1.2, 1.8, 1.9, 1.10, 1.11, 1.12, 1.13, 1.14 done
