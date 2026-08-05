@@ -2,7 +2,7 @@ import { afterEach, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 
 import { CacmClient, CacmError, normalizeDaemonUrl } from "../dist/index.js";
-import type { SessionActivity } from "../dist/index.js";
+import type { CacmSessionActivity } from "../dist/index.js";
 import { lastWs, MockWebSocket, reply } from "./mock-websocket.ts";
 
 const originalWebSocket = (globalThis as { WebSocket?: unknown }).WebSocket;
@@ -48,7 +48,7 @@ function sampleSession(id: string): Record<string, unknown> {
   };
 }
 
-function sampleActivity(overrides: Partial<SessionActivity> = {}): SessionActivity {
+function sampleActivity(overrides: Partial<CacmSessionActivity> = {}): CacmSessionActivity {
   return {
     session_id: "s1",
     agent_type: "jcode",
@@ -291,7 +291,7 @@ test("onActivity receives cacm.session_activity notifications and unsubscribes",
   };
   MockWebSocket.autoOpen = true;
   const client = new CacmClient("ws://test/ws");
-  const seen: SessionActivity[] = [];
+  const seen: CacmSessionActivity[] = [];
   const unsubscribe = client.onActivity((activity) => seen.push(activity));
 
   await client.query({ project: "/repo" });

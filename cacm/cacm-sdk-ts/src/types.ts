@@ -2,7 +2,7 @@
  * CACM wire types.
  *
  * These mirror `cacm-core/src/types.rs` exactly — they are the protocol types
- * shared over the daemon's WebSocket JSON surface (task 1.13). Naming and
+ * shared over the daemon's WebSocket JSON surface (task 1.14). Naming and
  * string encodings follow the SPEG contracts (task 1.2): agent and context
  * types serialize as kebab-case strings (`claude-code`, `file-change`),
  * statuses and event kinds as lowercase strings, timestamps as RFC 3339
@@ -79,7 +79,7 @@ export interface CrossAgentContext {
 export type SessionEventType = "created" | "modified" | "deleted" | "renamed" | "other";
 
 /** A single observed session-activity event, pushed by the daemon. */
-export interface SessionActivity {
+export interface CacmSessionActivity {
   session_id: string;
   agent_type: AgentType;
   event_type: SessionEventType;
@@ -104,12 +104,12 @@ export interface CacmQueryResult {
 }
 
 /** `cacm.sessions` params. Omit `project` for all sessions. */
-export interface CacmSessionParams {
+export interface CacmSessionsParams {
   project?: string;
 }
 
 /** `cacm.sessions` result — live agent sessions. */
-export interface CacmSessionResult {
+export interface CacmSessionsResult {
   sessions: AgentSession[];
 }
 

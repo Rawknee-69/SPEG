@@ -31,10 +31,10 @@ import type {
   CacmInjectResult,
   CacmQueryParams,
   CacmQueryResult,
-  CacmSessionParams,
-  CacmSessionResult,
+  CacmSessionsParams,
+  CacmSessionsResult,
   CrossAgentContext,
-  SessionActivity,
+  CacmSessionActivity,
 } from "./types.js";
 
 /** Default daemon address — matches `cacm-daemon`'s `--port 9786` default. */
@@ -192,7 +192,7 @@ export class CacmClient {
   private manuallyClosed = false;
   private nextId = 0;
   private readonly pending = new Map<number, PendingRequest>();
-  private readonly activityListeners = new Set<(activity: SessionActivity) => void>();
+  private readonly activityListeners = new Set<(activity: CacmSessionActivity) => void>();
 
   /**
    * @param url daemon address; defaults to `ws://localhost:9786`. A bare
@@ -236,7 +236,7 @@ export class CacmClient {
   }
 
   /** `cacm.sessions` — live agent sessions, optionally filtered to `project`. */
-  async sessions(params: CacmSessionParams = {}): Promise<CacmSessionResult> {
+  async sessions(params: CacmSessionsParams = {}): Promise<CacmSessionsResult> {
     const result = await this.request("cacm.sessions", params);
     const sessions = readArray(result, "sessions");
     return { sessions: sessions as unknown as AgentSession[] };
@@ -262,7 +262,7 @@ export class CacmClient {
    * Register a listener for server-pushed `cacm.session_activity`
    * notifications. Returns an unsubscribe function.
    */
-  onActivity(callback: (activity: SessionActivity) => void): () => void {
+  onActivity(callback: (activity: CacmSessionActivity) => void): () => void {
     this.activityListeners.add(callback);
     return () => {
       this.activityListeners.delete(callback);
@@ -467,7 +467,7 @@ export class CacmClient {
     // Server-initiated notification: {"event": ..., "data": ...}.
     if (record.event !== undefined) {
       if (record.event === "cacm.session_activity" && this.activityListeners.size > 0) {
-        const activity = record.data as SessionActivity;
+        const activity = record.data as CacmSessionActivity;
         for (const listener of this.activityListeners) listener(activity);
       }
       return;
