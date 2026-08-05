@@ -6,7 +6,8 @@ export type SettingsPath =
   | "/settings/source-control"
   | "/settings/connections"
   | "/settings/beta"
-  | "/settings/archived";
+  | "/settings/archived"
+  | "/settings/speg";
 
 export interface SettingsSearchItem {
   readonly id: string;
@@ -28,6 +29,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/connections": "Connections",
   "/settings/beta": "Beta",
   "/settings/archived": "Archive",
+  "/settings/speg": "SPEG",
 };
 
 /**
@@ -161,6 +163,39 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "archive",
     title: "Archived threads",
     to: "/settings/archived",
+  },
+  {
+    // Section-level entry; resolves to the first SPEG section like
+    // `environment-identification` resolves to `appearance`.
+    id: "speg",
+    title: "SPEG",
+    to: "/settings/speg",
+    targetId: "speg-jcode",
+  },
+  {
+    id: "speg-jcode",
+    title: "Jcode",
+    to: "/settings/speg",
+  },
+  {
+    id: "speg-cacm",
+    title: "CACM daemon",
+    to: "/settings/speg",
+  },
+  {
+    id: "speg-context-injection",
+    title: "Context injection",
+    to: "/settings/speg",
+  },
+  {
+    id: "speg-agent-watching",
+    title: "Agent watching",
+    to: "/settings/speg",
+  },
+  {
+    id: "speg-skills",
+    title: "Skills",
+    to: "/settings/speg",
   },
 ] as const satisfies ReadonlyArray<SettingsSearchItem>;
 

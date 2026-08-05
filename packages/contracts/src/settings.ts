@@ -6,6 +6,9 @@ import { TrimmedNonEmptyString, TrimmedString } from "./baseSchemas.ts";
 import { DEFAULT_TEXT_GENERATION_MODEL, ProviderOptionSelections } from "./model.ts";
 import { ModelSelection } from "./orchestration.ts";
 import { ProviderInstanceConfig, ProviderInstanceId } from "./providerInstance.ts";
+import { SpegSettingsSchema } from "./speg/spegSettings.ts";
+
+export * from "./speg/spegSettings.ts";
 
 // ── Client Settings (local-only) ───────────────────────────────
 
@@ -127,6 +130,9 @@ export const ClientSettingsSchema = Schema.Struct({
   // there is no way to tell that apart from "left alone", and a channel-derived
   // default could never reach them. Mirrors `updateChannelConfiguredByUser`.
   sidebarV2ConfiguredByUser: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  // SPEG integration (jcode + CACM daemon + context injection). Client-local
+  // blob; the whole object is replaced on each edit. See speg/spegSettings.ts.
+  speg: SpegSettingsSchema.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   timestampFormat: TimestampFormat.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_TIMESTAMP_FORMAT)),
   ),
@@ -757,6 +763,7 @@ export const ClientSettingsPatch = Schema.Struct({
   sidebarThreadPreviewCount: Schema.optionalKey(SidebarThreadPreviewCount),
   sidebarV2Enabled: Schema.optionalKey(Schema.Boolean),
   sidebarV2ConfiguredByUser: Schema.optionalKey(Schema.Boolean),
+  speg: Schema.optionalKey(SpegSettingsSchema),
   timestampFormat: Schema.optionalKey(TimestampFormat),
   wordWrap: Schema.optionalKey(Schema.Boolean),
 });

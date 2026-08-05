@@ -279,6 +279,8 @@ Follows `rightPanelStore.ts` pattern — registers as a new surface type.
 
 ### Task 1.12: SPEG Settings Panel (T3 Code Web)
 
+**Status**: ✅ (report: `research/report/1.12-speg-settings.md`)
+
 **Files**: `apps/web/src/routes/speg/` — new settings section
 
 **What**: A settings panel for SPEG/Jcode configuration:

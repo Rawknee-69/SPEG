@@ -18,6 +18,7 @@ import {
   PaletteIcon,
   SearchIcon,
   Settings2Icon,
+  SparklesIcon,
   XIcon,
 } from "lucide-react";
 import { useCanGoBack, useLocation, useNavigate } from "@tanstack/react-router";
@@ -54,6 +55,7 @@ const SETTINGS_SECTION_ICONS: Readonly<
   "/settings/connections": Link2Icon,
   "/settings/beta": FlaskConicalIcon,
   "/settings/archived": ArchiveIcon,
+  "/settings/speg": SparklesIcon,
 };
 
 export const SETTINGS_NAV_ITEMS: ReadonlyArray<{

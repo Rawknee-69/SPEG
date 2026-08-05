@@ -4,3 +4,4 @@ export * from "./spegContext.ts";
 export * from "./spegMemory.ts";
 export * from "./spegChat.ts";
 export * from "./spegRpc.ts";
+export * from "./spegSettings.ts";
