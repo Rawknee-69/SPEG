@@ -225,6 +225,15 @@ dependencies = [
 [[package]]
 name = "cacm-sdk-rs"
 version = "0.1.0"
+dependencies = [
+ "cacm-core",
+ "chrono",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite 0.24.0",
+]
 
 [[package]]
 name = "cc"

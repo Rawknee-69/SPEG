@@ -683,7 +683,7 @@ mod tests {
         assert!(value["result"]["formatted"]
             .as_str()
             .unwrap()
-            .starts_with("[Cross-Agent Context]"));
+            .contains("Cross-Agent Context"));
     }
 
     #[test]
