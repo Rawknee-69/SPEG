@@ -247,15 +247,53 @@ CACM daemon stores context in:
 
 ---
 
-### Task 1.10: SPEG Web UI
+### Task 1.10: Jcode Provider Adapter (T3 Code Server)
 
-**Files**: `speg-web/` — React app, imports `@cacm/sdk`, talks to Jcode daemon
+**Status**: ✅ (report: `research/report/1.10-jcode-adapter.md`)
 
-**Verification**: Chat works, CACM timeline shows cross-agent sessions.
+**Files**: `apps/server/src/provider/Drivers/JcodeDriver.ts`, `apps/server/src/provider/Layers/JcodeAdapter.ts`, `apps/server/src/provider/Drivers/JcodeProcessManager.ts`, `apps/server/src/provider/Layers/JcodeProvider.ts`, `apps/server/src/textGeneration/JcodeTextGeneration.ts`, `packages/contracts/src/settings.ts` (`JcodeSettings`)
+
+**What**: T3 Code already has provider adapters for Codex, Claude, Cursor, Grok, OpenCode. We add Jcode as a new provider. The adapter implements `ProviderDriver` interface: launch Jcode daemon, connect via harness API, send turns, stream events, interrupt.
+
+**Verification**: Jcode appears in T3 Code's provider list. Select Jcode → start a turn → agent responds.
 
 ---
 
-### Task 1.11: Compactor
+### Task 1.11: CACM Right Panel Tab (T3 Code Web)
+
+**Files**: `apps/web/src/components/speg/CacmPanel.tsx` — new right panel tab
+
+**What**: Like Cursor IDE's sidebar, T3 Code has a right panel with tabs (Plan, Diff, Files, Preview, Terminal). We add a CACM tab showing:
+- Cross-agent session timeline (all agents, color-coded)
+- Recent context extracted from each session
+- "Inject context" button for current thread
+- Links to related memories
+
+Follows `rightPanelStore.ts` pattern — registers as a new surface type.
+
+**Verification**: Right panel shows CACM tab. Timeline populated from cacm-daemon via @cacm/sdk.
+
+---
+
+### Task 1.12: SPEG Settings Panel (T3 Code Web)
+
+**Files**: `apps/web/src/routes/speg/` — new settings section
+
+**What**: A settings panel for SPEG/Jcode configuration:
+- Jcode binary path (auto-detect or manual)
+- CACM daemon port + connection settings
+- Agent session watch paths
+- Context injection preferences (auto/manual/off)
+- Skill toggle switches
+- Memory graph storage backend selection
+
+Follows existing T3 Code settings panel pattern.
+
+**Verification**: Settings appear in T3 Code's settings sidebar. Changes persist.
+
+---
+
+### Task 1.13: Compactor
 
 **Files**: `cacm/cacm-core/src/compactor.rs`
 
@@ -263,27 +301,27 @@ CACM daemon stores context in:
 
 ---
 
-### Task 1.12: Phase 1 Integration Gate
+### Task 1.14: CACM Daemon WebSocket Protocol Types
+
+**Files**: `cacm/cacm-sdk-ts/src/types.ts` — TypeScript types mirroring cacm-core Rust types
+
+**Why**: v4 contracts (1.2) defined Effect/Schema types. v6 CACM daemon uses simple JSON WebSocket protocol. These types mirror `cacm-core/src/types.rs` exactly — separate from Effect RPC contracts.
+
+---
+
+### Task 1.15: Wire Contracts Barrel Export
+
+**Files**: `packages/contracts/src/index.ts` — add `export * from "./speg/index.ts"` (1 line)
+
+**Why**: 1.2 report notes barrel is intentionally NOT exported yet. Safe to wire now.
+
+---
+
+### Task 1.16: Phase 1 Integration Gate
 
 **Files**: None — verification only
 
-**Verification**: Full build, all tests, Windows .exe, `git tag speg-v0.1.0-phase1`
-
----
-
-### Task 1.13: CACM Daemon WebSocket Protocol Types
-
-**Files**: `cacm/cacm-sdk-ts/src/types.ts` — TypeScript types mirroring Rust cacm-core types
-
-**Why**: v4 contracts (1.2) defined Effect/Schema types. v5 CACM daemon uses simple JSON WebSocket protocol. The `cacm-sdk-ts` types.ts must mirror `cacm-core/src/types.rs` exactly — these are the protocol types, separate from the Effect RPC contracts.
-
----
-
-### Task 1.14: Wire Contracts Barrel Export
-
-**Files**: `packages/contracts/src/index.ts` — add `export * from "./speg/index.ts"`
-
-**Why**: 1.2 report notes the barrel is intentionally NOT exported yet. Safe to wire now since contracts are stable. Enables `import { SpegSessionId } from "@t3tools/contracts"`.
+**Verification**: All builds pass, all tests pass, Jcode appears as provider in T3 Code, CACM right panel populates, `git tag speg-v0.1.0-phase1`.
 
 ---
 

@@ -1,58 +1,35 @@
-# SPEG — Implementation Checklist v5
+# SPEG — Implementation Checklist v6
 
-> **CACM is standalone** — importable daemon + SDKs. Jcode vanilla. SPEG web imports cacm-sdk-ts.
-> **Status key**: ⬜ pending | 🔵 in_progress | ✅ complete | ❌ blocked
-> **Tasks 1.1–1.2**: v4 plan — already implemented and committed. Unchanged.
+> **Strategy**: Jcode as a T3 Code provider. CACM as a right panel tab + settings.
+> **Jcode is vanilla** — `jcode-cacm-bridge` crate only. Zero core mods.
+> **No separate web UI** — T3 Code IS the UI. Observability dashboard deferred to Phase 6.
 
 ---
 
-## Phase 1: Foundation (12 tasks — 7 done, 5 remaining)
+## Phase 1: Foundation — Jcode in T3 Code (16 tasks — 4 done)
 
 | ID | Task | Status | Lang | Files | Depends |
 |----|------|--------|------|-------|---------|
 | 1.1 | @speg/core TypeScript package scaffold | ✅ | TS | `speg/package.json`, `speg/tsconfig.json`, `pnpm-workspace.yaml` | — |
-| 1.2 | SPEG wire contracts (Effect/Schema) | ✅ | TS | `packages/contracts/src/speg/` (7 files), `contracts.test.ts` | 1.1 |
-| 1.3 | cacm-core Rust crate (types, watcher, parser trait) | ✅ | Rust | `cacm/cacm-core/` | — |
-| 1.4 | cacm-daemon (HTTP+WS server, JSON-RPC API) | ✅ | Rust | `cacm/cacm-daemon/` | 1.3 |
-| 1.5 | Jcode session parser | ✅ | Rust | `cacm/cacm-core/src/parsers/jcode.rs` | 1.3 |
-| 1.6 | Context extractor (heuristics) | ✅ | Rust | `cacm/cacm-core/src/extractor.rs` | 1.5 |
-| 1.7 | Context injector (query + rank + format) | ✅ | Rust | `cacm/cacm-core/src/injector.rs` | 1.6 |
+| 1.2 | SPEG wire contracts (Effect/Schema) | ✅ | TS | `packages/contracts/src/speg/` (7 files), 64 tests | 1.1 |
+| 1.3 | cacm-core Rust crate (types, watcher, parser trait) | ⬜ | Rust | `cacm/cacm-core/` | — |
+| 1.4 | cacm-daemon (HTTP+WS server, JSON-RPC API) | ⬜ | Rust | `cacm/cacm-daemon/` | 1.3 |
+| 1.5 | Jcode session parser | ⬜ | Rust | `cacm/cacm-core/src/parsers/jcode.rs` | 1.3 |
+| 1.6 | Context extractor (heuristics) | ⬜ | Rust | `cacm/cacm-core/src/extractor.rs` | 1.5 |
+| 1.7 | Context injector (query + rank + format) | ⬜ | Rust | `cacm/cacm-core/src/injector.rs` | 1.6 |
 | 1.8 | cacm-sdk-rs + jcode-cacm-bridge | ⬜ | Rust | `cacm/cacm-sdk-rs/`, `jcode/crates/jcode-cacm-bridge/` | 1.4, 1.7 |
-| 1.9 | cacm-sdk-ts (@cacm/sdk npm package) | ⬜ | TS | `cacm/cacm-sdk-ts/` | 1.4 |
-| 1.10 | SPEG web UI (React, imports @cacm/sdk) | ⬜ | TS | `speg-web/` | 1.9 |
-| 1.11 | Compactor (dedup + summarize + link) | ⬜ | Rust | `cacm/cacm-core/src/compactor.rs` | 1.6 |
-| 1.12 | Phase 1 integration gate | ⬜ | Both | None (verification) | 1.1–1.11 |
-
-### v5 Append Tasks (bridge v4 implementations → v5 architecture)
-
-| ID | Task | Status | Lang | Files | Depends |
-|----|------|--------|------|-------|---------|
-| 1.13 | Add CACM daemon WebSocket protocol types | ⬜ | TS | `cacm/cacm-sdk-ts/src/types.ts` | 1.2, 1.4 |
-| 1.14 | Wire contracts barrel into package entry | ⬜ | TS | `packages/contracts/src/index.ts` (1-line add) | 1.2 |
-
-**1.13 rationale**: v4 contracts defined Effect/Schema types. v5 CACM daemon uses a simple JSON WebSocket protocol (not Effect RPC). The `cacm-sdk-ts` types.ts must mirror the Rust `cacm-core/src/types.rs` exactly — these are the protocol types, separate from the Effect RPC contracts. The existing 1.2 types (CrossAgentContext, AgentSessionDescriptor, etc.) inform these but the wire format differs.
-
-**1.14 rationale**: 1.2 report notes the barrel is intentionally NOT exported yet (would modify existing files). This task adds one `export * from "./speg/index.ts"` line to `packages/contracts/src/index.ts` so consumers can `import { SpegSessionId } from "@t3tools/contracts"`. Safe to do now since the contracts are stable.
-
-### Phase 1 Verification Gates
-
-- [x] `@speg/core` package typechecks (`vp run --filter @speg/core typecheck` PASS)
-- [x] SPEG contracts: 64 tests pass, 0 regressions (287 existing tests)
-- [ ] `cargo build --workspace` — all Rust compiles (cacm + jcode with bridge)
-- [ ] `cargo test --workspace` — all Rust tests pass
-- [ ] `cargo clippy --workspace` — no warnings
-- [ ] `cargo fmt --check` — all formatted
-- [ ] `cacm-daemon` starts, accepts WebSocket connections
-- [ ] CACM daemon detects Jcode session activity
-- [ ] `@cacm/sdk` builds, connects to daemon, queries context
-- [ ] Jcode builds with `jcode-cacm-bridge` — CACM tools visible
-- [ ] SPEG web UI: chat works, CACM timeline populated
-- [ ] Windows `.exe` builds (cacm-daemon + jcode + speg-desktop)
-- [ ] `git tag speg-v0.1.0-phase1`
+| 1.9 | cacm-sdk-ts (@cacm/sdk npm package) | ✅ | TS | `cacm/cacm-sdk-ts/` | 1.4 |
+| 1.10 | **Jcode Provider Adapter** (T3 Code server) | ✅ | TS | `apps/server/src/provider/Drivers/JcodeDriver.ts`, `Layers/JcodeAdapter.ts`, `Drivers/JcodeProcessManager.ts` | 1.8 |
+| 1.11 | **CACM Right Panel Tab** (T3 Code web) | ⬜ | TS | `apps/web/src/components/speg/CacmPanel.tsx` | 1.9, 1.10 |
+| 1.12 | **SPEG Settings Panel** (T3 Code web) | ⬜ | TS | `apps/web/src/components/speg/SpegSettings.tsx` | 1.10 |
+| 1.13 | Compactor (dedup + summarize + link) | ⬜ | Rust | `cacm/cacm-core/src/compactor.rs` | 1.6 |
+| 1.14 | CACM daemon WebSocket protocol types | ⬜ | TS | `cacm/cacm-sdk-ts/src/types.ts` | 1.2, 1.4 |
+| 1.15 | Wire contracts barrel export | ⬜ | TS | `packages/contracts/src/index.ts` (1 line) | 1.2 |
+| 1.16 | Phase 1 integration gate | ⬜ | Both | None | 1.1–1.15 |
 
 ---
 
-## Phase 2: External Agent Parsers + Cross-Agent Injection
+## Phase 2: Cross-Agent Parsers
 
 | ID | Task | Status | Lang | Files | Depends |
 |----|------|--------|------|-------|---------|
@@ -61,8 +38,7 @@
 | 2.3 | OpenCode parser | ⬜ | Rust | `cacm/cacm-core/src/parsers/opencode.rs` | 1.5 |
 | 2.4 | Cursor parser | ⬜ | Rust | `cacm/cacm-core/src/parsers/cursor.rs` | 1.5 |
 | 2.5 | Cross-agent injection (all agents) | ⬜ | Rust | `cacm/cacm-core/src/injector.rs` (update) | 2.1-2.4 |
-| 2.6 | CACM timeline UI | ⬜ | TS | `speg-web/src/components/CacmTimeline.tsx` | 1.10, 2.5 |
-| 2.7 | Phase 2 gate | ⬜ | Both | None | 2.1-2.6 |
+| 2.6 | Phase 2 gate | ⬜ | Both | None | 2.1-2.5 |
 
 ---
 
@@ -76,73 +52,117 @@
 | 3.4 | Skill: Security Audit | ⬜ | MD | `jcode/.jcode/skills/security-audit/SKILL.md` | 1.8 |
 | 3.5 | Skill: Doc Generator | ⬜ | MD | `jcode/.jcode/skills/doc-generator/SKILL.md` | 1.8 |
 | 3.6 | Skill: Test Generator | ⬜ | MD | `jcode/.jcode/skills/test-generator/SKILL.md` | 1.8 |
-| 3.7 | Provider picker UI | ⬜ | TS | `speg-web/src/components/ProviderPicker.tsx` | 1.10 |
-| 3.8 | Skill manager UI | ⬜ | TS | `speg-web/src/components/SkillManager.tsx` | 3.1-3.6 |
+| 3.7 | Skill manager in settings | ⬜ | TS | `apps/web/src/components/speg/SpegSettings.tsx` (update) | 3.1-3.6 |
+| 3.8 | Phase 3 gate | ⬜ | Both | None | 3.1-3.7 |
 
 ---
 
-## Phase 4: Memory + Swarm UI
+## Phase 4: Memory + Swarm Panels
 
 | ID | Task | Status | Lang | Files | Depends |
 |----|------|--------|------|-------|---------|
 | 4.1 | Memory graph query (cacm-daemon endpoint) | ⬜ | Rust | `cacm/cacm-daemon/src/` | 1.4 |
-| 4.2 | Memory graph visualizer | ⬜ | TS | `speg-web/src/components/MemoryGraph.tsx` | 4.1 |
-| 4.3 | Memory search + CRUD UI | ⬜ | TS | `speg-web/src/components/MemorySearch.tsx` | 4.2 |
-| 4.4 | Swarm dashboard (DAG view) | ⬜ | TS | `speg-web/src/components/SwarmDashboard.tsx` | 1.10 |
-| 4.5 | Phase 4 gate | ⬜ | Both | None | 4.1-4.4 |
+| 4.2 | Memory graph right panel tab | ⬜ | TS | `apps/web/src/components/speg/MemoryGraph.tsx` | 4.1 |
+| 4.3 | Swarm dashboard right panel tab | ⬜ | TS | `apps/web/src/components/speg/SwarmDashboard.tsx` | 1.10 |
+| 4.4 | Phase 4 gate | ⬜ | Both | None | 4.1-4.3 |
 
 ---
 
-## Phase 5: Terminal + Auth
+## Phase 5: Auth + Remote Access
 
 | ID | Task | Status | Lang | Files | Depends |
 |----|------|--------|------|-------|---------|
-| 5.1 | Terminal PTY (jcode existing + UI proxy) | ⬜ | Both | `speg-web/src/components/Terminal.tsx` | 1.10 |
-| 5.2 | Auth service (cacm-daemon) | ⬜ | Rust | `cacm/cacm-daemon/src/auth.rs` | 1.4 |
-| 5.3 | Auth UI (login/register) | ⬜ | TS | `speg-web/src/routes/auth/` | 5.2 |
-| 5.4 | Remote WebSocket gateway | ⬜ | Rust | `cacm/cacm-daemon/src/` | 5.2 |
-| 5.5 | Phase 5 gate | ⬜ | Both | None | 5.1-5.4 |
+| 5.1 | Auth service (cacm-daemon) | ⬜ | Rust | `cacm/cacm-daemon/src/auth.rs` | 1.4 |
+| 5.2 | Remote WebSocket gateway | ⬜ | Rust | `cacm/cacm-daemon/src/` | 5.1 |
+| 5.3 | Phase 5 gate | ⬜ | Both | None | 5.1-5.2 |
 
 ---
 
-## Phase 6: Desktop + Mobile + Polish
+## Phase 6: Observability + Polish (Deferred)
 
 | ID | Task | Status | Lang | Files | Depends |
 |----|------|--------|------|-------|---------|
-| 6.1 | Desktop Electron shell | ⬜ | TS | `speg-desktop/src/main.ts` | 1.12 |
-| 6.2 | Desktop bundling (cacm-daemon + jcode) | ⬜ | TS | `speg-desktop/`, `scripts/` | 6.1 |
-| 6.3 | Desktop auto-update | ⬜ | TS | `speg-desktop/src/` | 6.1 |
-| 6.4 | Mobile React Native app | ⬜ | TS | `speg-mobile/` | 1.10 |
-| 6.5 | Mobile push notifications | ⬜ | TS | `speg-mobile/src/` | 6.4 |
-| 6.6 | Error boundaries + loading | ⬜ | TS | `speg-web/src/components/` | 1.10 |
-| 6.7 | Accessibility + themes + shortcuts | ⬜ | TS | `speg-web/src/` | 1.10 |
-| 6.8 | Phase 6 gate | ⬜ | Both | None | 6.1-6.7 |
+| 6.1 | Observability web dashboard (deep analytics) | ⬜ | TS | `speg-web/` (new, minimal) | 1.12 |
+| 6.2 | Mobile React Native CACM widget | ⬜ | TS | `apps/mobile/src/speg/` | 1.12 |
+| 6.3 | Error boundaries + polish | ⬜ | TS | `apps/web/src/components/speg/` | 1.12 |
+| 6.4 | Accessibility + themes + shortcuts | ⬜ | TS | `apps/web/src/` | 1.12 |
+| 6.5 | Phase 6 gate | ⬜ | Both | None | 6.1-6.4 |
+
+---
+
+## What Changed from v5
+
+| v5 | v6 | Why |
+|----|-----|-----|
+| speg-web/ (React app) | **T3 Code right panel tabs** | T3 Code IS the UI. No redundant app. |
+| speg-desktop/ (Electron) | **T3 Code desktop** | Already exists. Jcode bundles into it. |
+| Standalone SPEG web UI | **Jcode Provider Adapter** | Jcode as a provider in T3 Code's existing adapter system |
+| CACM timeline component | **CACM right panel tab** | Same data, rendered in T3 Code's side panel |
+| Provider picker component | **T3 Code model picker** | Already exists in T3 Code's composer |
+
+### T3 Code Surfaces We Extend
+
+```
+T3 Code Web/Desktop UI
+├── Chat View
+│   └── Composer
+│       └── Provider Picker ← Jcode appears here (existing: Codex, Claude, Cursor...)
+├── Right Panel Tabs
+│   ├── Plan tab           (existing)
+│   ├── Diff tab           (existing)
+│   ├── Files tab          (existing)
+│   ├── Preview tab        (existing)
+│   ├── Terminal tab       (existing)
+│   ├── CACM tab           ← NEW: cross-agent context timeline
+│   ├── Memory tab         ← NEW: memory graph visualizer
+│   └── Swarm tab          ← NEW: swarm DAG dashboard
+└── Settings
+    └── SPEG section       ← NEW: Jcode + CACM configuration
+```
+
+### What Users See
+
+1. Open T3 Code → composer shows **Jcode** as a provider option (alongside Claude, Codex, etc.)
+2. Select Jcode → pick model → start chatting
+3. Right panel → **CACM tab** shows timeline of ALL agent sessions (Claude Code, Codex, Jcode, etc.)
+4. Right panel → **Memory tab** shows memory graph with cross-agent links
+5. Right panel → **Swarm tab** shows live swarm status when using Jcode swarms
+6. Settings → **SPEG** section configures CACM daemon, Jcode binary path, skills
+
+### Observability Web UI (Phase 6 — deferred)
+
+A minimal standalone dashboard for:
+- Deep agent performance analytics (tokens, latency, success rate)
+- Context quality scoring (how well CACM context matches agent output)
+- Cross-agent workflow visualization (time spent per agent, context transfer accuracy)
+- Export/share analysis reports
+
+This is Phase 6. Not needed for MVP.
 
 ---
 
 ## Language Split
 
-| Language | Components | Phase 1 tasks |
-|----------|-----------|---------------|
-| **Rust** | cacm-core, cacm-daemon, cacm-sdk-rs, jcode-cacm-bridge, parsers | 1.3–1.8, 1.11 |
-| **TypeScript** | @speg/core, contracts, cacm-sdk-ts, speg-web, speg-desktop, speg-mobile | 1.1–1.2, 1.9–1.10, 1.13–1.14 |
-| **Markdown** | Skills, docs | 3.1–3.6 |
+| Language | Components |
+|----------|-----------|
+| **Rust** | cacm-core, cacm-daemon, cacm-sdk-rs, jcode-cacm-bridge, parsers, compactor |
+| **TypeScript** | @speg/core, contracts, cacm-sdk-ts, Jcode provider adapter, right panel tabs, settings panel |
 
 ---
 
 ## Overall Progress
 
 ```
-Phase 1: ███████████░░░░░░░░░  7/14  (50%)
-Phase 2: ░░░░░░░░░░░░░░░░░░░░  0/7   (0%)
+Phase 1: ███░░░░░░░░░░░░░░░░░  4/16  (25%)
+Phase 2: ░░░░░░░░░░░░░░░░░░░░  0/6   (0%)
 Phase 3: ░░░░░░░░░░░░░░░░░░░░  0/8   (0%)
-Phase 4: ░░░░░░░░░░░░░░░░░░░░  0/5   (0%)
-Phase 5: ░░░░░░░░░░░░░░░░░░░░  0/5   (0%)
-Phase 6: ░░░░░░░░░░░░░░░░░░░░  0/8   (0%)
+Phase 4: ░░░░░░░░░░░░░░░░░░░░  0/4   (0%)
+Phase 5: ░░░░░░░░░░░░░░░░░░░░  0/3   (0%)
+Phase 6: ░░░░░░░░░░░░░░░░░░░░  0/5   (0%)
 ─────────────────────────────────────
-TOTAL:   ███░░░░░░░░░░░░░░░░░  7/47  (15%)
+TOTAL:   ██░░░░░░░░░░░░░░░░░░  4/42  (10%)
 ```
 
 ## Last Updated
 
-2026-08-04 | v5 — tasks 1.1–1.2 are v4 implementations (committed, unchanged) | 47 tasks
+2026-08-05 | v6 — Jcode as T3 Code provider, CACM as right panel | 42 tasks · 1.1, 1.2, 1.8, 1.9, 1.10 done
