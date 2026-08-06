@@ -21,7 +21,15 @@ import {
   type ContextType,
   type CrossAgentContext,
 } from "@cacm/sdk";
-import { ChevronDown, ChevronRight, ClipboardPaste, Network, RefreshCw, RotateCw, Send } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  ClipboardPaste,
+  Network,
+  RefreshCw,
+  RotateCw,
+  Send,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "~/lib/utils";
@@ -160,24 +168,63 @@ export function CacmPanel(props: CacmPanelProps) {
   const [sendingSwitchContext, setSendingSwitchContext] = useState(false);
   const [switchSendError, setSwitchSendError] = useState<string | null>(null);
   const previousAgentRef = useRef<AgentType | null | undefined>(undefined);
+  // Latest workspace the panel was asked to load. A load started for an
+  // earlier workspace must not apply its results after a switch, so each
+  // load captures the project it queried and drops stale resolutions.
+  const requestedProjectRef = useRef<string | null | undefined>(props.project);
+  // Consecutive failed loads. The first failures (e.g. the brief reconnect
+  // blip on a workspace switch) show a loading state with an automatic retry
+  // instead of the error card; only after several consecutive failures —
+  // a genuinely unreachable daemon — does the error card (with Retry /
+  // Restart) appear.
+  const failCountRef = useRef(0);
+  // Self-heal retry scheduled after a transient failure (cleared on unmount).
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const MAX_TRANSIENT_FAILURES = 3;
 
   const load = useCallback(async () => {
+    const project = props.project?.trim();
+    requestedProjectRef.current = project;
     try {
       await client.connect();
-      const project = props.project?.trim();
       const [sessionResult, queryResult] = await Promise.all([
         client.sessions(project ? { project } : {}),
         project ? client.query({ project, limit: 100 }) : Promise.resolve({ entries: [] }),
       ]);
+      // The workspace may have switched while the query was in flight; only
+      // apply results that still belong to the active workspace.
+      if (requestedProjectRef.current !== project) return;
+      failCountRef.current = 0;
+      if (retryTimerRef.current !== null) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
       setSessions(sessionResult.sessions);
       setContexts(queryResult.entries);
       setLoadError(null);
       setStatus("ready");
     } catch (err) {
+      if (requestedProjectRef.current !== project) return;
       setLoadError(errorMessage(err));
-      setStatus("error");
+      failCountRef.current += 1;
+      if (failCountRef.current < MAX_TRANSIENT_FAILURES) {
+        // Likely a transient blip (e.g. a workspace switch racing a
+        // reconnect): show a loading state and retry automatically instead
+        // of flashing the "Could not reach cacm-daemon" error card.
+        setStatus("loading");
+        if (retryTimerRef.current === null) {
+          retryTimerRef.current = setTimeout(() => {
+            retryTimerRef.current = null;
+            void loadRef.current();
+          }, 1500);
+        }
+      } else {
+        setStatus("error");
+      }
     }
   }, [client, props.project]);
+  loadRef.current = load;
 
   useEffect(() => {
     let cancelled = false;
@@ -191,7 +238,11 @@ export function CacmPanel(props: CacmPanelProps) {
     return () => {
       cancelled = true;
       unsubscribe();
-      client.close();
+      // Deliberately do NOT close the socket here. `load` changes identity
+      // when the workspace (`project`) changes, which re-runs this effect —
+      // closing the daemon connection on every workspace switch and racing
+      // the immediate reconnect flashes a spurious "cannot reach cacm-daemon"
+      // error for ~500 ms. The connection is torn down on unmount below.
     };
   }, [client, load]);
 
@@ -208,6 +259,18 @@ export function CacmPanel(props: CacmPanelProps) {
       setSwitchSendError(null);
     }
   }, [props.activeAgent]);
+
+  // Tear down the daemon connection only when the panel unmounts or the
+  // daemon URL changes — never on a workspace switch.
+  useEffect(() => {
+    return () => {
+      if (retryTimerRef.current !== null) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+      client.close();
+    };
+  }, [client]);
 
   const handleInject = useCallback(
     async (session: AgentSession) => {
@@ -247,7 +310,9 @@ export function CacmPanel(props: CacmPanelProps) {
       props.onSendContext?.(formatted);
       setSwitchNotice(null);
     } catch (err) {
-      setSwitchSendError(`Failed to send context to ${agentLabel(switchNotice.to)}: ${errorMessage(err)}`);
+      setSwitchSendError(
+        `Failed to send context to ${agentLabel(switchNotice.to)}: ${errorMessage(err)}`,
+      );
     } finally {
       setSendingSwitchContext(false);
     }
@@ -273,9 +338,10 @@ export function CacmPanel(props: CacmPanelProps) {
     setRestarting(true);
     try {
       const response = await fetch("/api/speg/cacm/restart", { method: "POST" });
-      const body = (await response.json().catch(() => null)) as
-        | { status?: string; reason?: string }
-        | null;
+      const body = (await response.json().catch(() => null)) as {
+        status?: string;
+        reason?: string;
+      } | null;
       if (!response.ok || body?.status === "failed") {
         throw new Error(body?.reason ?? `Server returned ${response.status}`);
       }

@@ -382,12 +382,87 @@ describe("CacmPanel", () => {
     expect(collectText(tree)).toContain("No agent sessions found yet.");
   });
 
-  it("surfaces a retryable error when the daemon is unreachable", async () => {
-    renderPanel();
+  it("re-queries on workspace switch without closing the daemon connection", async () => {
+    // Render 1 for workspace A: effects[0]=load, effects[1]=switch, effects[2]=close.
+    renderPanel({ project: "/repo-a" });
+    testState.client.sessions.mockResolvedValue({ sessions: [codexSession] });
+    testState.client.query.mockResolvedValue({ entries: [decisionContext] });
+    runInitialEffect();
+    await flushPromises();
+    expect(testState.client.connect).toHaveBeenCalledTimes(1);
+    expect(testState.client.sessions).toHaveBeenCalledWith({ project: "/repo-a" });
+
+    // Render 2 for workspace B: effects[3]=load, effects[4]=switch, effects[5]=close.
+    renderPanel({ project: "/repo-b" });
+    testState.client.sessions.mockResolvedValue({ sessions: [claudeSession] });
+    testState.client.query.mockResolvedValue({ entries: [] });
+    runEffect(3); // the new render's load effect
+    await flushPromises();
+
+    expect(testState.client.sessions).toHaveBeenCalledWith({ project: "/repo-b" });
+    // The socket is reused across workspaces — closing on every switch is
+    // what caused the transient "cannot reach cacm-daemon" flash.
+    expect(testState.client.close).not.toHaveBeenCalled();
+    expect(collectText(renderPanel({ project: "/repo-b" }))).toContain("Claude Code");
+    // And unmount still tears the connection down (effects[5] = close).
+    const unmount = hooks.effects[5]?.() ?? (() => {});
+    unmount();
+    expect(testState.client.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a loading state, not the error card, on transient failure after data", async () => {
+    vi.useFakeTimers();
+    // First workspace loads fine (effects[0]=load, effects[1]=switch, effects[2]=close).
+    renderPanel({ project: "/repo-a" });
+    testState.client.sessions.mockResolvedValue({ sessions: [codexSession] });
+    testState.client.query.mockResolvedValue({ entries: [decisionContext] });
+    runInitialEffect();
+    await flushPromises();
+    expect(collectText(renderPanel({ project: "/repo-a" }))).toContain("Codex");
+
+    // The next workspace's load fails transiently (e.g. reconnect blip).
     testState.client.connect.mockRejectedValueOnce(new Error("connection refused"));
+    renderPanel({ project: "/repo-b" });
+    runEffect(3); // render 2's load effect
+    await flushPromises();
+
+    const tree = renderPanel({ project: "/repo-b" });
+    // No error card — the panel keeps a loading state and self-heals.
+    expect(findByRole(tree, "alert")).toBeNull();
+    expect(collectText(tree)).toContain("Connecting to cacm-daemon");
+    // The self-heal retry is scheduled and recovers on the next connect.
+    testState.client.connect.mockResolvedValue(undefined);
+    testState.client.sessions.mockResolvedValue({ sessions: [claudeSession] });
+    testState.client.query.mockResolvedValue({ entries: [] });
+    await vi.advanceTimersByTimeAsync(1600);
+    await flushPromises();
+    expect(collectText(renderPanel({ project: "/repo-b" }))).toContain("Claude Code");
+
+    // Clear the pending retry timer on unmount (effects[5] = close).
+    const unmount = hooks.effects[5]?.() ?? (() => {});
+    unmount();
+    expect(testState.client.close).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it("surfaces a retryable error only after the daemon stays unreachable", async () => {
+    vi.useFakeTimers();
+    renderPanel();
+    // Keep failing: a single blip stays in a loading state, and only after
+    // several consecutive failures does the error card appear.
+    testState.client.connect.mockRejectedValue(new Error("connection refused"));
     runInitialEffect();
     await flushPromises();
 
+    // First failure → loading state, not the error card.
+    const first = renderPanel();
+    expect(findByRole(first, "alert")).toBeNull();
+    expect(collectText(first)).toContain("Connecting to cacm-daemon");
+
+    // Run the self-heal retries: the daemon is still down, so after the
+    // transient window the error card appears.
+    await vi.advanceTimersByTimeAsync(5000);
+    await flushPromises();
     const tree = renderPanel();
     const alert = findByRole(tree, "alert");
     expect(alert).not.toBeNull();
@@ -405,6 +480,7 @@ describe("CacmPanel", () => {
     const recovered = renderPanel();
     expect(collectText(recovered)).toContain("Codex");
     expect(findByAriaLabel(recovered, "CACM daemon connected")).not.toBeNull();
+    vi.useRealTimers();
   });
 
   it("expands a session to show its extracted decisions, errors, and files", async () => {
@@ -512,9 +588,9 @@ describe("CacmPanel", () => {
     expect(collectText(first)).not.toContain("Send context first");
     runEffect(1); // records previous=opencode
 
-    // Render 2 with a different agent: effects[2]=load, effects[3]=switch.
+    // Render 2 with a different agent: effects[3]=load, effects[4]=switch.
     renderPanel({ activeAgent: "claude-code", onSendContext });
-    runEffect(3); // sees opencode → claude-code, sets the notice
+    runEffect(4); // sees opencode → claude-code, sets the notice
 
     const noticed = renderPanel({ activeAgent: "claude-code", onSendContext });
     const text = collectText(noticed);
@@ -546,7 +622,7 @@ describe("CacmPanel", () => {
     renderPanel({ activeAgent: "opencode", onSendContext });
     runEffect(1); // record previous=opencode
     renderPanel({ activeAgent: "grok", onSendContext });
-    runEffect(3); // detect the switch
+    runEffect(4); // detect the switch
     const noticed = renderPanel({ activeAgent: "grok", onSendContext });
     expect(collectText(noticed)).toContain("Send context first");
 
@@ -560,21 +636,32 @@ describe("CacmPanel", () => {
   });
 
   it("shows a restart daemon button in the error state", async () => {
+    vi.useFakeTimers();
     renderPanel(); // constructs the client (constructor applies resolved defaults)
     testState.client.connect.mockRejectedValue(new Error("connect refused"));
     runInitialEffect();
     await flushPromises();
+    // Transient blips stay in a loading state; the error card (with the
+    // restart button) appears only after several consecutive failures.
+    await vi.advanceTimersByTimeAsync(5000);
+    await flushPromises();
     const tree = renderPanel();
     expect(collectText(tree)).toContain("Could not reach cacm-daemon");
     expect(findByAriaLabel(tree, "Restart CACM daemon")).not.toBeNull();
+    vi.useRealTimers();
   });
 
   it("restart posts to the server route and reloads the timeline", async () => {
+    vi.useFakeTimers();
     renderPanel(); // constructs the client
     testState.client.connect.mockRejectedValue(new Error("connect refused"));
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ status: "started" }), { status: 200 }));
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ status: "started" }), { status: 200 }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     runInitialEffect();
+    await flushPromises();
+    await vi.advanceTimersByTimeAsync(5000);
     await flushPromises();
     const tree = renderPanel();
     const restartButton = findByAriaLabel(tree, "Restart CACM daemon");
@@ -583,5 +670,6 @@ describe("CacmPanel", () => {
     await flushPromises();
     expect(fetchMock).toHaveBeenCalledWith("/api/speg/cacm/restart", { method: "POST" });
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 });
