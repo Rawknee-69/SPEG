@@ -1,7 +1,7 @@
 # SPEG — Implementation Checklist v6
 
-> **Strategy**: CACM daemon + right panel tab + settings. Harness = **TBD** (external or self-built).
-> **Revision v6**: jcode is **DROPPED** — provider adapter, session parser, and harness-API storage removed from t3code. The harness slot is open; historical jcode rows below are marked superseded.
+> **Strategy**: CACM daemon + right panel tab + settings. Harness = **already-supported providers only**.
+> **Revision v6**: jcode is **DROPPED** — provider adapter, session parser, and harness-API storage removed from t3code. **No self-built harness for now**: support is limited to the harnesses T3 Code already supports (Claude Code, Codex, OpenCode, Cursor, Grok). Historical jcode rows below are marked superseded.
 > **No separate web UI** — T3 Code IS the UI. Observability dashboard deferred to Phase 6.
 
 ---
@@ -25,7 +25,7 @@
 | 1.13 | Compactor (dedup + summarize + link) | ✅ | Rust | `cacm/cacm-core/src/compactor.rs` | 1.6 |
 | 1.14 | CACM daemon WebSocket protocol types | ✅ | TS | `cacm/cacm-sdk-ts/src/types.ts` | 1.2, 1.4 |
 | 1.15 | Wire contracts barrel export | ⬜ | TS | `packages/contracts/src/index.ts` (1 line) | 1.2 |
-| 1.16 | Phase 1 integration gate (harness = TBD) | ⬜ | Both | None | 1.1–1.15 |
+| 1.16 | Phase 1 integration gate (already-supported harnesses) | ⬜ | Both | None | 1.1–1.15 |
 
 ---
 
@@ -95,8 +95,8 @@
 | v5 | v6 | Why |
 |----|-----|-----|
 | speg-web/ (React app) | **T3 Code right panel tabs** | T3 Code IS the UI. No redundant app. |
-| speg-desktop/ (Electron) | **T3 Code desktop** | Already exists. The chosen harness bundles into it. |
-| Standalone SPEG web UI | **Harness adapter (TBD)** | Harness as a provider in T3 Code's existing adapter system |
+| speg-desktop/ (Electron) | **T3 Code desktop** | Already exists. The already-supported harnesses bundle into it. |
+| Standalone SPEG web UI | **Existing provider adapters** | Claude Code, Codex, OpenCode, Cursor, Grok — T3 Code's existing adapter system |
 | CACM timeline component | **CACM right panel tab** | Same data, rendered in T3 Code's side panel |
 | Provider picker component | **T3 Code model picker** | Already exists in T3 Code's composer |
 
@@ -122,7 +122,7 @@ T3 Code Web/Desktop UI
 
 ### What Users See
 
-1. Open T3 Code → composer shows the chosen harness as a provider option (alongside Claude, Codex, etc.)
+1. Open T3 Code → composer shows the already-supported providers (Claude, Codex, OpenCode, Cursor, Grok)
 2. Select harness → pick model → start chatting
 3. Right panel → **CACM tab** shows timeline of ALL agent sessions (Claude Code, Codex, etc.)
 4. Right panel → **Memory tab** shows memory graph with cross-agent links
@@ -146,7 +146,7 @@ This is Phase 6. Not needed for MVP.
 | Language | Components |
 |----------|-----------|
 | **Rust** | cacm-core, cacm-daemon, cacm-sdk-rs, parsers, compactor (~~jcode-cacm-bridge~~ removed) |
-| **TypeScript** | @speg/core, contracts, cacm-sdk-ts, harness adapter (TBD), right panel tabs, settings panel |
+| **TypeScript** | @speg/core, contracts, cacm-sdk-ts, existing provider adapters, right panel tabs, settings panel |
 
 ---
 
