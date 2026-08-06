@@ -4,10 +4,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./jcode": {
-      "types": "./src/jcode/index.ts",
-      "import": "./src/jcode/index.ts"
-    },
     "./cacm": {
       "types": "./src/cacm/index.ts",
       "import": "./src/cacm/index.ts"
@@ -17,7 +13,6 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@1jehuang/jcode-sdk": "^1.1.0",
     "@t3tools/contracts": "workspace:*",
     "@t3tools/shared": "workspace:*",
     "effect": "catalog:"

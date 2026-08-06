@@ -2,7 +2,7 @@
  * CACM panel — cross-agent context timeline (task 1.11).
  *
  * Queries the local cacm-daemon over WebSocket via `@cacm/sdk` and renders a
- * timeline of *all* agent sessions (Jcode, Claude Code, Codex, OpenCode,
+ * timeline of *all* agent sessions (Claude Code, Codex, OpenCode, Cursor,
  * Cursor, SPEG), color-coded by agent. Each session expands to the context
  * extracted from it (decisions, errors, patterns) and offers an "Inject
  * context" action that hands the daemon's formatted reminder to the caller
@@ -47,7 +47,6 @@ type LoadStatus = "loading" | "ready" | "error";
 
 /** Display metadata per agent: a stable label and a color dot class. */
 export const AGENT_META: Record<AgentType, { label: string; dotClass: string }> = {
-  jcode: { label: "Jcode", dotClass: "bg-violet-500" },
   "claude-code": { label: "Claude Code", dotClass: "bg-orange-500" },
   codex: { label: "Codex", dotClass: "bg-emerald-500" },
   opencode: { label: "OpenCode", dotClass: "bg-cyan-500" },
@@ -257,8 +256,8 @@ export function CacmPanel(props: CacmPanelProps) {
 
         {status === "ready" && sessions.length === 0 ? (
           <p className="px-1 py-4 text-sm text-muted-foreground">
-            No agent sessions found yet. Start an agent (Jcode, Claude Code, Codex, …) and its
-            sessions will appear here.
+            No agent sessions found yet. Start an agent (Claude Code, Codex, …) and its sessions
+            will appear here.
           </p>
         ) : null}
 

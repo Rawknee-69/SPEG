@@ -22,7 +22,7 @@
 //! let client = CacmClient::connect("ws://127.0.0.1:9786/ws").await?;
 //! let entries = client.query("/repo", 10).await?;
 //! let sessions = client.sessions("/repo").await?;
-//! let reminder = client.inject("ses_abc", "jcode").await?;
+//! let reminder = client.inject("ses_abc", "codex").await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -415,7 +415,7 @@ mod tests {
             Ok(json!({
                 "sessions": [{
                     "session_id": "s9",
-                    "agent_type": "jcode",
+                    "agent_type": "codex",
                     "path": "/repo/s9.jsonl",
                     "created_at": "2026-01-01T00:00:00Z",
                     "status": "active"
@@ -427,7 +427,7 @@ mod tests {
         let sessions = client.sessions("/repo").await.unwrap();
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].session_id, "s9");
-        assert_eq!(sessions[0].agent_type, AgentType::Jcode);
+        assert_eq!(sessions[0].agent_type, AgentType::Codex);
         assert_eq!(sessions[0].status, SessionStatus::Active);
     }
 
@@ -436,12 +436,12 @@ mod tests {
         let (addr, _shutdown) = spawn_mock_daemon(|method, params| {
             assert_eq!(method, "cacm.inject");
             assert_eq!(params["sessionId"], "ses_abc");
-            assert_eq!(params["agent"], "jcode");
-            Ok(json!({ "formatted": "[Cross-Agent Context]\n• Task: hi (jcode, 5m ago)" }))
+            assert_eq!(params["agent"], "codex");
+            Ok(json!({ "formatted": "[Cross-Agent Context]\n• Task: hi (codex, 5m ago)" }))
         })
         .await;
         let client = CacmClient::connect(&addr).await.unwrap();
-        let formatted = client.inject("ses_abc", "jcode").await.unwrap();
+        let formatted = client.inject("ses_abc", "codex").await.unwrap();
         assert!(formatted.starts_with("[Cross-Agent Context]"));
     }
 

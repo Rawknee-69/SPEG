@@ -122,15 +122,23 @@ describe("compressImageForStash", () => {
     expect(close).toHaveBeenCalled();
   });
 
-  it("reports too-large when even the smallest encoding overflows the budget", async () => {
-    const { close } = stubCanvasPipeline(() => 8_000_000);
+  // Real canvas encoding on a loaded host can take far longer than the 15s
+  // suite default (this test round-trips an 8MP bitmap through every quality
+  // step); an explicit generous timeout keeps it from flaking under parallel
+  // CPU load.
+  it(
+    "reports too-large when even the smallest encoding overflows the budget",
+    { timeout: 60_000 },
+    async () => {
+      const { close } = stubCanvasPipeline(() => 8_000_000);
 
-    const result = await compressImageForStash(makeFile(9_000_000));
+      const result = await compressImageForStash(makeFile(9_000_000));
 
-    expect(result).toEqual({ ok: false, reason: "too-large" });
-    // The bitmap must still be released on the give-up path.
-    expect(close).toHaveBeenCalled();
-  });
+      expect(result).toEqual({ ok: false, reason: "too-large" });
+      // The bitmap must still be released on the give-up path.
+      expect(close).toHaveBeenCalled();
+    },
+  );
 
   it("reports too-large for an oversized image when the browser cannot re-encode", async () => {
     vi.stubGlobal("createImageBitmap", undefined);

@@ -41,7 +41,7 @@ function sampleEntry(id: string): Record<string, unknown> {
 function sampleSession(id: string): Record<string, unknown> {
   return {
     session_id: id,
-    agent_type: "jcode",
+    agent_type: "codex",
     path: `/repo/${id}.jsonl`,
     created_at: "2026-01-01T00:00:00Z",
     status: "active",
@@ -51,7 +51,7 @@ function sampleSession(id: string): Record<string, unknown> {
 function sampleActivity(overrides: Partial<CacmSessionActivity> = {}): CacmSessionActivity {
   return {
     session_id: "s1",
-    agent_type: "jcode",
+    agent_type: "codex",
     event_type: "modified",
     turn: 3,
     timestamp: "2026-01-01T00:00:00Z",
@@ -172,7 +172,7 @@ test("sessions sends cacm.sessions and parses sessions", async () => {
   const result = await client.sessions({ project: "/repo" });
   assert.equal(result.sessions.length, 1);
   assert.equal(result.sessions[0]?.session_id, "s9");
-  assert.equal(result.sessions[0]?.agent_type, "jcode");
+  assert.equal(result.sessions[0]?.agent_type, "codex");
   assert.equal(result.sessions[0]?.status, "active");
   client.close();
 });
@@ -193,14 +193,14 @@ test("sessions defaults to an empty params object", async () => {
 test("inject sends cacm.inject and returns formatted text", async () => {
   MockWebSocket.onRequest = (ws, frame) => {
     assert.equal(frame.method, "cacm.inject");
-    assert.deepEqual(frame.params, { sessionId: "ses_abc", agent: "jcode" });
+    assert.deepEqual(frame.params, { sessionId: "ses_abc", agent: "codex" });
     reply(ws, frame, {
-      formatted: "[Cross-Agent Context]\n• Task: hi (jcode, 5m ago)",
+      formatted: "[Cross-Agent Context]\n• Task: hi (codex, 5m ago)",
     });
   };
   MockWebSocket.autoOpen = true;
   const client = new CacmClient("ws://test/ws");
-  const result = await client.inject({ sessionId: "ses_abc", agent: "jcode" });
+  const result = await client.inject({ sessionId: "ses_abc", agent: "codex" });
   assert.ok(result.formatted.startsWith("[Cross-Agent Context]"));
   client.close();
 });

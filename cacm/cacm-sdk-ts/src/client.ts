@@ -20,7 +20,7 @@
  * const client = new CacmClient();
  * await client.connect();
  * const { entries } = await client.query({ project: "/repo", limit: 10 });
- * const { formatted } = await client.inject({ sessionId: "ses_abc", agent: "jcode" });
+ * const { formatted } = await client.inject({ sessionId: "ses_abc", agent: "codex" });
  * client.close();
  * ```
  */

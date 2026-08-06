@@ -1,8 +1,7 @@
 //! Cross-session context compaction (task 1.13).
 //!
 //! Reduces the stored [`CrossAgentContext`] population during the daemon's
-//! ambient cycles (or on demand) through four pure, deterministic stages —
-//! the same "consolidation" family of patterns Jcode already uses:
+//! ambient cycles (or on demand) through four pure, deterministic stages:
 //!
 //! - **Deduplication** — group entries by `file_path` and keep the
 //!   highest-confidence representative of each group (confidence is
@@ -11,13 +10,13 @@
 //!   content equality, so file-less prose is never collapsed by accident.
 //! - **Summarization** — collapse every session's remaining entries into one
 //!   *milestone* entry: a deterministic, template-built summary (task line,
-//!   unioned decisions, file paths, errors) — the MVP stand-in for the
-//!   LLM-side summarization Jcode's `jcode-compaction-core` performs on
-//!   message transcripts. One milestone per `(agent_type, session_id)`.
+//!   unioned decisions, file paths, errors) — the MVP stand-in for
+//!   LLM-side summarization of message transcripts. One milestone per
+//!   `(agent_type, session_id)`.
 //! - **Linking** — emit cross-agent `related_to` edges
-//!   ([`ContextLink`], mirroring Jcode's `MemoryGraph` `EdgeKind::RelatesTo`)
-//!   between entries of *different* agents whose content is semantically
-//!   similar (Jaccard over lowercase word tokens), weighted and thresholded.
+//!   ([`ContextLink`]) between entries of *different* agents whose content is
+//!   semantically similar (Jaccard over lowercase word tokens), weighted and
+//!   thresholded.
 //! - **Staleness** — decay confidence exponentially
 //!   ([`decayed_confidence`], half-life [`DEFAULT_CONFIDENCE_HALF_LIFE_DAYS`])
 //!   and prune entries older than [`DEFAULT_MAX_AGE_DAYS`] or whose decayed
@@ -64,8 +63,7 @@ pub const MAX_MILESTONE_CHARS: usize = 2048;
 
 /// A cross-agent `related_to` edge between two context entries.
 ///
-/// Mirrors Jcode's memory-graph `EdgeKind::RelatesTo { weight }`: an
-/// undirected, weighted similarity link. `from_id < to_id` always holds
+/// An undirected, weighted similarity link. `from_id < to_id` always holds
 /// (lexicographic), so a pair is emitted at most once.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ContextLink {
@@ -212,7 +210,7 @@ pub fn link_related(entries: &[CrossAgentContext]) -> Vec<ContextLink> {
 /// Jaccard` (weights [`LINK_FILE_WEIGHT`] / [`LINK_CONTENT_WEIGHT`]). Shared
 /// file paths dominate — two entries editing the same file are strongly
 /// related — while content similarity catches thematically linked entries
-/// (the semantic `RelatesTo` case, mirroring Jcode's memory graph).
+/// (the semantic `RelatesTo` case).
 pub fn pair_weight(a: &CrossAgentContext, b: &CrossAgentContext) -> f64 {
     let file_jaccard = jaccard(&string_set(&a.file_paths), &string_set(&b.file_paths));
     let token_jaccard = jaccard(&content_tokens(&a.content), &content_tokens(&b.content));
@@ -515,7 +513,7 @@ mod tests {
 
     #[test]
     fn decayed_confidence_halves_each_half_life() {
-        let ctx = entry("a", "s", AgentType::Jcode, ContextType::Decision, "chose axum", &["Cargo.toml"]);
+        let ctx = entry("a", "s", AgentType::Codex, ContextType::Decision, "chose axum", &["Cargo.toml"]);
         let now = at_iso("2026-06-25T10:00:00Z");
         let base = confidence_score(&ctx); // 0.2 + 0.3 + 0.2 = 0.7
         assert_eq!(decayed_confidence(&ctx, now, Duration::days(30)), base);
@@ -532,7 +530,7 @@ mod tests {
         // Two entries touch Cargo.toml; the Decision (confidence 0.7) beats the
         // plain FileChange (0.4). A third entry touches only src/lib.rs and survives.
         let low = entry(
-            "low", "s1", AgentType::Jcode, ContextType::FileChange, "changed Cargo.toml", &["Cargo.toml"],
+            "low", "s1", AgentType::Codex, ContextType::FileChange, "changed Cargo.toml", &["Cargo.toml"],
         );
         let high = entry(
             "high", "s2", AgentType::ClaudeCode, ContextType::Decision, "use the workspace resolver", &["Cargo.toml"],
@@ -551,7 +549,7 @@ mod tests {
 
     #[test]
     fn deduplicate_file_less_entries_only_on_exact_content() {
-        let a = entry("a", "s1", AgentType::Jcode, ContextType::Task, "same prose", &[]);
+        let a = entry("a", "s1", AgentType::Codex, ContextType::Task, "same prose", &[]);
         let b = entry("b", "s2", AgentType::Codex, ContextType::Task, "same prose", &[]);
         let c = entry("c", "s3", AgentType::ClaudeCode, ContextType::Task, "different prose", &[]);
         let out = deduplicate(&[a.clone(), b.clone(), c.clone()]);
@@ -563,7 +561,7 @@ mod tests {
     #[test]
     fn deduplicate_preserves_original_order() {
         let entries = vec![
-            entry("e1", "s1", AgentType::Jcode, ContextType::Task, "task a", &["src/a.rs"]),
+            entry("e1", "s1", AgentType::Codex, ContextType::Task, "task a", &["src/a.rs"]),
             entry("e2", "s2", AgentType::Codex, ContextType::Task, "task b", &["src/b.rs"]),
             entry("e3", "s3", AgentType::ClaudeCode, ContextType::Task, "task c", &["src/a.rs"]),
         ];
@@ -573,15 +571,15 @@ mod tests {
 
     #[test]
     fn summarize_groups_by_agent_and_session() {
-        let j1a = entry("j1a", "j1", AgentType::Jcode, ContextType::Task, "build the extractor", &["src/lib.rs"]);
-        let mut j1b = entry("j1b", "j1", AgentType::Jcode, ContextType::Decision, "use regex", &["src/lib.rs"]);
+        let j1a = entry("j1a", "j1", AgentType::Codex, ContextType::Task, "build the extractor", &["src/lib.rs"]);
+        let mut j1b = entry("j1b", "j1", AgentType::Codex, ContextType::Decision, "use regex", &["src/lib.rs"]);
         j1b.decisions = vec!["use regex".into()];
         let c1 = entry("c1", "c1", AgentType::ClaudeCode, ContextType::Task, "review the extractor", &["src/main.rs"]);
         let milestones = summarize_to_milestones(&[j1a.clone(), j1b.clone(), c1.clone()]);
         assert_eq!(milestones.len(), 2); // j1 and c1 (agent+session keys)
 
         let j_milestone = milestones.iter().find(|m| m.session_id == "j1").unwrap();
-        assert_eq!(j_milestone.agent_type, AgentType::Jcode);
+        assert_eq!(j_milestone.agent_type, AgentType::Codex);
         assert!(j_milestone.content.contains("[Milestone] 2 entries"));
         assert!(j_milestone.content.contains("Task: build the extractor"));
         assert!(j_milestone.content.contains("Decisions: use regex"));
@@ -594,18 +592,18 @@ mod tests {
 
     #[test]
     fn summarize_same_agent_two_sessions_makes_two_milestones() {
-        let a = entry("a", "s1", AgentType::Jcode, ContextType::Task, "one", &["src/a.rs"]);
-        let b = entry("b", "s2", AgentType::Jcode, ContextType::Task, "two", &["src/b.rs"]);
+        let a = entry("a", "s1", AgentType::Codex, ContextType::Task, "one", &["src/a.rs"]);
+        let b = entry("b", "s2", AgentType::Codex, ContextType::Task, "two", &["src/b.rs"]);
         let milestones = summarize_to_milestones(&[a, b]);
         assert_eq!(milestones.len(), 2);
     }
 
     #[test]
     fn link_related_only_cross_agent_and_thresholded() {
-        let j = entry("j1", "j1", AgentType::Jcode, ContextType::Decision, "use the workspace resolver config", &["Cargo.toml"]);
+        let j = entry("j1", "j1", AgentType::Codex, ContextType::Decision, "use the workspace resolver config", &["Cargo.toml"]);
         let c = entry("c1", "c1", AgentType::ClaudeCode, ContextType::Task, "set the workspace resolver to version two config", &["src/main.rs"]);
         // Same agent as j → never linked (and content unrelated to the rest).
-        let j2 = entry("j2", "j2", AgentType::Jcode, ContextType::Task, "add tests for the batch pipeline", &["src/lib.rs"]);
+        let j2 = entry("j2", "j2", AgentType::Codex, ContextType::Task, "add tests for the batch pipeline", &["src/lib.rs"]);
         // Unrelated content, no shared file → below threshold.
         let unrelated = entry("x1", "x1", AgentType::Codex, ContextType::Task, "refactor the ui panel styling", &["src/ui.rs"]);
 
@@ -622,7 +620,7 @@ mod tests {
     #[test]
     fn prune_stale_removes_old_and_low_confidence() {
         let now = at_iso("2026-06-25T10:00:00Z");
-        let fresh = entry("fresh", "s1", AgentType::Jcode, ContextType::Task, "recent work", &["src/lib.rs"]);
+        let fresh = entry("fresh", "s1", AgentType::Codex, ContextType::Task, "recent work", &["src/lib.rs"]);
         let mut old = entry("old", "s2", AgentType::Codex, ContextType::Task, "ancient work", &["src/old.rs"]);
         old.timestamp = now - Duration::days(400); // past DEFAULT_MAX_AGE_DAYS
         let (kept, pruned) = prune_stale(
@@ -643,7 +641,7 @@ mod tests {
         // A plain Task (base confidence 0.2) decays below a 0.05 floor after
         // two 30-day half-lives; with a 5-day half-life it is already stale.
         let now = at_iso("2026-06-25T10:00:00Z");
-        let mut entry = entry("e", "s1", AgentType::Jcode, ContextType::Task, "plain task", &[]);
+        let mut entry = entry("e", "s1", AgentType::Codex, ContextType::Task, "plain task", &[]);
         entry.timestamp = now - Duration::days(20);
         let (_kept, pruned) = prune_stale(
             &[entry.clone()],
@@ -668,19 +666,19 @@ mod tests {
         let now = at_iso("2026-06-25T10:00:00Z");
         let compactor = Compactor::new(now);
         let entries = vec![
-            // jcode session j1: 2× src/lib.rs (dup pair), 2× src/main.rs (dup pair)
-            entry("j1a", "j1", AgentType::Jcode, ContextType::Task, "add tests to the lib module", &["src/lib.rs"]),
-            entry("j1b", "j1", AgentType::Jcode, ContextType::Decision, "use the workspace resolver config", &["src/lib.rs"]),
-            entry("j1c", "j1", AgentType::Jcode, ContextType::Task, "wire the main entry point", &["src/main.rs"]),
-            entry("j1d", "j1", AgentType::Jcode, ContextType::FileChange, "changed the main entry point", &["src/main.rs"]),
+            // codex session j1: 2× src/lib.rs (dup pair), 2× src/main.rs (dup pair)
+            entry("j1a", "j1", AgentType::Codex, ContextType::Task, "add tests to the lib module", &["src/lib.rs"]),
+            entry("j1b", "j1", AgentType::Codex, ContextType::Decision, "use the workspace resolver config", &["src/lib.rs"]),
+            entry("j1c", "j1", AgentType::Codex, ContextType::Task, "wire the main entry point", &["src/main.rs"]),
+            entry("j1d", "j1", AgentType::Codex, ContextType::FileChange, "changed the main entry point", &["src/main.rs"]),
             // claude session c1: 2× src/lib.rs (both cross-agent dups of j1a/j1b), 1× src/parser.rs
             entry("c1a", "c1", AgentType::ClaudeCode, ContextType::Task, "review the lib module changes", &["src/lib.rs"]),
             entry("c1b", "c1", AgentType::ClaudeCode, ContextType::Task, "review the lib module changes", &["src/lib.rs"]),
             entry("c1c", "c1", AgentType::ClaudeCode, ContextType::Task, "fix the parser error handling", &["src/parser.rs"]),
             // codex session x1: 1× src/main.rs (cross-agent dup), 2× Cargo.toml (dup pair)
-            entry("x1a", "x1", AgentType::Codex, ContextType::Task, "set the workspace resolver to version two config", &["src/main.rs"]),
-            entry("x1b", "x1", AgentType::Codex, ContextType::Decision, "pin the workspace resolver version", &["Cargo.toml"]),
-            entry("x1c", "x1", AgentType::Codex, ContextType::Decision, "pin the workspace resolver version", &["Cargo.toml"]),
+            entry("x1a", "x1", AgentType::OpenCode, ContextType::Task, "set the workspace resolver to version two config", &["src/main.rs"]),
+            entry("x1b", "x1", AgentType::OpenCode, ContextType::Decision, "pin the workspace resolver version", &["Cargo.toml"]),
+            entry("x1c", "x1", AgentType::OpenCode, ContextType::Decision, "pin the workspace resolver version", &["Cargo.toml"]),
         ];
 
         let report = compactor.compact(&entries);
@@ -690,7 +688,7 @@ mod tests {
         assert_eq!(report.milestones.len(), 3);
         let mut agents: Vec<String> = report.milestones.iter().map(|m| m.agent_type.to_string()).collect();
         agents.sort();
-        assert_eq!(agents, vec!["claude-code", "codex", "jcode"]);
+        assert_eq!(agents, vec!["claude-code", "codex", "opencode"]);
         assert!(report.milestones.iter().all(|m| m.content.contains("[Milestone]")));
         assert!(report.deduplicated >= 5);
         assert_eq!(report.pruned, 0);

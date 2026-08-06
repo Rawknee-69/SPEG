@@ -129,10 +129,10 @@ vi.mock("react/compiler-runtime", () => ({
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const jcodeSession: AgentSession = {
-  session_id: "ses-jcode-1",
-  agent_type: "jcode",
-  path: "/repo/.jcode/sessions/ses-jcode-1",
+const codexSession: AgentSession = {
+  session_id: "ses-codex-1",
+  agent_type: "codex",
+  path: "/repo/.codex/sessions/ses-codex-1",
   created_at: "2026-08-05T10:00:00Z",
   status: "active",
 };
@@ -147,11 +147,11 @@ const claudeSession: AgentSession = {
 
 const decisionContext: CrossAgentContext = {
   id: "ctx-decision",
-  session_id: "ses-jcode-1",
-  agent_type: "jcode",
+  session_id: "ses-codex-1",
+  agent_type: "codex",
   context_type: "decision",
   content: "Use Effect v4 idioms for the adapter layer.",
-  file_paths: ["apps/server/src/provider/Layers/JcodeAdapter.ts"],
+  file_paths: ["apps/server/src/provider/Drivers/CodexDriver.ts"],
   decisions: ["Use Effect v4 idioms for the adapter layer."],
   errors: [],
   timestamp: "2026-08-05T10:05:00Z",
@@ -159,13 +159,13 @@ const decisionContext: CrossAgentContext = {
 
 const errorContext: CrossAgentContext = {
   id: "ctx-error",
-  session_id: "ses-jcode-1",
-  agent_type: "jcode",
+  session_id: "ses-codex-1",
+  agent_type: "codex",
   context_type: "error",
-  content: "Harness api-bridge is cfg(unix) on Windows.",
+  content: "Codex session terminated unexpectedly mid-turn.",
   file_paths: [],
   decisions: [],
-  errors: ["Harness api-bridge is cfg(unix) on Windows."],
+  errors: ["Codex session terminated unexpectedly mid-turn."],
   timestamp: "2026-08-05T10:06:00Z",
 };
 
@@ -255,7 +255,6 @@ afterEach(() => {
 describe("CacmPanel presentation helpers", () => {
   it("labels every agent type with a distinct color dot", () => {
     const agents: Array<[AgentSession["agent_type"], string]> = [
-      ["jcode", "Jcode"],
       ["claude-code", "Claude Code"],
       ["codex", "Codex"],
       ["opencode", "OpenCode"],
@@ -280,28 +279,28 @@ describe("CacmPanel presentation helpers", () => {
 
   it("filters contexts to a session and folds decision/error notes", () => {
     const contexts = [decisionContext, errorContext, { ...errorContext, session_id: "other" }];
-    expect(getSessionContexts(contexts, "ses-jcode-1")).toEqual([decisionContext, errorContext]);
+    expect(getSessionContexts(contexts, "ses-codex-1")).toEqual([decisionContext, errorContext]);
     expect(getSessionDecisionNotes([decisionContext, decisionContext])).toEqual([
       "Use Effect v4 idioms for the adapter layer.",
     ]);
     expect(getSessionErrorNotes([errorContext])).toEqual([
-      "Harness api-bridge is cfg(unix) on Windows.",
+      "Codex session terminated unexpectedly mid-turn.",
     ]);
   });
 
   it("summarizes a session from its newest context and truncates long content", () => {
-    expect(summarizeSession(jcodeSession, [decisionContext])).toBe(
+    expect(summarizeSession(codexSession, [decisionContext])).toBe(
       "Use Effect v4 idioms for the adapter layer.",
     );
     const long = {
       ...decisionContext,
       content: "word ".repeat(60),
     };
-    expect(summarizeSession(jcodeSession, [long]).endsWith("…")).toBe(true);
+    expect(summarizeSession(codexSession, [long]).endsWith("…")).toBe(true);
   });
 
   it("falls back to the session path tail when no context exists", () => {
-    expect(summarizeSession(jcodeSession, [])).toBe("ses-jcode-1");
+    expect(summarizeSession(codexSession, [])).toBe("ses-codex-1");
     expect(summarizeSession(claudeSession, [])).toBe("ses-claude-1.jsonl");
   });
 });
@@ -319,7 +318,7 @@ describe("CacmPanel", () => {
 
   it("loads sessions and context on mount and renders the timeline", async () => {
     renderPanel(); // first render constructs the client (constructor defaults)
-    testState.client.sessions.mockResolvedValue({ sessions: [jcodeSession, claudeSession] });
+    testState.client.sessions.mockResolvedValue({ sessions: [codexSession, claudeSession] });
     testState.client.query.mockResolvedValue({ entries: [decisionContext, errorContext] });
     runInitialEffect();
     await flushPromises();
@@ -329,14 +328,14 @@ describe("CacmPanel", () => {
     expect(testState.client.sessions).toHaveBeenCalledWith({ project: "/repo" });
     expect(testState.client.query).toHaveBeenCalledWith({ project: "/repo", limit: 100 });
 
-    expect(findByAriaLabel(tree, "Session ses-jcode-1")).not.toBeNull();
+    expect(findByAriaLabel(tree, "Session ses-codex-1")).not.toBeNull();
     expect(findByAriaLabel(tree, "Session ses-claude-1")).not.toBeNull();
     const text = collectText(tree);
-    expect(text).toContain("Jcode");
+    expect(text).toContain("Codex");
     expect(text).toContain("Claude Code");
     expect(text).toContain("Use Effect v4 idioms for the adapter layer.");
     // CACM header + one inject button per session.
-    expect(findByAriaLabel(tree, "Inject context from ses-jcode-1")).not.toBeNull();
+    expect(findByAriaLabel(tree, "Inject context from ses-codex-1")).not.toBeNull();
     expect(findByAriaLabel(tree, "Inject context from ses-claude-1")).not.toBeNull();
     // Connected indicator.
     expect(findByAriaLabel(tree, "CACM daemon connected")).not.toBeNull();
@@ -344,14 +343,14 @@ describe("CacmPanel", () => {
 
   it("loads all sessions without a project and skips context query", async () => {
     renderPanel({ project: null });
-    testState.client.sessions.mockResolvedValue({ sessions: [jcodeSession] });
+    testState.client.sessions.mockResolvedValue({ sessions: [codexSession] });
     runInitialEffect();
     await flushPromises();
 
     renderPanel({ project: null });
     expect(testState.client.sessions).toHaveBeenCalledWith({});
     expect(testState.client.query).not.toHaveBeenCalled();
-    expect(collectText(renderPanel({ project: null }))).toContain("Jcode");
+    expect(collectText(renderPanel({ project: null }))).toContain("Codex");
   });
 
   it("renders an empty state when the daemon has no sessions", async () => {
@@ -377,25 +376,25 @@ describe("CacmPanel", () => {
 
     // Retry: the daemon comes back, so the timeline loads.
     testState.client.connect.mockResolvedValue(undefined);
-    testState.client.sessions.mockResolvedValue({ sessions: [jcodeSession] });
+    testState.client.sessions.mockResolvedValue({ sessions: [codexSession] });
     const retry = findByAriaLabel(tree, "Retry connecting to CACM daemon");
     expect(retry).not.toBeNull();
     (retry!.props as { onClick: () => void }).onClick();
     await flushPromises();
 
     const recovered = renderPanel();
-    expect(collectText(recovered)).toContain("Jcode");
+    expect(collectText(recovered)).toContain("Codex");
     expect(findByAriaLabel(recovered, "CACM daemon connected")).not.toBeNull();
   });
 
   it("expands a session to show its extracted decisions, errors, and files", async () => {
     renderPanel();
-    testState.client.sessions.mockResolvedValue({ sessions: [jcodeSession] });
+    testState.client.sessions.mockResolvedValue({ sessions: [codexSession] });
     testState.client.query.mockResolvedValue({ entries: [decisionContext, errorContext] });
     runInitialEffect();
     await flushPromises();
 
-    const row = findByAriaLabel(renderPanel(), "Session ses-jcode-1");
+    const row = findByAriaLabel(renderPanel(), "Session ses-codex-1");
     expect(row).not.toBeNull();
     (row!.props as { onClick: () => void }).onClick();
 
@@ -403,11 +402,11 @@ describe("CacmPanel", () => {
     const text = collectText(expanded);
     expect(text).toContain("Decision");
     expect(text).toContain("Use Effect v4 idioms for the adapter layer.");
-    expect(text).toContain("Harness api-bridge is cfg(unix) on Windows.");
-    expect(text).toContain("apps/server/src/provider/Layers/JcodeAdapter.ts");
+    expect(text).toContain("Codex session terminated unexpectedly mid-turn.");
+    expect(text).toContain("apps/server/src/provider/Drivers/CodexDriver.ts");
 
     // Collapse again.
-    const rowAgain = findByAriaLabel(expanded, "Session ses-jcode-1");
+    const rowAgain = findByAriaLabel(expanded, "Session ses-codex-1");
     (rowAgain!.props as { onClick: () => void }).onClick();
     expect(collectText(renderPanel())).not.toContain("Decision");
   });
@@ -415,22 +414,22 @@ describe("CacmPanel", () => {
   it("injects a session's formatted context into the composer callback", async () => {
     const onInjectContext = vi.fn();
     renderPanel({ onInjectContext });
-    testState.client.sessions.mockResolvedValue({ sessions: [jcodeSession] });
+    testState.client.sessions.mockResolvedValue({ sessions: [codexSession] });
     testState.client.query.mockResolvedValue({ entries: [decisionContext] });
     runInitialEffect();
     await flushPromises();
 
     const inject = findByAriaLabel(
       renderPanel({ onInjectContext }),
-      "Inject context from ses-jcode-1",
+      "Inject context from ses-codex-1",
     );
     expect(inject).not.toBeNull();
     (inject!.props as { onClick: () => void }).onClick();
     await flushPromises();
 
     expect(testState.client.inject).toHaveBeenCalledWith({
-      sessionId: "ses-jcode-1",
-      agent: "jcode",
+      sessionId: "ses-codex-1",
+      agent: "codex",
     });
     expect(onInjectContext).toHaveBeenCalledWith("[Cross-Agent Context]\n• note");
     expect(collectText(renderPanel({ onInjectContext }))).not.toContain("Injecting…");
@@ -439,7 +438,7 @@ describe("CacmPanel", () => {
   it("disables other inject buttons and reports injection failures", async () => {
     const onInjectContext = vi.fn();
     renderPanel({ onInjectContext });
-    testState.client.sessions.mockResolvedValue({ sessions: [jcodeSession, claudeSession] });
+    testState.client.sessions.mockResolvedValue({ sessions: [codexSession, claudeSession] });
     let resolveInject!: (value: { formatted: string }) => void;
     testState.client.inject.mockImplementation(
       () =>
@@ -452,7 +451,7 @@ describe("CacmPanel", () => {
 
     const inject = findByAriaLabel(
       renderPanel({ onInjectContext }),
-      "Inject context from ses-jcode-1",
+      "Inject context from ses-codex-1",
     );
     (inject!.props as { onClick: () => void }).onClick();
 
@@ -469,14 +468,14 @@ describe("CacmPanel", () => {
 
   it("auto-refreshes when the daemon pushes session activity", async () => {
     renderPanel();
-    testState.client.sessions.mockResolvedValue({ sessions: [jcodeSession] });
+    testState.client.sessions.mockResolvedValue({ sessions: [codexSession] });
     testState.client.query.mockResolvedValue({ entries: [] });
     runInitialEffect();
     await flushPromises();
-    expect(collectText(renderPanel())).toContain("Jcode");
+    expect(collectText(renderPanel())).toContain("Codex");
 
     // The daemon announces a new session; the activity handler reloads.
-    testState.client.sessions.mockResolvedValue({ sessions: [jcodeSession, claudeSession] });
+    testState.client.sessions.mockResolvedValue({ sessions: [codexSession, claudeSession] });
     expect(testState.activityCallback).not.toBeNull();
     testState.activityCallback!({ session_id: "ses-claude-1", event_type: "created" });
     await flushPromises();

@@ -11,18 +11,13 @@ import { AgentType } from "./spegSession.ts";
 
 /**
  * SPEG settings (task 1.12). Client-local configuration for the SPEG
- * integration: how to build/launch the jcode daemon, where the cacm-daemon
- * lives, how context gets injected into threads, which agents to watch, and
- * (Phase 3) which skills are enabled.
+ * integration: where the cacm-daemon lives, how context gets injected into
+ * threads, which agents to watch, and (Phase 3) which skills are enabled.
  *
  * Persisted as one `speg` blob inside `ClientSettings` (localStorage), so the
  * whole object is replaced on every edit — patches are built by spreading the
  * current value, mirroring the `sidebarProjectGroupingOverrides` convention.
  */
-
-export const SpegJcodeBinaryPathMode = Schema.Literals(["auto", "manual"]);
-export type SpegJcodeBinaryPathMode = typeof SpegJcodeBinaryPathMode.Type;
-export const DEFAULT_SPEG_JCODE_BINARY_PATH_MODE: SpegJcodeBinaryPathMode = "auto";
 
 export const SpegContextInjectionMode = Schema.Literals(["auto", "manual", "off"]);
 export type SpegContextInjectionMode = typeof SpegContextInjectionMode.Type;
@@ -37,7 +32,6 @@ export const DEFAULT_SPEG_CACM_PORT = 9786;
 export const DEFAULT_SPEG_MAX_CONTEXT_BUDGET_TOKENS = 8_000;
 
 export const SpegAgentWatchDefaults: Record<AgentType, boolean> = {
-  jcode: true,
   "claude-code": true,
   codex: true,
   opencode: true,
@@ -46,16 +40,6 @@ export const SpegAgentWatchDefaults: Record<AgentType, boolean> = {
 };
 
 export const SpegSettingsSchema = Schema.Struct({
-  jcodeBinaryPathMode: SpegJcodeBinaryPathMode.pipe(
-    Schema.withDecodingDefault(Effect.succeed(DEFAULT_SPEG_JCODE_BINARY_PATH_MODE)),
-  ),
-  // Path used when `jcodeBinaryPathMode` is "manual". Empty in "auto" mode,
-  // where the binary is resolved from PATH (or the jcode-sdk bundled binary).
-  jcodeBinaryPath: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
-  // Shell command SPEG runs to build jcode from source when the daemon is
-  // missing (e.g. "cargo build --release"). Empty means "don't build".
-  jcodeBuildCommand: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
-  jcodeLaunchArgs: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   cacmHost: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_SPEG_CACM_HOST))),
   cacmPort: PortSchema.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_SPEG_CACM_PORT))),
   // Auto-start the cacm-daemon when the app boots.

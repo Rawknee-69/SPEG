@@ -170,12 +170,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "speg",
     title: "SPEG",
     to: "/settings/speg",
-    targetId: "speg-jcode",
-  },
-  {
-    id: "speg-jcode",
-    title: "Jcode",
-    to: "/settings/speg",
+    targetId: "speg-cacm",
   },
   {
     id: "speg-cacm",

@@ -83,12 +83,9 @@ describe("SessionStatus", () => {
 });
 
 describe("AgentType", () => {
-  it.each(["jcode", "claude-code", "codex", "opencode", "cursor", "speg"])(
-    "roundtrips %s",
-    (agent) => {
-      roundtrip(AgentType, agent);
-    },
-  );
+  it.each(["claude-code", "codex", "opencode", "cursor", "speg"])("roundtrips %s", (agent) => {
+    roundtrip(AgentType, agent);
+  });
 
   it("rejects unknown agent types", () => {
     rejects(AgentType, "gemini");
@@ -98,7 +95,7 @@ describe("AgentType", () => {
 describe("AgentSessionDescriptor", () => {
   const valid = {
     sessionId: "session-1",
-    agentType: "jcode",
+    agentType: "codex",
     status: "active",
     path: "/workspace/project",
     metadata: { project: "sparrow", branch: "main" },
@@ -106,7 +103,7 @@ describe("AgentSessionDescriptor", () => {
 
   it("roundtrips a full descriptor", () => {
     const decoded = roundtrip(AgentSessionDescriptor, valid);
-    expect(decoded.agentType).toBe("jcode");
+    expect(decoded.agentType).toBe("codex");
     expect(decoded.metadata).toEqual(valid.metadata);
   });
 
@@ -121,7 +118,7 @@ describe("AgentSessionDescriptor", () => {
     rejects(AgentSessionDescriptor, { ...valid, status: undefined });
     rejects(AgentSessionDescriptor, { ...valid, path: "   " });
     rejects(AgentSessionDescriptor, { ...valid, sessionId: "" });
-    rejects(AgentSessionDescriptor, { agentType: "jcode" });
+    rejects(AgentSessionDescriptor, { agentType: "codex" });
   });
 });
 
@@ -179,10 +176,10 @@ describe("ContextQuery", () => {
       projectPath: "/workspace/project",
       limit: 25,
       recencyHours: 24,
-      agentTypes: ["jcode", "claude-code"],
+      agentTypes: ["codex", "claude-code"],
     });
     expect(decoded.limit).toBe(25);
-    expect(decoded.agentTypes).toEqual(["jcode", "claude-code"]);
+    expect(decoded.agentTypes).toEqual(["codex", "claude-code"]);
   });
 
   it("roundtrips a minimal query with only projectPath", () => {
@@ -301,7 +298,7 @@ describe("SpegChatMessage", () => {
     role: "assistant",
     content: "I refactored auth to use JWT.",
     timestamp: "2026-08-04T12:00:00Z",
-    metadata: { model: "jcode-1" },
+    metadata: { model: "codex-1" },
   } as const;
 
   it("roundtrips a full message", () => {
@@ -322,10 +319,10 @@ describe("SpegTurnRequest", () => {
     const decoded = roundtrip(SpegTurnRequest, {
       sessionId: "session-1",
       message: "Summarize the auth refactor",
-      modelSelection: "jcode-1",
+      modelSelection: "codex-1",
       skills: ["context-query", "memory-search"],
     });
-    expect(decoded.modelSelection).toBe("jcode-1");
+    expect(decoded.modelSelection).toBe("codex-1");
     expect(decoded.skills).toEqual(["context-query", "memory-search"]);
   });
 

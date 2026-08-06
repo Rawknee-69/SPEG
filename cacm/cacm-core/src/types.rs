@@ -17,9 +17,6 @@ use std::str::FromStr;
 /// The coding agents CACM watches and shares context between.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AgentType {
-    /// Jcode's own sessions (watch `~/.jcode/sessions/`).
-    #[serde(rename = "jcode")]
-    Jcode,
     /// Claude Code sessions (watch `~/.claude/projects/`).
     #[serde(rename = "claude-code")]
     ClaudeCode,
@@ -39,8 +36,7 @@ pub enum AgentType {
 
 impl AgentType {
     /// All known agent types, in a stable order (used for defaults/iteration).
-    pub const ALL: [AgentType; 6] = [
-        AgentType::Jcode,
+    pub const ALL: [AgentType; 5] = [
         AgentType::ClaudeCode,
         AgentType::Codex,
         AgentType::OpenCode,
@@ -48,10 +44,9 @@ impl AgentType {
         AgentType::Speg,
     ];
 
-    /// Directory name used inside `~/.jcode/sessions/<agent>/...`.
+    /// Directory name used inside `~/.speg/sessions/<agent>/...`.
     pub fn dir_name(self) -> &'static str {
         match self {
-            AgentType::Jcode => "jcode",
             AgentType::ClaudeCode => "claude-code",
             AgentType::Codex => "codex",
             AgentType::OpenCode => "opencode",
@@ -65,7 +60,6 @@ impl fmt::Display for AgentType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Matches the kebab-case serde representation.
         let s = match self {
-            AgentType::Jcode => "jcode",
             AgentType::ClaudeCode => "claude-code",
             AgentType::Codex => "codex",
             AgentType::OpenCode => "opencode",
@@ -81,7 +75,6 @@ impl FromStr for AgentType {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.trim().to_ascii_lowercase().as_str() {
-            "jcode" => Ok(AgentType::Jcode),
             "claude-code" | "claude" => Ok(AgentType::ClaudeCode),
             "codex" => Ok(AgentType::Codex),
             "opencode" | "open-code" => Ok(AgentType::OpenCode),
@@ -215,7 +208,6 @@ mod tests {
             serde_json::to_string(&AgentType::OpenCode).unwrap(),
             "\"opencode\""
         );
-        assert_eq!(serde_json::to_string(&AgentType::Jcode).unwrap(), "\"jcode\"");
     }
 
     #[test]

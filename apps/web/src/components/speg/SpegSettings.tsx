@@ -1,10 +1,10 @@
 /**
  * SPEG settings panel (task 1.12).
  *
- * A settings section for the SPEG integration: jcode binary/build config,
- * the local cacm-daemon (host/port, auto-start, watch paths, storage
- * backend), context injection preferences, per-agent watching toggles, and
- * Phase-3 skill toggles. All values live in the client-local `speg` blob
+ * A settings section for the SPEG integration: the local cacm-daemon
+ * (host/port, auto-start, watch paths, storage backend), context injection
+ * preferences, per-agent watching toggles, and Phase-3 skill toggles. All
+ * values live in the client-local `speg` blob
  * (`ClientSettings.speg`, persisted to localStorage), so every edit commits
  * immediately through `useUpdateClientSettings` — there is no save button,
  * matching the rest of the settings UI.
@@ -13,7 +13,6 @@ import { useCallback, useEffect, useState } from "react";
 import {
   DEFAULT_SPEG_CACM_PORT,
   type SpegContextInjectionMode,
-  type SpegJcodeBinaryPathMode,
   type SpegSettings,
   type SpegStorageBackend,
 } from "@t3tools/contracts/settings";
@@ -168,76 +167,6 @@ export function SpegSettings() {
 
   return (
     <SettingsPageContainer>
-      <SettingsSection {...searchableSetting("speg-jcode")}>
-        <SettingsRow
-          title="Binary path mode"
-          description="Auto-detect resolves the jcode binary from PATH (falling back to the binary bundled with jcode-sdk). Manual lets you point at a specific build."
-          control={
-            <Select
-              value={speg.jcodeBinaryPathMode}
-              onValueChange={(value) =>
-                updateSpeg({ jcodeBinaryPathMode: value as SpegJcodeBinaryPathMode })
-              }
-            >
-              <SelectTrigger className="w-full sm:w-40" aria-label="Jcode binary path mode">
-                <SelectValue>
-                  {speg.jcodeBinaryPathMode === "manual" ? "Manual" : "Auto-detect"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectPopup align="end" alignItemWithTrigger={false}>
-                <SelectItem hideIndicator value="auto">
-                  Auto-detect
-                </SelectItem>
-                <SelectItem hideIndicator value="manual">
-                  Manual
-                </SelectItem>
-              </SelectPopup>
-            </Select>
-          }
-        />
-        {speg.jcodeBinaryPathMode === "manual" ? (
-          <SettingsRow
-            title="Binary path"
-            description="Absolute path to the jcode binary to launch."
-            control={
-              <DraftTextInput
-                value={speg.jcodeBinaryPath}
-                onCommit={(next) => updateSpeg({ jcodeBinaryPath: next })}
-                ariaLabel="Jcode binary path"
-                placeholder="/path/to/jcode"
-                className="w-full sm:w-64"
-              />
-            }
-          />
-        ) : null}
-        <SettingsRow
-          title="Build command"
-          description="Optional shell command SPEG runs to build jcode from source when the daemon binary is missing. Empty means never build."
-          control={
-            <DraftTextInput
-              value={speg.jcodeBuildCommand}
-              onCommit={(next) => updateSpeg({ jcodeBuildCommand: next })}
-              ariaLabel="Jcode build command"
-              placeholder="cargo build --release"
-              className="w-full sm:w-64"
-            />
-          }
-        />
-        <SettingsRow
-          title="Launch arguments"
-          description="Extra CLI arguments passed to the jcode daemon on start."
-          control={
-            <DraftTextInput
-              value={speg.jcodeLaunchArgs}
-              onCommit={(next) => updateSpeg({ jcodeLaunchArgs: next })}
-              ariaLabel="Jcode launch arguments"
-              placeholder="--api-socket /tmp/jcode.sock"
-              className="w-full sm:w-64"
-            />
-          }
-        />
-      </SettingsSection>
-
       <SettingsSection {...searchableSetting("speg-cacm")}>
         <SettingsRow
           title="Daemon address"

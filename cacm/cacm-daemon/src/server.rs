@@ -606,12 +606,11 @@ fn response_json(response: RpcResponse) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{JcodeBackend, Storage};
+    use crate::storage::{InMemoryBackend, Storage};
     use cacm_core::types::{AgentType, ContextType, CrossAgentContext};
-    use std::path::PathBuf;
 
     fn test_state() -> AppState {
-        let backend = JcodeBackend::new(PathBuf::from("C:\\nonexistent\\jcode-api.sock"));
+        let backend = InMemoryBackend::new();
         AppState::new(Box::new(backend), ParserRegistry::new(), HashMap::new())
     }
 
@@ -668,7 +667,7 @@ mod tests {
             let mut sessions = state.sessions.lock().unwrap();
             sessions.insert(
                 "abc".into(),
-                AgentSession::new("abc", AgentType::Jcode, "/repo/abc", Utc::now()),
+                AgentSession::new("abc", AgentType::Codex, "/repo/abc", Utc::now()),
             );
         }
         let resp = call(&state, r#"{"id":3,"method":"cacm.sessions","params":{}}"#);
@@ -898,7 +897,7 @@ mod tests {
         let resp = call(
             &state,
             r#"{"id":1,"method":"cacm.context.store","params":{"context":{
-                "id":"ctx-p1","session_id":"s1","agent_type":"jcode","context_type":"task",
+                "id":"ctx-p1","session_id":"s1","agent_type":"codex","context_type":"task",
                 "content":"x","file_paths":[],"decisions":[],"errors":[],
                 "timestamp":"2026-01-01T00:00:00Z"
             }}}"#,
@@ -923,7 +922,7 @@ mod tests {
         let resp = call(
             &state,
             r#"{"id":2,"method":"cacm.context.store","params":{"context":{
-                "id":"ctx-new","session_id":"s9","agent_type":"jcode","context_type":"task",
+                "id":"ctx-new","session_id":"s9","agent_type":"codex","context_type":"task",
                 "content":"fresh","file_paths":["/repo/d.rs"],"decisions":[],"errors":[],
                 "timestamp":"2026-01-02T00:00:00Z"
             }}}"#,
@@ -972,7 +971,7 @@ mod tests {
         let mut rx = tx.subscribe(); // keep ≥1 receiver so sends are stored
         let activity = SessionActivity {
             session_id: "fox".into(),
-            agent_type: AgentType::Jcode,
+            agent_type: AgentType::Codex,
             event_type: cacm_core::watcher::SessionEventType::Modified,
             turn: Some(3),
             timestamp: Utc::now(),
@@ -982,7 +981,7 @@ mod tests {
         let value: Value = serde_json::from_str(&payload).unwrap();
         assert_eq!(value["event"], "cacm.session_activity");
         assert_eq!(value["data"]["session_id"], "fox");
-        assert_eq!(value["data"]["agent_type"], "jcode");
+        assert_eq!(value["data"]["agent_type"], "codex");
     }
 
     // ---- HTTP-layer WebSocket handshake tests (real server + tungstenite) ----

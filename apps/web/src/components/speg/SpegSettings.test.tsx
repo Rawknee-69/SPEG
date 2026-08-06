@@ -221,7 +221,7 @@ describe("SpegSettings.logic", () => {
   });
 
   it("labels every watchable agent", () => {
-    expect(WATCH_AGENT_ORDER).toHaveLength(6);
+    expect(WATCH_AGENT_ORDER).toHaveLength(5);
     for (const agent of WATCH_AGENT_ORDER) {
       expect(AGENT_WATCH_LABELS[agent]).toBeTruthy();
     }
@@ -237,12 +237,12 @@ describe("SpegSettings.logic", () => {
 describe("SpegSettings", () => {
   it("renders every SPEG section", () => {
     const titles = collectPropText(renderSettings(), "title");
-    for (const title of ["Jcode", "CACM daemon", "Context injection", "Agent watching", "Skills"]) {
+    for (const title of ["CACM daemon", "Context injection", "Agent watching", "Skills"]) {
       expect(titles).toContain(title);
     }
   });
 
-  it("renders all six agent toggles, checked by default", () => {
+  it("renders all five agent toggles, checked by default", () => {
     const tree = renderSettings();
     for (const agent of WATCH_AGENT_ORDER) {
       const toggle = findByAriaLabel(tree, `Watch ${AGENT_WATCH_LABELS[agent]} sessions`);
@@ -263,7 +263,7 @@ describe("SpegSettings", () => {
       watchedAgents: { ...DEFAULT_SPEG_SETTINGS.watchedAgents, codex: false },
     });
     expect(patch.speg!.watchedAgents.codex).toBe(false);
-    expect(patch.speg!.watchedAgents.jcode).toBe(true);
+    expect(patch.speg!.watchedAgents["claude-code"]).toBe(true);
   });
 
   it("re-renders the toggled agent as off", () => {
@@ -277,38 +277,15 @@ describe("SpegSettings", () => {
     ).toBe(false);
   });
 
-  it("changes the binary path mode via the select", () => {
-    const tree = renderSettings();
-    const select = findByType(tree, Select)!;
-    expect(select.props as { value: string }).toMatchObject({ value: "auto" });
-    (select.props as { onValueChange: (next: string) => void }).onValueChange("manual");
-
-    expect(testState.updateCalls[0]!.speg!.jcodeBinaryPathMode).toBe("manual");
-  });
-
-  it("reveals the manual binary path input only in manual mode", () => {
-    const autoTree = renderSettings();
-    expect(findByAriaLabel(autoTree, "Jcode binary path")).toBeNull();
-    expect(findByAriaLabel(autoTree, "Jcode build command")).not.toBeNull();
-
-    testState.speg = {
-      ...structuredClone(DEFAULT_SPEG_SETTINGS),
-      jcodeBinaryPathMode: "manual",
-    };
-    const pathInput = findByAriaLabel(renderSettings(), "Jcode binary path");
-    expect(pathInput).not.toBeNull();
-    expect((pathInput!.props as { value: string }).value).toBe("");
-  });
-
   it("changes the context injection mode", () => {
     const tree = renderSettings();
     const selects = [] as ReactElement[];
     walk(tree, (element) => {
       if (element.type === Select) selects.push(element);
     });
-    expect(selects).toHaveLength(3);
-    // Selects render in order: binary mode, storage backend, injection mode.
-    const injectionSelect = selects[2]!;
+    expect(selects).toHaveLength(2);
+    // Selects render in order: storage backend, injection mode.
+    const injectionSelect = selects[1]!;
     (injectionSelect.props as { onValueChange: (next: string) => void }).onValueChange("off");
 
     expect(testState.updateCalls[0]!.speg!.contextInjectionMode).toBe("off");
@@ -333,7 +310,7 @@ describe("SpegSettings", () => {
     expect(testState.updateCalls[0]!.speg!.skillToggles["context-reminder"]).toBe(false);
   });
 
-  it("registers five SPEG sections in the settings catalog", () => {
+  it("registers four SPEG sections in the settings catalog", () => {
     const sectionIds = [] as string[];
     walk(renderSettings(), (element) => {
       if (element.type === SettingsSection) {
@@ -341,7 +318,6 @@ describe("SpegSettings", () => {
       }
     });
     expect(sectionIds).toEqual([
-      "speg-jcode",
       "speg-cacm",
       "speg-context-injection",
       "speg-agent-watching",
@@ -357,28 +333,28 @@ describe("SpegSettings", () => {
 describe("SpegSettings draft editors", () => {
   it("commits a text draft trimmed, on blur, and only when changed", () => {
     const onCommit = vi.fn();
-    const props = { value: "", onCommit, ariaLabel: "Jcode binary path" };
-    const input = findByAriaLabel(renderDraftInput(props), "Jcode binary path")!;
+    const props = { value: "", onCommit, ariaLabel: "Binary path" };
+    const input = findByAriaLabel(renderDraftInput(props), "Binary path")!;
     (input.props as { onChange: (event: { target: { value: string } }) => void }).onChange({
-      target: { value: "  /tmp/jcode  " },
+      target: { value: "  /tmp/claude  " },
     });
 
     // Re-render so the blur closure reads the updated draft (real React would
     // re-render between change and blur).
-    const input2 = findByAriaLabel(reRender(DraftTextInput, props), "Jcode binary path")!;
+    const input2 = findByAriaLabel(reRender(DraftTextInput, props), "Binary path")!;
     (input2.props as { onBlur: () => void }).onBlur();
     expect(onCommit).toHaveBeenCalledTimes(1);
-    expect(onCommit).toHaveBeenCalledWith("/tmp/jcode");
+    expect(onCommit).toHaveBeenCalledWith("/tmp/claude");
   });
 
   it("does not commit an unchanged draft on blur", () => {
     const onCommit = vi.fn();
-    const props = { value: "/tmp/jcode", onCommit, ariaLabel: "Jcode binary path" };
-    const input = findByAriaLabel(renderDraftInput(props), "Jcode binary path")!;
+    const props = { value: "/tmp/claude", onCommit, ariaLabel: "Binary path" };
+    const input = findByAriaLabel(renderDraftInput(props), "Binary path")!;
     (input.props as { onChange: (event: { target: { value: string } }) => void }).onChange({
-      target: { value: "/tmp/jcode  " },
+      target: { value: "/tmp/claude  " },
     });
-    const input2 = findByAriaLabel(reRender(DraftTextInput, props), "Jcode binary path")!;
+    const input2 = findByAriaLabel(reRender(DraftTextInput, props), "Binary path")!;
     (input2.props as { onBlur: () => void }).onBlur();
     expect(onCommit).not.toHaveBeenCalled();
   });

@@ -439,7 +439,7 @@ fn extract_context_emits_each_context_type_with_session_metadata() {
         simple(1, "the build failed", "Modified: src/extractor.rs"),
         simple(2, "we always add tests", "ok"),
     ];
-    let mut ex = ContextExtractor::new("sess-abc", AgentType::Jcode);
+    let mut ex = ContextExtractor::new("sess-abc", AgentType::Codex);
     let ctxs = ex.extract_context(&turns);
 
     assert_eq!(
@@ -455,7 +455,7 @@ fn extract_context_emits_each_context_type_with_session_metadata() {
 
     for ctx in &ctxs {
         assert_eq!(ctx.session_id, "sess-abc");
-        assert_eq!(ctx.agent_type, AgentType::Jcode);
+        assert_eq!(ctx.agent_type, AgentType::Codex);
         assert_eq!(ctx.timestamp, turns.last().unwrap().timestamp);
     }
 
@@ -501,7 +501,7 @@ fn extract_context_skips_task_without_keywords_but_keeps_other_types() {
 
 #[test]
 fn extract_context_empty_and_no_signal_inputs() {
-    let mut ex = ContextExtractor::new("s1", AgentType::Jcode);
+    let mut ex = ContextExtractor::new("s1", AgentType::Codex);
     assert!(ex.extract_context(&[]).is_empty());
     // Turns with no detectable signals produce nothing either.
     let quiet = vec![simple(0, "hi", "hello"), simple(1, "again", "sure")];
@@ -510,7 +510,7 @@ fn extract_context_empty_and_no_signal_inputs() {
 
 #[test]
 fn extract_context_emits_task_only_once_per_session() {
-    let mut ex = ContextExtractor::new("s1", AgentType::Jcode);
+    let mut ex = ContextExtractor::new("s1", AgentType::Codex);
     let first = ex.extract_context(&[simple(0, "I want to build a CLI", "ok")]);
     assert!(first.iter().any(|c| c.context_type == ContextType::Task));
     let second = ex.extract_context(&[simple(1, "I want to add more", "ok")]);
@@ -525,7 +525,7 @@ fn task_is_decided_from_the_session_first_user_message_only() {
     // Batch 1's first user message does not read like a task (no keyword) →
     // no Task entry, and the gate closes so batch 2's message is never
     // mislabeled as the task.
-    let mut ex = ContextExtractor::new("s1", AgentType::Jcode);
+    let mut ex = ContextExtractor::new("s1", AgentType::Codex);
     let first = ex.extract_context(&[simple(0, "please review the diff", "ok")]);
     assert!(!first.iter().any(|c| c.context_type == ContextType::Task));
     let second = ex.extract_context(&[simple(1, "I want to build a CLI", "ok")]);
@@ -538,7 +538,7 @@ fn task_is_decided_from_the_session_first_user_message_only() {
 #[test]
 fn oversized_task_is_truncated() {
     let huge = format!("I want to build a CLI {}", "y".repeat(2000));
-    let mut ex = ContextExtractor::new("s1", AgentType::Jcode);
+    let mut ex = ContextExtractor::new("s1", AgentType::Codex);
     let ctxs = ex.extract_context(&[simple(0, &huge, "ok")]);
     let task = ctxs
         .iter()
@@ -556,7 +556,7 @@ fn oversized_task_is_truncated() {
 
 #[test]
 fn batching_extracts_every_five_turns_or_at_session_end() {
-    let mut ex = ContextExtractor::new("sess-batch", AgentType::Jcode);
+    let mut ex = ContextExtractor::new("sess-batch", AgentType::Codex);
     assert_eq!(ex.batch_size(), 5);
 
     let mut flushed = Vec::new();
@@ -609,7 +609,7 @@ fn batching_extracts_every_five_turns_or_at_session_end() {
 
 #[test]
 fn single_turn_extracts_at_session_end() {
-    let mut ex = ContextExtractor::new("s1", AgentType::Jcode);
+    let mut ex = ContextExtractor::new("s1", AgentType::Codex);
     let turn = simple(0, "I want to fix the crash", "we decided to use sqlite");
     assert!(
         ex.add_turn(turn).is_empty(),
@@ -622,7 +622,7 @@ fn single_turn_extracts_at_session_end() {
 
 #[test]
 fn custom_batch_size_is_honored() {
-    let mut ex = ContextExtractor::new("s1", AgentType::Jcode).with_batch_size(2);
+    let mut ex = ContextExtractor::new("s1", AgentType::Codex).with_batch_size(2);
     assert_eq!(ex.batch_size(), 2);
 
     assert!(ex
@@ -636,7 +636,7 @@ fn custom_batch_size_is_honored() {
 #[test]
 #[should_panic(expected = "batch size must be >= 1")]
 fn zero_batch_size_panics() {
-    let _ = ContextExtractor::new("s1", AgentType::Jcode).with_batch_size(0);
+    let _ = ContextExtractor::new("s1", AgentType::Codex).with_batch_size(0);
 }
 
 // ---------------------------------------------------------------------------
@@ -665,7 +665,7 @@ fn malformed_tool_inputs_do_not_panic() {
     // No panic; the one real text pattern still surfaces.
     assert_eq!(extract_file_changes(&turns), vec!["src/lib.rs".to_string()]);
 
-    let mut ex = ContextExtractor::new("s1", AgentType::Jcode);
+    let mut ex = ContextExtractor::new("s1", AgentType::Codex);
     let ctxs = ex.extract_context(&turns);
     assert!(!ctxs.is_empty());
 }

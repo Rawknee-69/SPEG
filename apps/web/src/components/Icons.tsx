@@ -663,20 +663,6 @@ export const OpenCodeIcon: Icon = (props) => (
   </svg>
 );
 
-export const JcodeIcon: Icon = (props) => (
-  <svg {...props} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect
-      x="2"
-      y="2"
-      width="20"
-      height="20"
-      rx="5"
-      className="fill-[#2B2B2B] dark:fill-[#E8E6E3]"
-    />
-    <path d="M8 7h8v2.4h-5.2V11H15v2.2h-4.2v3.8H8V7Z" className="fill-[#6EE7B7]" />
-  </svg>
-);
-
 export const GithubCopilotIcon: Icon = ({ className, ...props }) => (
   <svg
     {...props}

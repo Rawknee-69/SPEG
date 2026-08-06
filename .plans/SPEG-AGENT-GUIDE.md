@@ -131,7 +131,7 @@ All reports go in `t3code/research/report/`:
 research/report/
 ├── 1.1-scaffolding.md
 ├── 1.2-contracts.md
-├── 1.3-jcode-sdk.md
+├── 1.3-harness-sdk.md
 ├── ...
 ```
 

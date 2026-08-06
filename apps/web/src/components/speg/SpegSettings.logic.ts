@@ -8,7 +8,6 @@ export type WatchedAgent = keyof SpegSettings["watchedAgents"];
 
 /** Agent watching toggle order (matches the CACM timeline's agent set). */
 export const WATCH_AGENT_ORDER: ReadonlyArray<WatchedAgent> = [
-  "jcode",
   "claude-code",
   "codex",
   "opencode",
@@ -17,7 +16,6 @@ export const WATCH_AGENT_ORDER: ReadonlyArray<WatchedAgent> = [
 ];
 
 export const AGENT_WATCH_LABELS: Readonly<Record<WatchedAgent, string>> = {
-  jcode: "Jcode",
   "claude-code": "Claude Code",
   codex: "Codex",
   opencode: "OpenCode",

@@ -10,7 +10,7 @@
  */
 
 /** The coding agents CACM watches and shares context between. */
-export type AgentType = "jcode" | "claude-code" | "codex" | "opencode" | "cursor" | "speg";
+export type AgentType = "claude-code" | "codex" | "opencode" | "cursor" | "speg";
 
 /** Lifecycle status of a watched agent session. */
 export type SessionStatus = "active" | "idle" | "completed" | "failed";
@@ -113,7 +113,7 @@ export interface CacmSessionsResult {
   sessions: AgentSession[];
 }
 
-/** `cacm.inject` params. `agent` defaults to Jcode's style when omitted. */
+/** `cacm.inject` params. `agent` defaults to the plain-text style when omitted. */
 export interface CacmInjectParams {
   sessionId: string;
   agent?: string;

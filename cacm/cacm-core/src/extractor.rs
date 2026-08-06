@@ -9,8 +9,7 @@
 //!
 //! # LLM upgrade path
 //!
-//! The eventual LLM-based extraction mirrors Jcode's sidecar model
-//! (`jcode/crates/jcode-base/src/sidecar.rs`): a lightweight model client
+//! The eventual LLM-based extraction uses a lightweight model client
 //! that turns raw turns into structured context instead of keyword matching.
 //! The swap-in point is [`ContextExtractor::extract_context`] — keep the
 //! public surface stable and replace the heuristic bodies with sidecar calls
@@ -28,8 +27,8 @@
 //! - File paths are recognized from structured `file_modifications`, from
 //!   path-shaped tool inputs, and from text patterns (`Modified:` /
 //!   `Created:` / `Wrote to:` prefixes and file-extension tokens). All
-//!   sources are sanitized the same way the jcode parser sanitizes its
-//!   structured paths ([`sanitize_path`]): `.`/`..` segments are
+//!   sources are sanitized the same way structured paths are elsewhere
+//!   ([`sanitize_path`]): `.`/`..` segments are
 //!   collapsed and absolute prefixes (`/`, `\`, drive letters) stripped, so
 //!   traversal-style paths never leak verbatim into stored entries. Paths
 //!   are also de-quoted and de-punctuated. Extension tokens are
@@ -182,7 +181,7 @@ pub fn extract_patterns(turns: &[AgentTurn]) -> Vec<String> {
 ///
 /// Usage (watcher/daemon side):
 /// ```ignore
-/// let mut ex = ContextExtractor::new("sess-abc", AgentType::Jcode);
+/// let mut ex = ContextExtractor::new("sess-abc", AgentType::Codex);
 /// // ...as turns arrive (extraction runs every 5 turns):
 /// for ctx in ex.add_turn(turn) { /* store via daemon */ }
 /// // ...at session end:
@@ -457,8 +456,8 @@ fn push_path_raw(out: &mut Vec<String>, seen: &mut HashSet<String>, raw: &str) {
 }
 
 /// Sanitize a path extracted from transcript data into a clean, relative
-/// form — identical semantics to the jcode parser's
-/// `normalize_extracted_path`: empty and `.` segments are dropped, `..`
+/// form — identical semantics to `normalize_extracted_path` used by the
+/// per-agent parsers: empty and `.` segments are dropped, `..`
 /// segments cancel the previous segment, and absolute prefixes (`/`, `\`,
 /// drive letters) are stripped. Traversal-style paths can therefore never
 /// leak verbatim into stored `CrossAgentContext` entries. Returns `None`

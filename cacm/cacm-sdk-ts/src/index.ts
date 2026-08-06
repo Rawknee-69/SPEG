@@ -9,7 +9,7 @@
  *
  * const { entries } = await client.query({ project: "/repo", limit: 10 });
  * const { sessions } = await client.sessions({ project: "/repo" });
- * const { formatted } = await client.inject({ sessionId: "ses_abc", agent: "jcode" });
+ * const { formatted } = await client.inject({ sessionId: "ses_abc", agent: "codex" });
  *
  * const unsubscribe = client.onActivity((activity) => {
  *   console.log(activity.session_id, activity.event_type);

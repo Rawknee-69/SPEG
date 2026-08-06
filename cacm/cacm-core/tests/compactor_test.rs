@@ -49,21 +49,21 @@ fn compact_verification_ten_entries_three_agents_to_three_milestones() {
     let now = base_time();
     let compactor = Compactor::new(now);
     let entries = vec![
-        // jcode session j1 — 4 entries, 2 duplicated pairs (src/lib.rs, src/main.rs).
-        entry("j1a", "j1", AgentType::Jcode, ContextType::Task, "add tests to the lib module", &["src/lib.rs"]),
-        entry("j1b", "j1", AgentType::Jcode, ContextType::Decision, "use the workspace resolver config", &["src/lib.rs"]),
-        entry("j1c", "j1", AgentType::Jcode, ContextType::Task, "wire the main entry point", &["src/main.rs"]),
-        entry("j1d", "j1", AgentType::Jcode, ContextType::FileChange, "changed the main entry point", &["src/main.rs"]),
+        // codex session j1 — 4 entries, 2 duplicated pairs (src/lib.rs, src/main.rs).
+        entry("j1a", "j1", AgentType::Codex, ContextType::Task, "add tests to the lib module", &["src/lib.rs"]),
+        entry("j1b", "j1", AgentType::Codex, ContextType::Decision, "use the workspace resolver config", &["src/lib.rs"]),
+        entry("j1c", "j1", AgentType::Codex, ContextType::Task, "wire the main entry point", &["src/main.rs"]),
+        entry("j1d", "j1", AgentType::Codex, ContextType::FileChange, "changed the main entry point", &["src/main.rs"]),
         // claude-code session c1 — 3 entries, 2 cross-agent dups of j1's
         // src/lib.rs group plus one unique file.
         entry("c1a", "c1", AgentType::ClaudeCode, ContextType::Task, "review the lib module changes", &["src/lib.rs"]),
         entry("c1b", "c1", AgentType::ClaudeCode, ContextType::Task, "review the lib module changes", &["src/lib.rs"]),
         entry("c1c", "c1", AgentType::ClaudeCode, ContextType::Task, "fix the parser error handling", &["src/parser.rs"]),
-        // codex session x1 — 3 entries, one cross-agent dup of j1's src/main.rs
+        // opencode session x1 — 3 entries, one cross-agent dup of j1's src/main.rs
         // group and one duplicated pair on Cargo.toml.
-        entry("x1a", "x1", AgentType::Codex, ContextType::Task, "set the workspace resolver to version two config", &["src/main.rs"]),
-        entry("x1b", "x1", AgentType::Codex, ContextType::Decision, "pin the workspace resolver version", &["Cargo.toml"]),
-        entry("x1c", "x1", AgentType::Codex, ContextType::Decision, "pin the workspace resolver version", &["Cargo.toml"]),
+        entry("x1a", "x1", AgentType::OpenCode, ContextType::Task, "set the workspace resolver to version two config", &["src/main.rs"]),
+        entry("x1b", "x1", AgentType::OpenCode, ContextType::Decision, "pin the workspace resolver version", &["Cargo.toml"]),
+        entry("x1c", "x1", AgentType::OpenCode, ContextType::Decision, "pin the workspace resolver version", &["Cargo.toml"]),
     ];
 
     let report = compactor.compact(&entries);
@@ -76,7 +76,7 @@ fn compact_verification_ten_entries_three_agents_to_three_milestones() {
         .map(|m| m.agent_type.to_string())
         .collect();
     agents.sort();
-    assert_eq!(agents, vec!["claude-code", "codex", "jcode"]);
+    assert_eq!(agents, vec!["claude-code", "codex", "opencode"]);
 
     // Each milestone is a self-describing summary carrying its group's union.
     for milestone in &report.milestones {
@@ -84,14 +84,14 @@ fn compact_verification_ten_entries_three_agents_to_three_milestones() {
         assert!(milestone.content.contains("Task:"), "task line");
         assert_eq!(milestone.context_type, ContextType::Task);
     }
-    // The jcode milestone unions its two surviving file paths.
-    let jcode = report
+    // The codex milestone unions its two surviving file paths.
+    let codex = report
         .milestones
         .iter()
-        .find(|m| m.agent_type == AgentType::Jcode)
+        .find(|m| m.agent_type == AgentType::Codex)
         .unwrap();
-    assert!(jcode.file_paths.contains(&"src/lib.rs".to_string()));
-    assert!(jcode.file_paths.contains(&"src/main.rs".to_string()));
+    assert!(codex.file_paths.contains(&"src/lib.rs".to_string()));
+    assert!(codex.file_paths.contains(&"src/main.rs".to_string()));
 
     // 10 in, 3 milestones → at least 5 duplicates were removed; nothing stale.
     assert!(report.deduplicated >= 5);
@@ -107,7 +107,7 @@ fn compact_verification_ten_entries_three_agents_to_three_milestones() {
 
 #[test]
 fn deduplicate_keeps_highest_confidence_entry_per_file_group() {
-    let low = entry("low", "s1", AgentType::Jcode, ContextType::FileChange, "changed Cargo.toml", &["Cargo.toml"]);
+    let low = entry("low", "s1", AgentType::Codex, ContextType::FileChange, "changed Cargo.toml", &["Cargo.toml"]);
     let high = entry("high", "s2", AgentType::ClaudeCode, ContextType::Decision, "use the workspace resolver", &["Cargo.toml"]);
     let other = entry("other", "s3", AgentType::Codex, ContextType::Task, "add tests", &["src/lib.rs"]);
 
@@ -120,8 +120,8 @@ fn deduplicate_keeps_highest_confidence_entry_per_file_group() {
 
 #[test]
 fn summarize_creates_one_milestone_per_session_with_unions() {
-    let mut a = entry("a", "j1", AgentType::Jcode, ContextType::Task, "build the extractor", &["src/lib.rs"]);
-    let mut b = entry("b", "j1", AgentType::Jcode, ContextType::Decision, "use regex", &["src/parser.rs"]);
+    let mut a = entry("a", "j1", AgentType::Codex, ContextType::Task, "build the extractor", &["src/lib.rs"]);
+    let mut b = entry("b", "j1", AgentType::Codex, ContextType::Decision, "use regex", &["src/parser.rs"]);
     a.decisions = vec!["keep it deterministic".into()];
     b.decisions = vec!["use regex".into()];
     let c = entry("c", "c1", AgentType::ClaudeCode, ContextType::Task, "review the extractor", &["src/main.rs"]);
@@ -130,22 +130,22 @@ fn summarize_creates_one_milestone_per_session_with_unions() {
 
     assert_eq!(milestones.len(), 2); // sessions j1 and c1
     let j1 = milestones.iter().find(|m| m.session_id == "j1").unwrap();
-    assert_eq!(j1.agent_type, AgentType::Jcode);
+    assert_eq!(j1.agent_type, AgentType::Codex);
     assert!(j1.content.contains("2 entries"));
     assert!(j1.content.contains("Task: build the extractor"));
     // Decisions and file paths are the group's unions, in first-seen order.
     assert_eq!(j1.decisions, vec!["keep it deterministic", "use regex"]);
     assert_eq!(j1.file_paths, vec!["src/lib.rs", "src/parser.rs"]);
     // Milestone ids are namespaced and unique.
-    assert_eq!(j1.id, "milestone:jcode:j1");
+    assert_eq!(j1.id, "milestone:codex:j1");
 }
 
 #[test]
 fn link_related_connects_different_agents_with_similar_content() {
-    let a = entry("a1", "s1", AgentType::Jcode, ContextType::Decision, "use the workspace resolver config", &["Cargo.toml"]);
+    let a = entry("a1", "s1", AgentType::Codex, ContextType::Decision, "use the workspace resolver config", &["Cargo.toml"]);
     let b = entry("b1", "s2", AgentType::ClaudeCode, ContextType::Task, "set the workspace resolver to version two config", &["src/main.rs"]);
     // Same agent as a1, unrelated content → must not link.
-    let a2 = entry("a2", "s3", AgentType::Jcode, ContextType::Task, "add tests for the batch pipeline", &["src/lib.rs"]);
+    let a2 = entry("a2", "s3", AgentType::Codex, ContextType::Task, "add tests for the batch pipeline", &["src/lib.rs"]);
 
     let links = link_related(&[a, b, a2]);
 
@@ -158,7 +158,7 @@ fn link_related_connects_different_agents_with_similar_content() {
 #[test]
 fn prune_stale_removes_entries_past_max_age_or_below_decayed_floor() {
     let now = base_time();
-    let mut old = entry("old", "s1", AgentType::Jcode, ContextType::Task, "ancient work", &["src/old.rs"]);
+    let mut old = entry("old", "s1", AgentType::Codex, ContextType::Task, "ancient work", &["src/old.rs"]);
     old.timestamp = now - Duration::days(400); // past the 365-day default cap
     let fresh = entry("fresh", "s2", AgentType::Codex, ContextType::Task, "recent work", &["src/lib.rs"]);
 
@@ -176,7 +176,7 @@ fn prune_stale_removes_entries_past_max_age_or_below_decayed_floor() {
 
 #[test]
 fn decayed_confidence_falls_exponentially_with_age() {
-    let ctx = entry("e", "s1", AgentType::Jcode, ContextType::Decision, "chose axum", &["Cargo.toml"]);
+    let ctx = entry("e", "s1", AgentType::Codex, ContextType::Decision, "chose axum", &["Cargo.toml"]);
     let now = base_time();
     let base = decayed_confidence(&ctx, now, Duration::days(30));
     let one_half_life = decayed_confidence(&ctx, now + Duration::days(30), Duration::days(30));
@@ -189,7 +189,7 @@ fn decayed_confidence_falls_exponentially_with_age() {
 fn compactor_stages_can_be_disabled_independently() {
     let now = base_time();
     // A stale entry plus a duplicate pair: with everything off, nothing changes.
-    let mut stale = entry("stale", "s1", AgentType::Jcode, ContextType::Task, "old task", &["src/old.rs"]);
+    let mut stale = entry("stale", "s1", AgentType::Codex, ContextType::Task, "old task", &["src/old.rs"]);
     stale.timestamp = now - Duration::days(400);
     let dup_a = entry("dup-a", "s2", AgentType::Codex, ContextType::Decision, "use the workspace resolver config", &["Cargo.toml"]);
     let dup_b = entry("dup-b", "s3", AgentType::ClaudeCode, ContextType::Task, "set the workspace resolver to version two config", &["Cargo.toml"]);

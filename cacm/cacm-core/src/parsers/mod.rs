@@ -1,10 +1,9 @@
 //! Parser trait + registry.
 //!
 //! [`AgentSessionParser`] defines the interface every per-agent session parser
-//! (Claude Code, Codex, OpenCode, Cursor, Jcode, ...) implements. Concrete
+//! (Claude Code, Codex, OpenCode, Cursor, ...) implements. Concrete
 //! parsers live in this crate's `parsers/` directory:
 //!
-//! - [`jcode`] — functional parser for jcode's own sessions (task 1.5).
 //! - [`claude`], [`codex`], [`opencode`], [`cursor`] — stubs that return
 //!   [`ParseError::NotImplemented`] until their Phase 2 tasks land.
 //!
@@ -14,7 +13,6 @@
 pub mod claude;
 pub mod codex;
 pub mod cursor;
-pub mod jcode;
 pub mod opencode;
 
 use crate::types::{AgentSession, AgentTurn, AgentType};
@@ -95,11 +93,9 @@ impl ParserRegistry {
     }
 
     /// A registry pre-populated with the default parser set:
-    /// the functional [`jcode::JcodeSessionParser`] plus Phase-2 stubs for
-    /// Claude Code, Codex, OpenCode, and Cursor.
+    /// Phase-2 stubs for Claude Code, Codex, OpenCode, and Cursor.
     pub fn with_defaults() -> Self {
         let mut registry = Self::new();
-        let _ = registry.register(Box::new(jcode::JcodeSessionParser::new()));
         let _ = registry.register(Box::new(claude::ClaudeCodeSessionParser::new()));
         let _ = registry.register(Box::new(codex::CodexSessionParser::new()));
         let _ = registry.register(Box::new(opencode::OpenCodeSessionParser::new()));
@@ -210,11 +206,11 @@ mod tests {
 
     #[test]
     fn parser_parses_manifest() {
-        let parser = MockParser(AgentType::Jcode);
+        let parser = MockParser(AgentType::Codex);
         let session = parser
             .parse_session_manifest(Path::new("/tmp/session"))
             .unwrap();
-        assert_eq!(session.agent_type, AgentType::Jcode);
+        assert_eq!(session.agent_type, AgentType::Codex);
         assert_eq!(session.session_id, "mock-session");
     }
 

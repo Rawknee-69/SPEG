@@ -1,19 +1,8 @@
 //! Storage backends for the CACM daemon.
 //!
-//! [`Storage`] is the trait the daemon's handlers go through. Two backends
-//! implement it, mirroring the task spec:
-//!
-//! - [`JcodeBackend`] — the primary backend. It resolves the Jcode harness
-//!   API socket (`jcode-api.sock`, see [`resolve_jcode_socket`]) and probes it
-//!   at startup; if a Jcode daemon is reachable it is selected and context is
-//!   kept in an in-memory graph (mirroring Jcode's `MemoryGraph`). The full
-//!   harness-protocol write path (pushing entries into Jcode's memory graph)
-//!   is wired by task 1.8 (`jcode-cacm-bridge`); here the graph is local.
-//! - [`SqliteBackend`] — the fallback, used whenever the Jcode socket is not
-//!   reachable. Persists context entries and sessions in a local SQLite file.
-//!
-//! [`select_backend`] implements the auto-select: try Jcode first, fall back
-//! to SQLite.
+//! [`Storage`] is the trait the daemon's handlers go through. The SQLite
+//! backend persists context entries and sessions in a local SQLite file;
+//! an in-memory graph ([`MemoryGraph`]) backs tests and lightweight runs.
 
 use crate::server::RpcError;
 use cacm_core::types::{AgentSession, AgentType, CrossAgentContext, SessionStatus};
@@ -72,8 +61,7 @@ impl From<std::io::Error> for StorageError {
 /// sessions it observes (the daemon's session index is hydrated from
 /// [`Storage::list_sessions`] at startup).
 pub trait Storage: Send + Sync {
-    /// Backend identifier, reported in `/healthz` and logs (`"jcode"`,
-    /// `"sqlite"`).
+    /// Backend identifier, reported in `/healthz` and logs (`"sqlite"`).
     fn name(&self) -> &'static str;
 
     /// Persist a cross-agent context entry.
@@ -106,7 +94,7 @@ pub trait Storage: Send + Sync {
     fn shrink_memory(&mut self, _target_bytes: usize) {}
 
     /// Align the backend's own eviction budget with the memory manager's soft
-    /// limit so pressure signals are real (Jcode's memory graph evicts at the
+    /// limit so pressure signals are real (the in-memory graph evicts at the
     /// soft budget; SQLite is disk-backed, so a no-op there). Default: no-op.
     fn set_budgets(&mut self, _byte_budget: usize, _count_cap: usize) {}
 }
@@ -148,11 +136,11 @@ pub(crate) fn path_within(path: &str, base: &str) -> bool {
         .is_some_and(|rest| rest.starts_with('/') || rest.starts_with('\\'))
 }
 
-/// Shared in-memory store used by [`JcodeBackend`] (and tests).
+/// Shared in-memory store used by [`SqliteBackend`]-adjacent tests and
+/// lightweight runs.
 ///
-/// Mirrors Jcode's `MemoryGraph` in spirit: entries live in memory only. No
-/// persistence — that is what the harness write path (task 1.8) and the
-/// SQLite fallback provide. Storing the same id again replaces the old entry
+/// Entries live in memory only. No persistence — that is what the SQLite
+/// backend provides. Storing the same id again replaces the old entry
 /// (matching SQLite's `INSERT OR REPLACE`), and the store is bounded both by
 /// entry count and by a total string-data byte budget, so an unauthenticated
 /// `cacm.context.store` loop cannot grow memory without bound.
@@ -302,133 +290,32 @@ impl MemoryGraph {
     }
 }
 
-/// Resolve the Jcode harness API socket path.
+/// Lightweight in-memory backend: the graph store with no persistence.
 ///
-/// Precedence (mirrors `jcode-harness-api::sockets`):
-/// 1. `--jcode-home` (CLI override) → `<home>/jcode-api.sock`
-/// 2. `JCODE_API_SOCKET` env var
-/// 3. runtime dir: `JCODE_RUNTIME_DIR` → `XDG_RUNTIME_DIR` → macOS `TMPDIR`
-///    → `$TMP/jcode-<user>` fallback; socket file `jcode-api.sock`.
-pub fn resolve_jcode_socket(jcode_home: Option<&Path>) -> PathBuf {
-    if let Some(home) = jcode_home {
-        return home.join("jcode-api.sock");
-    }
-    if let Ok(path) = std::env::var("JCODE_API_SOCKET") {
-        return PathBuf::from(path);
-    }
-    runtime_dir().join("jcode-api.sock")
-}
-
-fn runtime_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("JCODE_RUNTIME_DIR") {
-        return PathBuf::from(dir);
-    }
-    if let Ok(dir) = std::env::var("XDG_RUNTIME_DIR") {
-        return PathBuf::from(dir);
-    }
-    #[cfg(target_os = "macos")]
-    if let Ok(dir) = std::env::var("TMPDIR") {
-        return PathBuf::from(dir);
-    }
-    std::env::temp_dir().join(format!("jcode-{}", runtime_user_discriminator()))
-}
-
-fn runtime_user_discriminator() -> String {
-    let raw = std::env::var("USERNAME")
-        .or_else(|_| std::env::var("USER"))
-        .or_else(|_| std::env::var("UID"))
-        .unwrap_or_default();
-    let clean: String = raw
-        .chars()
-        .filter(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
-        .take(64)
-        .collect();
-    if clean.is_empty() {
-        "user".to_string()
-    } else {
-        clean
-    }
-}
-
-/// Derive the Windows named-pipe name for a socket path, exactly as
-/// `jcode-transport` does (stem + sha256 of the normalized path, 16 hex).
-#[cfg(windows)]
-fn pipe_name_from_path(path: &Path) -> String {
-    use sha2::{Digest, Sha256};
-
-    let stem: String = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("jcode")
-        .chars()
-        .filter(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
-        .take(32)
-        .collect();
-    let stem = if stem.is_empty() { "jcode" } else { &stem };
-    let normalized = path
-        .to_string_lossy()
-        .replace('\\', "/")
-        .to_ascii_lowercase();
-    let digest = Sha256::digest(normalized.as_bytes());
-    let hash = hex::encode(digest);
-    format!(r"\\.\pipe\{}-{}", stem, &hash[..16])
-}
-
-/// Try to open the Jcode harness API socket once (connect-and-close).
-async fn probe_socket(path: &Path) -> bool {
-    #[cfg(unix)]
-    {
-        tokio::net::UnixStream::connect(path).await.is_ok()
-    }
-    #[cfg(windows)]
-    {
-        // tokio's named-pipe client `open` is synchronous; fine for a
-        // one-shot startup probe.
-        let pipe = pipe_name_from_path(path);
-        tokio::net::windows::named_pipe::ClientOptions::new()
-            .open(&pipe)
-            .is_ok()
-    }
-}
-
-/// Primary backend: in-memory graph, selected when the Jcode harness API
-/// socket is reachable.
-pub struct JcodeBackend {
+/// Used by tests and for lightweight runs where a database file is unwanted.
+/// Reports and evicts real graph bytes, so the memory manager's pressure
+/// signals and shrink requests behave the same as the store does in memory.
+pub struct InMemoryBackend {
     graph: MemoryGraph,
-    socket_path: PathBuf,
-    connected: bool,
 }
 
-impl JcodeBackend {
-    /// Create a backend for `socket_path` without probing.
-    pub fn new(socket_path: PathBuf) -> Self {
+impl InMemoryBackend {
+    pub fn new() -> Self {
         Self {
             graph: MemoryGraph::new(),
-            socket_path,
-            connected: false,
         }
-    }
-
-    /// The harness API socket this backend talks to.
-    pub fn socket_path(&self) -> &Path {
-        &self.socket_path
-    }
-
-    /// Whether the socket probe succeeded.
-    pub fn is_connected(&self) -> bool {
-        self.connected
-    }
-
-    /// Probe the Jcode daemon socket; sets `connected` on success.
-    pub async fn probe(&mut self) -> bool {
-        self.connected = probe_socket(&self.socket_path).await;
-        self.connected
     }
 }
 
-impl Storage for JcodeBackend {
+impl Default for InMemoryBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Storage for InMemoryBackend {
     fn name(&self) -> &'static str {
-        "jcode"
+        "memory"
     }
 
     fn store_context(&mut self, ctx: &CrossAgentContext) -> Result<(), StorageError> {
@@ -466,7 +353,7 @@ impl Storage for JcodeBackend {
     }
 }
 
-/// Fallback backend: local SQLite persistence used when Jcode is unavailable.
+/// Local SQLite persistence backend.
 pub struct SqliteBackend {
     /// rusqlite's `Connection` is `Send` but not `Sync` (internal `RefCell`
     /// statement cache), so the daemon's `Storage: Send + Sync` bound is met
@@ -729,30 +616,13 @@ impl Storage for SqliteBackend {
     }
 }
 
-/// Auto-select a storage backend: try Jcode first, fall back to SQLite.
-pub async fn select_backend(
-    jcode_home: Option<&Path>,
-    db_path: Option<&Path>,
-) -> Result<Box<dyn Storage>, StorageError> {
-    let socket = resolve_jcode_socket(jcode_home);
-    let mut jcode = JcodeBackend::new(socket.clone());
-    if jcode.probe().await {
-        tracing::info!(
-            socket = %socket.display(),
-            "jcode harness API reachable — using Jcode memory-graph backend"
-        );
-        Ok(Box::new(jcode))
-    } else {
-        let db = db_path
-            .map(Path::to_path_buf)
-            .unwrap_or_else(SqliteBackend::default_db_path);
-        tracing::info!(
-            socket = %socket.display(),
-            db = %db.display(),
-            "jcode harness API not reachable — falling back to SQLite backend"
-        );
-        Ok(Box::new(SqliteBackend::new(&db)?))
-    }
+/// Select the storage backend: SQLite at `db_path` (or the default location).
+pub fn select_backend(db_path: Option<&Path>) -> Result<Box<dyn Storage>, StorageError> {
+    let db = db_path
+        .map(Path::to_path_buf)
+        .unwrap_or_else(SqliteBackend::default_db_path);
+    tracing::info!(db = %db.display(), "using SQLite storage backend");
+    Ok(Box::new(SqliteBackend::new(&db)?))
 }
 
 impl From<StorageError> for RpcError {
@@ -858,7 +728,7 @@ mod tests {
         let mut graph = MemoryGraph::new();
         graph.store_session(&AgentSession::new(
             "s1",
-            AgentType::Jcode,
+            AgentType::Speg,
             "/x/s1",
             Utc::now(),
         ));
@@ -989,34 +859,6 @@ mod tests {
         let after = backend.memory_bytes();
         assert!(after >= before);
     }
-
-    #[test]
-    fn jcode_backend_reports_graph_bytes() {
-        let mut backend = JcodeBackend::new(PathBuf::from("C:\\nonexistent\\jcode-api.sock"));
-        assert_eq!(backend.memory_bytes(), 0);
-        let t0 = chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
-        backend
-            .store_context(&CrossAgentContext {
-                timestamp: t0,
-                ..sample_context("c1", "s1", "/repo/a.rs")
-            })
-            .unwrap();
-        backend
-            .store_context(&CrossAgentContext {
-                timestamp: t0 + chrono::Duration::minutes(1),
-                ..sample_context("c2", "s1", "/repo/b.rs")
-            })
-            .unwrap();
-        assert!(backend.memory_bytes() > 0);
-        // Shrink to roughly one entry → only the newest survives.
-        backend.shrink_memory(backend.memory_bytes() / 2);
-        let all = backend.query_context("*", 10).unwrap();
-        assert_eq!(all.len(), 1);
-        assert_eq!(all[0].id, "c2");
-    }
-
     #[test]
     fn sqlite_store_query_and_list_roundtrip() {
         let mut backend = SqliteBackend::open_in_memory().unwrap();
@@ -1039,7 +881,7 @@ mod tests {
         backend
             .store_session(&AgentSession::new(
                 "s1",
-                AgentType::Jcode,
+                AgentType::Speg,
                 "/x/s1",
                 Utc::now(),
             ))
@@ -1075,61 +917,5 @@ mod tests {
         let limited = backend.query_context("/repo", 3).unwrap();
         assert_eq!(limited.len(), 3);
         assert_eq!(limited[0].id, "c4"); // newest first
-    }
-
-    #[test]
-    fn jcode_backend_is_memory_graph() {
-        let mut backend = JcodeBackend::new(PathBuf::from("C:\\nonexistent\\jcode-api.sock"));
-        backend
-            .store_context(&sample_context("c1", "s1", "/repo/a.rs"))
-            .unwrap();
-        backend
-            .store_session(&AgentSession::new(
-                "s1",
-                AgentType::Jcode,
-                "/x/s1",
-                Utc::now(),
-            ))
-            .unwrap();
-        assert_eq!(backend.query_context("/repo", 10).unwrap().len(), 1);
-        assert_eq!(backend.list_sessions().unwrap().len(), 1);
-        assert!(!backend.is_connected());
-    }
-
-    #[tokio::test]
-    async fn select_backend_falls_back_to_sqlite_when_jcode_unreachable() {
-        let db = std::env::temp_dir().join(format!(
-            "cacm-select-backend-test-{}.db",
-            std::process::id()
-        ));
-        let backend = select_backend(
-            Some(Path::new("C:\\definitely\\not\\a\\jcode\\home")),
-            Some(&db),
-        )
-        .await
-        .unwrap();
-        assert_eq!(backend.name(), "sqlite");
-        let _ = std::fs::remove_file(&db);
-    }
-
-    #[test]
-    fn resolve_jcode_socket_prefers_explicit_home() {
-        let home = Path::new("/tmp/jcode-home");
-        assert_eq!(
-            resolve_jcode_socket(Some(home)),
-            PathBuf::from("/tmp/jcode-home/jcode-api.sock")
-        );
-        // No env overrides set in tests: falls back to the runtime dir.
-        let resolved = resolve_jcode_socket(None);
-        assert_eq!(resolved.file_name().unwrap(), "jcode-api.sock");
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn pipe_name_matches_jcode_transport_shape() {
-        // jcode-transport: /run/user/1000/jcode-api.sock -> \\.\pipe\jcode-api-<sha16>
-        let name = pipe_name_from_path(Path::new("C:/tmp/jcode-api.sock"));
-        assert!(name.starts_with(r"\\.\pipe\jcode-api-"), "{name}");
-        assert_eq!(name.len(), r"\\.\pipe\jcode-api-".len() + 16);
     }
 }

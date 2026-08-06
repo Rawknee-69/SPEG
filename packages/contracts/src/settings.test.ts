@@ -301,8 +301,6 @@ describe("ServerSettingsPatch string normalization", () => {
 describe("ClientSettings speg blob (task 1.12)", () => {
   it("defaults every SPEG setting when the blob is absent", () => {
     const decoded = decodeClientSettings({});
-    expect(decoded.speg.jcodeBinaryPathMode).toBe("auto");
-    expect(decoded.speg.jcodeBinaryPath).toBe("");
     expect(decoded.speg.cacmHost).toBe("localhost");
     expect(decoded.speg.cacmPort).toBe(9786);
     expect(decoded.speg.cacmAutoStart).toBe(true);
@@ -311,7 +309,7 @@ describe("ClientSettings speg blob (task 1.12)", () => {
     expect(decoded.speg.contextInjectionMode).toBe("auto");
     expect(decoded.speg.maxContextBudgetTokens).toBe(8000);
     expect(decoded.speg.skillToggles).toEqual({});
-    for (const agent of ["jcode", "claude-code", "codex", "opencode", "cursor", "speg"]) {
+    for (const agent of ["claude-code", "codex", "opencode", "cursor", "speg"]) {
       expect(decoded.speg.watchedAgents[agent as keyof typeof decoded.speg.watchedAgents]).toBe(
         true,
       );
@@ -321,14 +319,10 @@ describe("ClientSettings speg blob (task 1.12)", () => {
   it("round-trips a fully customized blob and rejects invalid values", () => {
     const customized = {
       ...decodeClientSettings({}).speg,
-      jcodeBinaryPathMode: "manual",
-      jcodeBinaryPath: "/opt/jcode",
-      jcodeBuildCommand: "cargo build --release",
-      jcodeLaunchArgs: "--api-socket /tmp/jcode.sock",
       cacmHost: "127.0.0.1",
       cacmPort: 9790,
       cacmAutoStart: false,
-      cacmWatchPaths: ["/repo/.jcode", "/repo/.claude"],
+      cacmWatchPaths: ["/repo/.claude"],
       cacmStorageBackend: "sled",
       contextInjectionMode: "off",
       maxContextBudgetTokens: 16000,
@@ -346,17 +340,17 @@ describe("ClientSettings speg blob (task 1.12)", () => {
     expect(decodeOption({ speg: { cacmPort: 0 } } as never)._tag).toBe("None");
     expect(decodeOption({ speg: { cacmPort: 70000 } } as never)._tag).toBe("None");
     expect(decodeOption({ speg: { maxContextBudgetTokens: -1 } } as never)._tag).toBe("None");
-    expect(decodeOption({ speg: { watchedAgents: { jcode: false } } } as never)._tag).toBe("None");
+    expect(
+      decodeOption({ speg: { watchedAgents: { "unknown-agent": false } } } as never)._tag,
+    ).toBe("None");
   });
 
   it("accepts a whole speg blob in the client patch", () => {
     const patch = decodeClientSettingsPatch({
       speg: {
-        jcodeBinaryPathMode: "manual",
-        jcodeBinaryPath: "/opt/jcode",
+        cacmHost: "127.0.0.1",
       },
     });
-    expect(patch.speg?.jcodeBinaryPathMode).toBe("manual");
-    expect(patch.speg?.jcodeBinaryPath).toBe("/opt/jcode");
+    expect(patch.speg?.cacmHost).toBe("127.0.0.1");
   });
 });

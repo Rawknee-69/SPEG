@@ -5,8 +5,7 @@
 //! [`CrossAgentContext`] entries by **recency × relevance × confidence**, and
 //! formats the top entries as text tailored to a target agent type — to be
 //! prepended to a first user message (Codex) or appended to a prompt file
-//! (`CLAUDE.md`, `OPENCODE.md`, `.cursorrules`) or system reminder (Jcode /
-//! SPEG).
+//! (`CLAUDE.md`, `OPENCODE.md`, `.cursorrules`) or system reminder (SPEG).
 //!
 //! # Ranking
 //!
@@ -28,9 +27,8 @@
 //! Each agent gets a header + one bullet per entry, carrying the context
 //! type, the content, the source agent, and a human `time_ago` suffix:
 //!
-//! - **Jcode / Speg** — `[Cross-Agent Context]` + `• Task: … (agent, 5m ago)`
-//!   (mirrors the `# System Reminder` dynamic-prompt pattern Jcode uses in
-//!   `jcode-app-core/src/agent/prompting.rs`).
+//! - **Speg** — `[Cross-Agent Context]` + `• Task: … (agent, 5m ago)` as a
+//!   system-reminder style block.
 //! - **Claude Code / OpenCode** — `## Cross-Agent Context` markdown section,
 //!   appended to `CLAUDE.md` / `OPENCODE.md`.
 //! - **Codex** — plain `[Cross-Agent Context]` block, prepended to the first
@@ -362,9 +360,9 @@ pub fn time_ago(now: DateTime<Utc>, timestamp: DateTime<Utc>) -> String {
 /// Per-target header line(s).
 fn target_header(target: AgentType) -> &'static str {
     match target {
-        // Jcode/SPEG system reminders and Codex's first user message are
+        // SPEG system reminders and Codex's first user message are
         // plain text — mirror the `# System Reminder` pattern in prose.
-        AgentType::Speg | AgentType::Jcode | AgentType::Codex => "[Cross-Agent Context]\n",
+        AgentType::Speg | AgentType::Codex => "[Cross-Agent Context]\n",
         // Markdown files get a real heading.
         AgentType::ClaudeCode | AgentType::OpenCode => "## Cross-Agent Context\n\n",
         AgentType::Cursor => "# Cross-Agent Context\n\n",
@@ -397,7 +395,7 @@ fn format_entry_line(ranked: &RankedContext, target: AgentType, now: DateTime<Ut
         time_ago(now, ranked.context.timestamp)
     );
     match target {
-        AgentType::Speg | AgentType::Jcode | AgentType::Codex => {
+        AgentType::Speg | AgentType::Codex => {
             format!("• {label}: {content} {suffix}")
         }
         AgentType::ClaudeCode | AgentType::OpenCode => {
@@ -576,7 +574,7 @@ mod tests {
             confidence: 0.5,
             final_score: 0.8,
         };
-        let line = format_entry_line(&ranked, AgentType::Jcode, now);
+        let line = format_entry_line(&ranked, AgentType::Codex, now);
         // Exactly one bullet, no embedded newline, suffix on the same line.
         assert_eq!(
             line,
@@ -606,7 +604,7 @@ mod tests {
     #[test]
     fn relevance_boosts_own_session_and_agent() {
         let base = t(0);
-        let same_session = ctx("a", "sess-1", AgentType::Jcode, ContextType::Task, base);
+        let same_session = ctx("a", "sess-1", AgentType::Codex, ContextType::Task, base);
         let other = ctx(
             "b",
             "sess-9",
@@ -616,16 +614,16 @@ mod tests {
         );
         // Same session: +0.4; same agent: +0.3; Task: +0.1.
         assert_close(
-            relevance_score(&same_session, AgentType::Jcode, Some("sess-1")),
+            relevance_score(&same_session, AgentType::Codex, Some("sess-1")),
             0.8,
         );
         // No session or agent match: only the Task baseline (+0.1).
         assert_close(
-            relevance_score(&other, AgentType::Jcode, Some("sess-1")),
+            relevance_score(&other, AgentType::Codex, Some("sess-1")),
             0.1,
         );
         // No session given: same-agent + Task only.
-        assert_close(relevance_score(&same_session, AgentType::Jcode, None), 0.4);
+        assert_close(relevance_score(&same_session, AgentType::Codex, None), 0.4);
         // Decision/Pattern get +0.2 instead of Task's +0.1.
         let decision = ctx("c", "s1", AgentType::Codex, ContextType::Decision, base);
         assert_close(relevance_score(&decision, AgentType::Codex, None), 0.5);
@@ -633,13 +631,13 @@ mod tests {
 
     #[test]
     fn confidence_reflects_structured_fields() {
-        let mut rich = ctx("a", "s1", AgentType::Jcode, ContextType::Decision, t(0));
+        let mut rich = ctx("a", "s1", AgentType::Codex, ContextType::Decision, t(0));
         rich.decisions = vec!["use workspace resolver".into()];
         rich.file_paths = vec!["Cargo.toml".into()];
         // 0.2 base + 0.3 decision + 0.3 decisions + 0.2 paths = 1.0
         assert_close(confidence_score(&rich), 1.0);
         // Bare task: base only.
-        let bare = ctx("b", "s1", AgentType::Jcode, ContextType::Task, t(0));
+        let bare = ctx("b", "s1", AgentType::Codex, ContextType::Task, t(0));
         assert_close(confidence_score(&bare), 0.2);
     }
 
@@ -665,7 +663,7 @@ mod tests {
         let mut high = ctx(
             "high",
             "s2",
-            AgentType::Jcode,
+            AgentType::Codex,
             ContextType::Decision,
             t(-3_600),
         );
@@ -674,7 +672,7 @@ mod tests {
 
         let ranked = injector.rank_context(
             vec![low.clone(), high.clone()],
-            AgentType::Jcode,
+            AgentType::Codex,
             Some("s1"),
         );
         assert_eq!(ranked.len(), 2);
@@ -687,7 +685,7 @@ mod tests {
         let capped =
             injector
                 .with_top_n(1)
-                .rank_context(vec![low, high], AgentType::Jcode, Some("s1"));
+                .rank_context(vec![low, high], AgentType::Codex, Some("s1"));
         assert_eq!(capped.len(), 1);
         assert_eq!(capped[0].context.id, "high");
     }

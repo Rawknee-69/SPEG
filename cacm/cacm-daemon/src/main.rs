@@ -2,7 +2,7 @@
 //!
 //! Watches agent session directories, serves the JSON-RPC-style WebSocket
 //! API, and pushes `cacm.session_activity` notifications. One daemon serves
-//! all clients (Jcode, SPEG web, any tool).
+//! all clients (SPEG web, any tool).
 //!
 //! Resilience: a [`Crashpad`] writes crash reports + a collectible daemon log
 //! on panic, the [`MemoryManager`] bounds memory so the process degrades
@@ -56,11 +56,6 @@ struct Cli {
     /// without this flag is refused.
     #[arg(long)]
     expose: bool,
-
-    /// Jcode home directory; the harness API socket is resolved under it as
-    /// `<home>/jcode-api.sock` (default: JCODE_API_SOCKET / runtime-dir rules).
-    #[arg(long)]
-    jcode_home: Option<PathBuf>,
 
     /// SQLite database path for the fallback backend
     /// (default: ~/.cacm/cacm.db).
@@ -224,13 +219,12 @@ async fn daemon_main(
     _crashpad: Crashpad,
     crash_dir_for_state: PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Storage: try the Jcode harness API backend first, fall back to SQLite.
-    let mut storage_box =
-        storage::select_backend(cli.jcode_home.as_deref(), cli.db_path.as_deref()).await?;
+    // Storage: SQLite (in-memory graph backs tests only).
+    let mut storage_box = storage::select_backend(cli.db_path.as_deref())?;
     tracing::info!(backend = storage_box.name(), "storage backend selected");
 
     // Align the backend's own eviction budget with the memory manager's soft
-    // limit so the jcode memory graph self-evicts at the same threshold the
+    // limit so the in-memory graph self-evicts at the same threshold the
     // manager treats as "soft pressure" (SQLite is disk-backed: no-op).
     storage_box.set_budgets(cli.memory_soft.max(1), storage::MEMORY_GRAPH_CAP);
 
@@ -480,7 +474,7 @@ fn is_loopback_host(host: &str) -> bool {
 ///
 /// Mirrors the watcher's path heuristic: for files the stem is the session id
 /// (Claude Code / Codex transcripts), for directories the entry name is
-/// (Jcode / SPEG session dirs). Real extraction comes with the parsers
+/// (SPEG session dirs). Real extraction comes with the parsers
 /// (task 1.5).
 fn scan_default_dirs() -> Vec<AgentSession> {
     let mut out = Vec::new();
@@ -569,15 +563,15 @@ mod tests {
     fn session_from_activity_uses_agent_default_dir() {
         let activity = SessionActivity {
             session_id: "fox".into(),
-            agent_type: AgentType::Jcode,
+            agent_type: AgentType::Speg,
             event_type: SessionEventType::Modified,
             turn: None,
             timestamp: chrono::Utc::now(),
         };
         let session = session_from_activity(&activity);
         assert_eq!(session.session_id, "fox");
-        assert_eq!(session.agent_type, AgentType::Jcode);
-        assert!(session.path.ends_with(".jcode/sessions/fox"));
+        assert_eq!(session.agent_type, AgentType::Speg);
+        assert!(session.path.ends_with(".speg/sessions/fox"));
     }
 
     #[test]
@@ -633,9 +627,10 @@ mod tests {
     async fn watcher_task_upserts_index_and_broadcasts() {
         let (tx, rx) = mpsc::channel(16);
         let state = AppState::new(
-            Box::new(cacm_daemon::storage::JcodeBackend::new(PathBuf::from(
-                "C:\\nonexistent\\jcode-api.sock",
-            ))),
+            Box::new(
+                cacm_daemon::storage::SqliteBackend::open_in_memory()
+                    .expect("in-memory sqlite backend"),
+            ),
             ParserRegistry::new(),
             HashMap::new(),
         );
@@ -646,7 +641,7 @@ mod tests {
 
         tx.send(SessionActivity {
             session_id: "fox".into(),
-            agent_type: AgentType::Jcode,
+            agent_type: AgentType::Codex,
             event_type: SessionEventType::Modified,
             turn: Some(2),
             timestamp: chrono::Utc::now(),
@@ -669,6 +664,6 @@ mod tests {
         let value: serde_json::Value = serde_json::from_str(&payload).unwrap();
         assert_eq!(value["event"], "cacm.session_activity");
         assert_eq!(value["data"]["session_id"], "fox");
-        assert_eq!(value["data"]["agent_type"], "jcode");
+        assert_eq!(value["data"]["agent_type"], "codex");
     }
 }

@@ -34,12 +34,6 @@ export const PROVIDER_OPTIONS: Array<{
   { value: ProviderDriverKind.make("codex"), label: "Codex", available: true },
   { value: ProviderDriverKind.make("claudeAgent"), label: "Claude", available: true },
   {
-    value: ProviderDriverKind.make("jcode"),
-    label: "Jcode",
-    available: true,
-    pickerSidebarBadge: "new",
-  },
-  {
     value: ProviderDriverKind.make("opencode"),
     label: "OpenCode",
     available: true,

@@ -1,6 +1,13 @@
-# SPEG — Architecture v5: CACM as Standalone Importable Package
+# SPEG — Architecture v6: CACM as Standalone Importable Package
 
-> **Plan 21 v5** | CACM = standalone daemon + SDKs. Jcode = vanilla + thin import.
+> **Plan 21 v6** | CACM = standalone daemon + SDKs. Harness = **TBD**.
+>
+> **Revision (v5 → v6): jcode is DROPPED as the harness.** The jcode
+> provider adapter, session parser, and harness-API storage were removed from
+> t3code (see commit "revert(speg): strip jcode"). We will integrate an
+> external harness or build our own; until then CACM stays agent-agnostic
+> (Claude Code, Codex, OpenCode, Cursor, SPEG) and the harness slot below is
+> open. Historical jcode task records are kept but marked **superseded**.
 > **Principle**: CACM is a universal cross-agent context manager — any tool can import and use it.
 
 ---
@@ -18,25 +25,23 @@
 │  └────────────────────────────────────────────────────────┘  │
 │                                                              │
 │  API: WebSocket (cacm.query, cacm.sessions, cacm.inject)     │
-│  Watches: ~/.jcode/sessions/, ~/.claude/projects/, etc.      │
-│  Stores: → Jcode memory graph (via harness API)              │
-│          → OR local SQLite if Jcode unavailable              │
+│  Watches: ~/.claude/projects/, ~/.codex/sessions/, etc.      │
+│  Stores: local SQLite (in-memory graph for lightweight runs) │
 └──────┬──────────────┬──────────────────┬─────────────────────┘
        │              │                  │
        ▼              ▼                  ▼
 ┌──────────┐  ┌────────────┐  ┌─────────────────┐
-│  JCODE   │  │  SPEG WEB  │  │  ANY OTHER TOOL │
-│ (vanilla)│  │  (React)   │  │  (Claude, etc.) │
+│ HARNESS  │  │  SPEG WEB  │  │  ANY OTHER TOOL │
+│  (TBD:   │  │  (React)   │  │  (Claude, etc.) │
+│ external │  │            │  │                 │
+│ or self- │  │ + cacm-    │  │ + cacm-sdk-rs   │
+│  built)  │  │   sdk-ts   │  │   or cacm-sdk-ts│
 │          │  │            │  │                 │
-│ + cacm-  │  │ + cacm-    │  │ + cacm-sdk-rs   │
-│   sdk-rs │  │   sdk-ts   │  │   or cacm-sdk-ts│
-│          │  │            │  │                 │
-│ Jcode    │  │ Talks to   │  │ Talks to CACM   │
-│ imports  │  │ CACM via   │  │ daemon via      │
-│ CACM as  │  │ WebSocket  │  │ WebSocket       │
-│ a crate  │  │            │  │                 │
-│ dep. No  │  │            │  │                 │
-│ core mods│  │            │  │                 │
+│ Connects │  │ Talks to   │  │ Talks to CACM   │
+│ to CACM  │  │ CACM via   │  │ daemon via      │
+│ via      │  │ WebSocket  │  │ WebSocket       │
+│ sdk-rs   │  │            │  │                 │
+│ or sdk-ts│  │            │  │                 │
 └──────────┘  └────────────┘  └─────────────────┘
 ```
 
@@ -47,9 +52,9 @@
 | **CACM as daemon** | One process watches all agents. Any tool connects. No embedded complexity. |
 | **Core in Rust** | User preference. Watcher/extractor/injector/compactor all Rust. |
 | **TypeScript SDK** | SPEG web + Node.js tools import `cacm-sdk-ts` — clean npm package. |
-| **Rust SDK** | Jcode imports `cacm-sdk-rs` — thin crate, no Jcode core modifications. |
-| **Jcode vanilla** | Jcode only adds a bridge crate (`jcode-cacm-bridge`) that imports `cacm-sdk-rs` and registers CACM as a Jcode tool. Zero changes to Jcode's existing crates. |
-| **Storage** | Primary: Jcode memory graph (via harness API). Fallback: local SQLite. |
+| **Rust SDK** | Future harness / self-built agent imports `cacm-sdk-rs`. ~~jcode~~ (superseded). |
+| **Harness** | **TBD** — external harness or self-built. The jcode bridge route was removed in v6. |
+| **Storage** | Local SQLite; in-memory graph for lightweight runs. ~~Jcode memory graph~~ (superseded). |
 | **Protocol** | WebSocket with JSON messages — simple, cross-language, debuggable. |
 
 ---
@@ -66,7 +71,6 @@ t3code/
 │   │       ├── watcher.rs         ← File watcher (notify crate)
 │   │       ├── parsers/
 │   │       │   ├── mod.rs         ← Parser trait + registry
-│   │       │   ├── jcode.rs       ← Jcode transcript parser
 │   │       │   ├── claude.rs      ← Claude Code parser
 │   │       │   ├── codex.rs       ← Codex parser
 │   │       │   ├── opencode.rs    ← OpenCode parser
@@ -81,9 +85,9 @@ t3code/
 │   │   └── src/
 │   │       ├── main.rs            ← HTTP + WebSocket server
 │   │       ├── server.rs          ← Request routing, session mgmt
-│   │       └── storage.rs         ← Memory graph (Jcode) or SQLite backend
+│   │       └── storage.rs         ← SQLite (+ in-memory graph) backend
 │   │
-│   ├── cacm-sdk-rs/               ← Rust client library (for Jcode)
+│   ├── cacm-sdk-rs/               ← Rust client library (Rust consumers)
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       └── lib.rs             ← CacmClient: connect, query, inject
@@ -96,19 +100,13 @@ t3code/
 │           ├── client.ts          ← CacmClient: WebSocket + request/reply
 │           └── types.ts           ← TypeScript types matching Rust types
 │
-├── jcode/                         ← VANILLA JCODE (from 1jehuang/jcode)
-│   ├── crates/
-│   │   └── jcode-cacm-bridge/     ← NEW: thin bridge crate
-│   │       ├── Cargo.toml         ← depends on cacm-sdk-rs
-│   │       └── src/
-│   │           └── lib.rs         ← Register CACM tools + hooks
-│   │                               ← ZERO changes to jcode-app-core
-│   └── Cargo.toml                 ← add jcode-cacm-bridge to workspace
+├── (harness)/                     ← ~~VANILLA JCODE~~ (removed in v6 —
+│                                  ←   harness slot is TBD: external or self-built)
 │
 ├── speg-web/                      ← SPEG WEB UI (TypeScript, React)
 │   ├── package.json               ← depends on @cacm/sdk
 │   ├── src/
-│   │   ├── client.ts              ← Jcode harness API client
+│   │   ├── client.ts              ← CacmClient: WebSocket + request/reply
 │   │   └── components/
 │   │       ├── ChatView.tsx
 │   │       ├── CacmTimeline.tsx   ← Uses @cacm/sdk for cross-agent data
@@ -131,28 +129,19 @@ cacm-core (Rust)          ← Pure logic, no I/O deps
 cacm-daemon (Rust)        ← HTTP/WS server, depends on cacm-core
     ↑
     ├── cacm-sdk-rs (Rust)      ← Client library for Rust consumers
-    │       ↑
-    │   jcode-cacm-bridge (Rust) ← Jcode imports this. Registers tools.
-    │       ↑
-    │   jcode (vanilla)          ← ZERO core modifications
     │
     └── cacm-sdk-ts (TypeScript) ← Client library for TS consumers
             ↑
         speg-web (React)         ← Imports @cacm/sdk
 ```
 
-### Jcode Integration (Zero Core Mods)
+### ~~Jcode Integration~~ (superseded in v6)
 
-`jcode-cacm-bridge` is the ONLY new crate in Jcode. It:
-1. Depends on `cacm-sdk-rs` and `jcode-app-core` (for tool registration)
-2. Registers CACM tools in Jcode's tool registry:
-   - `cacm_query` — agent can query cross-agent context
-   - `cacm_inject` — agent can request context injection
-   - `cacm_sessions` — agent can list recent sessions across agents
-3. Adds a `turn_start` hook (via Jcode's existing hook system in `jcode-base::hooks`) that calls `cacm.inject()` before each turn
-4. That's it. ~200 lines of Rust.
-
-No changes to: `jcode-app-core`, `jcode-harness-api`, `jcode-memory-types`, `jcode-base`. Jcode stays 100% vanilla.
+The jcode bridge route (a `jcode-cacm-bridge` crate registering CACM tools
+and a `turn_start` injection hook inside jcode) is **removed**. When a
+harness is chosen (external or self-built), integration follows the same
+shape: a thin adapter that imports `cacm-sdk-rs`/`cacm-sdk-ts`, registers
+CACM tools, and injects context before each turn.
 
 ### CACM Daemon API
 
@@ -168,14 +157,14 @@ WebSocket at ws://localhost:9786 (configurable)
 → REQUEST:  {"id":3,"method":"cacm.inject","params":{"sessionId":"abc","agent":"claude-code"}}
 ← RESPONSE: {"id":3,"result":{"formatted":"[Cross-Agent Context]\n• ..."}}
 
-→ NOTIFICATION: {"event":"cacm.session_activity","data":{"agent":"jcode","sessionId":"fox","turn":{...}}}
+→ NOTIFICATION: {"event":"cacm.session_activity","data":{"agent":"codex","sessionId":"fox","turn":{...}}}
 ```
 
 ### Storage Backend
 
-CACM daemon stores context in:
-1. **Primary**: Jcode memory graph — connects to Jcode daemon via harness API, stores entries with `category: Custom("cross_agent_context")`, `source: "cacm"`
-2. **Fallback**: Local SQLite — if Jcode daemon is not running, CACM stores context locally and syncs when Jcode becomes available
+CACM daemon stores context in local SQLite (default `~/.cacm/cacm.db`), with
+an in-memory graph for lightweight runs. ~~Jcode memory graph~~ (superseded
+in v6).
 
 ---
 
@@ -207,11 +196,9 @@ CACM daemon stores context in:
 
 ---
 
-### Task 1.5: Jcode Session Parser
+### Task 1.5: ~~Jcode~~ Session Parser 🔄 SUPERSEDED
 
-**Files**: `cacm/cacm-core/src/parsers/jcode.rs` — parse Jcode transcript JSONL
-
-**Verification**: Parser extracts turns from sample Jcode session file.
+**Status**: Removed in v6 — the jcode parser (`cacm/cacm-core/src/parsers/jcode.rs`) was deleted with the jcode strip. The parser slot is open for the chosen harness.
 
 ---
 
@@ -231,11 +218,9 @@ CACM daemon stores context in:
 
 ---
 
-### Task 1.8: cacm-sdk-rs + Jcode Bridge
+### Task 1.8: cacm-sdk-rs 🔄 SUPERSEDED
 
-**Files**: `cacm/cacm-sdk-rs/`, `jcode/crates/jcode-cacm-bridge/`
-
-**Verification**: Jcode builds with bridge crate. CACM tools appear in agent tool list.
+**Status**: `cacm-sdk-rs` remains (Rust client for the future harness); the `jcode-cacm-bridge` crate was removed with the jcode strip in v6.
 
 ---
 
@@ -247,15 +232,9 @@ CACM daemon stores context in:
 
 ---
 
-### Task 1.10: Jcode Provider Adapter (T3 Code Server)
+### Task 1.10: Jcode Provider Adapter 🔄 SUPERSEDED (removed in v6)
 
-**Status**: ✅ (report: `research/report/1.10-jcode-adapter.md`)
-
-**Files**: `apps/server/src/provider/Drivers/JcodeDriver.ts`, `apps/server/src/provider/Layers/JcodeAdapter.ts`, `apps/server/src/provider/Drivers/JcodeProcessManager.ts`, `apps/server/src/provider/Layers/JcodeProvider.ts`, `apps/server/src/textGeneration/JcodeTextGeneration.ts`, `packages/contracts/src/settings.ts` (`JcodeSettings`)
-
-**What**: T3 Code already has provider adapters for Codex, Claude, Cursor, Grok, OpenCode. We add Jcode as a new provider. The adapter implements `ProviderDriver` interface: launch Jcode daemon, connect via harness API, send turns, stream events, interrupt.
-
-**Verification**: Jcode appears in T3 Code's provider list. Select Jcode → start a turn → agent responds.
+**Status**: Was ✅ (report: `research/report/1.10-jcode-adapter.md`). The entire adapter (`JcodeDriver.ts`, `JcodeAdapter.ts`, `JcodeProcessManager.ts`, `JcodeProvider.ts`, `JcodeTextGeneration.ts`, `JcodeSettings`) was **deleted** when jcode was dropped; the provider slot is open for the chosen harness.
 
 ---
 
@@ -283,8 +262,7 @@ Follows `rightPanelStore.ts` pattern — registers as a new surface type.
 
 **Files**: `apps/web/src/routes/speg/` — new settings section
 
-**What**: A settings panel for SPEG/Jcode configuration:
-- Jcode binary path (auto-detect or manual)
+**What**: A settings panel for SPEG configuration:
 - CACM daemon port + connection settings
 - Agent session watch paths
 - Context injection preferences (auto/manual/off)
@@ -325,7 +303,7 @@ Follows existing T3 Code settings panel pattern.
 
 **Files**: None — verification only
 
-**Verification**: All builds pass, all tests pass, Jcode appears as provider in T3 Code, CACM right panel populates, `git tag speg-v0.1.0-phase1`.
+**Verification**: All builds pass, all tests pass, CACM right panel populates, provider list shows the chosen harness (TBD), `git tag speg-v0.1.0-phase1`.
 
 ---
 
@@ -333,11 +311,11 @@ Follows existing T3 Code settings panel pattern.
 
 | Component | Language | Why |
 |-----------|----------|-----|
-| cacm-core | **Rust** | Performance, Jcode integration |
+| cacm-core | **Rust** | Performance, cross-agent watcher/extractor |
 | cacm-daemon | **Rust** | Same binary, no runtime overhead |
-| cacm-sdk-rs | **Rust** | Native Jcode dependency |
+| cacm-sdk-rs | **Rust** | Native SDK for the chosen harness |
 | cacm-sdk-ts | **TypeScript** | SPEG web + Node.js ecosystem |
-| jcode-cacm-bridge | **Rust** | Thin Jcode integration layer |
+| ~~jcode-cacm-bridge~~ | **Rust** | ~~Thin Jcode integration layer~~ (removed in v6) |
 | speg-web | **TypeScript** | React UI |
 | speg-desktop | **TypeScript** | Electron |
 | speg-mobile | **TypeScript** | React Native |
@@ -347,8 +325,8 @@ Follows existing T3 Code settings panel pattern.
 ```
 $ cacm-daemon &                    # Start CACM (one process, watches all agents)
 
-# Jcode picks it up automatically:
-$ jcode                            # CACM tools available, context injected
+# The chosen harness picks it up (TBD):
+# $ <harness>                       # CACM tools available, context injected
 
 # SPEG web connects:
 $ cd speg-web && vp run dev        # Shows cross-agent timeline from @cacm/sdk
@@ -362,11 +340,11 @@ cacm-sdk-rs = "0.1"               # Cargo.toml for Rust tools
 ## Done Criteria (Full Plan)
 
 - [ ] CACM daemon watches all agent types, extracts context
-- [ ] Jcode imports CACM via bridge crate → tools + auto-injection work
+- [ ] Chosen harness imports CACM via adapter → tools + auto-injection work
 - [ ] SPEG web imports `@cacm/sdk` → cross-agent timeline visible
-- [ ] Context transfers seamlessly between Claude Code → Codex → SPEG → Jcode
+- [ ] Context transfers seamlessly between Claude Code → Codex → SPEG → harness
 - [ ] Any tool can `npm install @cacm/sdk` or add `cacm-sdk-rs` to Cargo.toml
 - [ ] Compactor deduplicates and summarizes across sessions
-- [ ] Windows desktop app (Electron + cacm-daemon + Jcode binary)
+- [ ] Windows desktop app (Electron + cacm-daemon + chosen harness)
 - [ ] All Rust: `cargo build --workspace`, `cargo test --workspace`, clippy clean
 - [ ] All TypeScript: typecheck, tests pass

@@ -2,7 +2,7 @@
 //!
 //! Exercises `cacm_core::injector` — the exponential-decay recency ranking
 //! with the spec weights (`recency×0.5 + relevance×0.3 + confidence×0.2`),
-//! per-agent formatting (Jcode/Speg, Claude Code, Codex, OpenCode, Cursor),
+//! per-agent formatting (Speg, Claude Code, Codex, OpenCode, Cursor),
 //! the 2000-char budget with lowest-ranked truncation, and the empty-context
 //! edge case — against an in-memory fake context source with a pinned clock.
 
@@ -108,7 +108,7 @@ fn ranking_orders_by_final_score_descending() {
     let mut structured = entry(
         "a",
         "sess-1",
-        AgentType::Jcode,
+        AgentType::Codex,
         ContextType::Decision,
         "dec",
         -3600,
@@ -127,7 +127,7 @@ fn ranking_orders_by_final_score_descending() {
     let injector = seeded(vec![]).with_top_n(5);
     let ranked = injector.rank_context(
         vec![plain.clone(), structured.clone()],
-        AgentType::Jcode,
+        AgentType::Codex,
         Some("sess-1"),
     );
 
@@ -166,7 +166,7 @@ fn top_n_limits_kept_entries() {
             entry(
                 &format!("e{i}"),
                 "s1",
-                AgentType::Jcode,
+                AgentType::Codex,
                 ContextType::Task,
                 "x",
                 -i,
@@ -174,7 +174,7 @@ fn top_n_limits_kept_entries() {
         })
         .collect();
     let injector = seeded(entries.clone()).with_top_n(3);
-    let ranked = injector.rank_context(entries, AgentType::Jcode, None);
+    let ranked = injector.rank_context(entries, AgentType::Codex, None);
     assert_eq!(ranked.len(), 3);
 }
 
@@ -183,7 +183,7 @@ fn top_n_limits_kept_entries() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn speg_and_jcode_format_spec_bullets() {
+fn speg_and_codex_format_spec_bullets() {
     let entries = vec![entry(
         "c1",
         "sess-1",
@@ -192,7 +192,7 @@ fn speg_and_jcode_format_spec_bullets() {
         "implement the injector",
         -300,
     )];
-    for target in [AgentType::Speg, AgentType::Jcode] {
+    for target in [AgentType::Speg, AgentType::Codex] {
         let formatted = seeded(entries.clone()).inject("sess-1", target, Some("sess-1"));
         assert_eq!(
             formatted,
@@ -240,7 +240,7 @@ fn opencode_formats_for_opencode_md_append() {
     let entries = vec![entry(
         "c1",
         "s1",
-        AgentType::Jcode,
+        AgentType::Codex,
         ContextType::Error,
         "missing linker for x86_64-pc-windows-gnu",
         -60,
@@ -248,7 +248,7 @@ fn opencode_formats_for_opencode_md_append() {
     let formatted = seeded(entries).inject("s1", AgentType::OpenCode, Some("s1"));
     assert_eq!(
         formatted,
-        "## Cross-Agent Context\n\n- **Error**: missing linker for x86_64-pc-windows-gnu (jcode, 1m ago)"
+        "## Cross-Agent Context\n\n- **Error**: missing linker for x86_64-pc-windows-gnu (codex, 1m ago)"
     );
 }
 
@@ -304,7 +304,7 @@ fn truncates_lowest_ranked_when_over_budget() {
     let mut top = entry(
         "top",
         "s1",
-        AgentType::Jcode,
+        AgentType::Codex,
         ContextType::Decision,
         "the winning decision",
         -60,
@@ -315,7 +315,7 @@ fn truncates_lowest_ranked_when_over_budget() {
             entry(
                 &format!("low{i}"),
                 "s1",
-                AgentType::Jcode,
+                AgentType::Codex,
                 ContextType::Task,
                 &format!("low-ranked task number {i} with some padding text"),
                 -60,
@@ -326,7 +326,7 @@ fn truncates_lowest_ranked_when_over_budget() {
 
     // Budget tight enough that not all five fit.
     let injector = seeded(others).with_max_chars(220);
-    let formatted = injector.inject("s1", AgentType::Jcode, Some("s1"));
+    let formatted = injector.inject("s1", AgentType::Codex, Some("s1"));
 
     assert!(
         formatted.len() <= 220,
@@ -352,7 +352,7 @@ fn keeps_top_entry_even_when_alone_exceeds_budget() {
     let mut huge = entry(
         "huge",
         "s1",
-        AgentType::Jcode,
+        AgentType::Codex,
         ContextType::Task,
         "a very long task description that goes on and on "
             .repeat(60)
@@ -361,7 +361,7 @@ fn keeps_top_entry_even_when_alone_exceeds_budget() {
     );
     huge.decisions = vec!["x".into()];
     let injector = seeded(vec![huge]).with_max_chars(80);
-    let formatted = injector.inject("s1", AgentType::Jcode, Some("s1"));
+    let formatted = injector.inject("s1", AgentType::Codex, Some("s1"));
     assert!(formatted.len() <= 80);
     assert!(formatted.starts_with("[Cross-Agent Context]"));
 }
@@ -387,12 +387,12 @@ fn no_matching_project_injects_nothing() {
     let entries = vec![entry(
         "c1",
         "other-project",
-        AgentType::Jcode,
+        AgentType::Codex,
         ContextType::Task,
         "x",
         -60,
     )];
-    let formatted = seeded(entries).inject("s1", AgentType::Jcode, Some("s1"));
+    let formatted = seeded(entries).inject("s1", AgentType::Codex, Some("s1"));
     assert_eq!(formatted, "");
 }
 
@@ -403,10 +403,11 @@ fn no_matching_project_injects_nothing() {
 #[test]
 fn relevance_and_confidence_are_deterministic_heuristics() {
     let base = base_time();
-    let ctx = entry("c1", "s1", AgentType::Jcode, ContextType::Decision, "d", 0);
-    assert_close(relevance_score(&ctx, AgentType::Jcode, Some("s1")), 0.9); // 0.4+0.3+0.2
-    assert_close(relevance_score(&ctx, AgentType::Codex, None), 0.2); // Decision only
-    assert_close(confidence_score(&ctx), 0.5); // 0.2 base + 0.3 Decision
+    let same = entry("c1", "s1", AgentType::Codex, ContextType::Decision, "d", 0);
+    assert_close(relevance_score(&same, AgentType::Codex, Some("s1")), 0.9); // 0.4+0.3+0.2
+    let other = entry("c1", "s1", AgentType::OpenCode, ContextType::Decision, "d", 0);
+    assert_close(relevance_score(&other, AgentType::Codex, None), 0.2); // Decision only
+    assert_close(confidence_score(&same), 0.5); // 0.2 base + 0.3 Decision
     assert_eq!(time_ago(base, at(-3 * 3600)), "3h ago");
 }
 

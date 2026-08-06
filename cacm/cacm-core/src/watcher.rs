@@ -97,7 +97,6 @@ pub fn home_dir() -> Option<PathBuf> {
 ///
 /// | Agent      | Path                                        |
 /// |------------|---------------------------------------------|
-/// | Jcode      | `~/.jcode/sessions/`                        |
 /// | ClaudeCode | `~/.claude/projects/`                       |
 /// | Codex      | `~/.codex/sessions/`                        |
 /// | OpenCode   | platform data dir (see [`opencode_dir`])    |
@@ -108,7 +107,6 @@ pub fn default_agent_dirs() -> Vec<(AgentType, PathBuf)> {
         return Vec::new();
     };
     vec![
-        (AgentType::Jcode, home.join(".jcode").join("sessions")),
         (AgentType::ClaudeCode, home.join(".claude").join("projects")),
         (AgentType::Codex, home.join(".codex").join("sessions")),
         (AgentType::OpenCode, opencode_dir(&home)),
@@ -266,7 +264,7 @@ fn longest_matching_root<'a>(
 /// - paths with a file extension: the file stem (Claude Code / Codex
 ///   transcripts are `<root>/<project>/<session-id>.jsonl`),
 /// - other paths (session directories): the component directly under the root
-///   (Jcode sessions are `<root>/<agent>/<session-id>/...`).
+///   (session directories are `<root>/<agent>/<session-id>/...`).
 ///
 /// Extension-based (rather than event-kind-based) so the heuristic is stable
 /// across platforms: Windows notify may deliver a create as `Create(Any)` or
@@ -337,8 +335,8 @@ mod tests {
         let roots = vec![
             (AgentType::ClaudeCode, PathBuf::from("/home/u/.claude/projects")),
             (
-                AgentType::Jcode,
-                PathBuf::from("/home/u/.jcode/sessions"),
+                AgentType::Codex,
+                PathBuf::from("/home/u/.codex/sessions"),
             ),
         ];
         let event = Event {
@@ -357,17 +355,17 @@ mod tests {
 
     #[test]
     fn resolve_activity_directory_session_uses_component_under_root() {
-        let roots = vec![(AgentType::Jcode, PathBuf::from("/home/u/.jcode/sessions"))];
+        let roots = vec![(AgentType::Speg, PathBuf::from("/home/u/.speg/sessions"))];
         let event = Event {
             kind: EventKind::Create(CreateKind::Folder),
             paths: vec![PathBuf::from(
-                "/home/u/.jcode/sessions/claude-code/sess-xyz",
+                "/home/u/.speg/sessions/demo/sess-xyz",
             )],
             attrs: notify::event::EventAttributes::default(),
         };
         let activity = resolve_activity(&event, &roots).expect("should resolve");
-        assert_eq!(activity.agent_type, AgentType::Jcode);
-        assert_eq!(activity.session_id, "claude-code");
+        assert_eq!(activity.agent_type, AgentType::Speg);
+        assert_eq!(activity.session_id, "demo");
     }
 
     #[test]
