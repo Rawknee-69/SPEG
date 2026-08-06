@@ -387,6 +387,7 @@ mod tests {
             file_paths: vec!["Cargo.toml".into()],
             decisions: vec!["resolver = 2".into()],
             errors: vec![],
+            project: None,
             timestamp: chrono::Utc::now(),
         }
     }

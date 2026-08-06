@@ -1,11 +1,11 @@
 //! Parser trait + registry.
 //!
 //! [`AgentSessionParser`] defines the interface every per-agent session parser
-//! (Claude Code, Codex, OpenCode, Cursor, ...) implements. Concrete
+//! (Claude Code, Codex, OpenCode, Cursor, Grok, ...) implements. Concrete
 //! parsers live in this crate's `parsers/` directory:
 //!
-//! - [`claude`], [`codex`], [`opencode`], [`cursor`] — stubs that return
-//!   [`ParseError::NotImplemented`] until their Phase 2 tasks land.
+//! - [`claude`], [`codex`], [`opencode`], [`cursor`], [`grok`] — real
+//!   parsers that read each agent's on-disk session storage.
 //!
 //! [`ParserRegistry`] holds one parser per [`AgentType`];
 //! [`ParserRegistry::with_defaults`] registers the full default set.
@@ -13,6 +13,7 @@
 pub mod claude;
 pub mod codex;
 pub mod cursor;
+pub mod grok;
 pub mod opencode;
 
 use crate::types::{AgentSession, AgentTurn, AgentType};
@@ -28,8 +29,6 @@ pub enum ParseError {
     InvalidFormat(String),
     /// The parser does not support the given agent type.
     UnsupportedAgent(AgentType),
-    /// The parser is a placeholder and does not implement parsing yet.
-    NotImplemented(String),
 }
 
 impl std::fmt::Display for ParseError {
@@ -38,16 +37,8 @@ impl std::fmt::Display for ParseError {
             ParseError::Io(err) => write!(f, "io error: {err}"),
             ParseError::InvalidFormat(detail) => write!(f, "invalid session format: {detail}"),
             ParseError::UnsupportedAgent(agent) => write!(f, "unsupported agent: {agent}"),
-            ParseError::NotImplemented(detail) => write!(f, "not implemented: {detail}"),
         }
     }
-}
-
-/// Build the [`ParseError::NotImplemented`] error used by Phase-2 stub parsers.
-pub(crate) fn not_implemented(agent: AgentType, method: &str) -> ParseError {
-    ParseError::NotImplemented(format!(
-        "{method} for agent {agent} (planned for Phase 2)"
-    ))
 }
 
 impl std::error::Error for ParseError {}
@@ -79,6 +70,13 @@ pub trait AgentSessionParser: Send + Sync {
 
     /// Cheap check: does `path` look like an active session for this agent?
     fn detect_activity(&self, path: &Path) -> bool;
+
+    /// Enumerate every session under `root` (the agent's data directory),
+    /// best-effort: entries that fail to parse are skipped.
+    fn discover_sessions(&self, root: &Path) -> Vec<AgentSession>;
+
+    /// Read every turn recorded in `session` (from its manifest/transcript).
+    fn read_session_turns(&self, session: &AgentSession) -> ParseResult<Vec<AgentTurn>>;
 }
 
 /// Holds one registered parser per [`AgentType`].
@@ -92,14 +90,15 @@ impl ParserRegistry {
         Self::default()
     }
 
-    /// A registry pre-populated with the default parser set:
-    /// Phase-2 stubs for Claude Code, Codex, OpenCode, and Cursor.
+    /// A registry pre-populated with the default parser set: the real
+    /// parsers for Claude Code, Codex, OpenCode, Cursor, and Grok.
     pub fn with_defaults() -> Self {
         let mut registry = Self::new();
         let _ = registry.register(Box::new(claude::ClaudeCodeSessionParser::new()));
         let _ = registry.register(Box::new(codex::CodexSessionParser::new()));
         let _ = registry.register(Box::new(opencode::OpenCodeSessionParser::new()));
         let _ = registry.register(Box::new(cursor::CursorSessionParser::new()));
+        let _ = registry.register(Box::new(grok::GrokSessionParser::new()));
         registry
     }
 
@@ -181,6 +180,28 @@ mod tests {
 
         fn detect_activity(&self, _path: &Path) -> bool {
             false
+        }
+
+        fn discover_sessions(&self, root: &Path) -> Vec<AgentSession> {
+            std::fs::read_dir(root)
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .map(|e| {
+                            AgentSession::new(
+                                e.file_name().to_string_lossy().to_string(),
+                                self.0,
+                                e.path(),
+                                Utc::now(),
+                            )
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        }
+
+        fn read_session_turns(&self, _session: &AgentSession) -> ParseResult<Vec<AgentTurn>> {
+            Ok(Vec::new())
         }
     }
 

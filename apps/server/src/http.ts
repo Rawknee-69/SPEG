@@ -29,6 +29,7 @@ import { OtlpTracer } from "effect/unstable/observability";
 import * as ServerConfig from "./config.ts";
 import { ASSET_ROUTE_PREFIX, resolveAsset } from "./assets/AssetAccess.ts";
 import * as BrowserTraceCollector from "./observability/BrowserTraceCollector.ts";
+import * as CacmDaemonProcess from "./speg/CacmDaemonProcess.ts";
 import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
 import { traceRelayRequest } from "./cloud/traceRelayRequest.ts";
 import {
@@ -41,6 +42,8 @@ import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import { browserApiCorsAllowedHeaders, browserApiCorsAllowedMethods } from "./httpCors.ts";
 
 const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
+/** Restart the local cacm-daemon sidecar (SPEG CACM). */
+const CACM_DAEMON_RESTART_PATH = "/api/speg/cacm/restart";
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
 const DESKTOP_RENDERER_ORIGINS = ["t3code://app", "t3code-dev://app"];
 export const httpCompressionLayer = HttpRouter.middleware(HttpMiddleware.compression(), {
@@ -180,6 +183,23 @@ export const otlpTracesProxyRouteLayer = HttpRouter.add(
       EnvironmentScopeRequiredError: HttpServerRespondable.toResponse,
     }),
   ),
+);
+
+/**
+ * Restart the local cacm-daemon sidecar (SPEG CACM). The editor's CACM tab
+ * calls this when the daemon is wedged (crash-loop, stale instance with an
+ * outdated origin list) — the daemon cannot restart itself, so the server
+ * owns the lifecycle. Returns the fresh start status.
+ */
+export const cacmDaemonRestartRouteLayer = HttpRouter.add(
+  "POST",
+  CACM_DAEMON_RESTART_PATH,
+  Effect.gen(function* () {
+    yield* authenticateRawRouteWithScope(AuthOrchestrationOperateScope);
+    const daemonProcess = yield* CacmDaemonProcess.CacmDaemonProcess;
+    const status = yield* daemonProcess.restart;
+    return yield* HttpServerResponse.json(status, { status: 200 });
+  }),
 );
 
 export const assetRouteLayer = HttpRouter.add(

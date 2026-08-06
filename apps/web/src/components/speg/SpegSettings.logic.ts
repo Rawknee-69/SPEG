@@ -12,6 +12,7 @@ export const WATCH_AGENT_ORDER: ReadonlyArray<WatchedAgent> = [
   "codex",
   "opencode",
   "cursor",
+  "grok",
   "speg",
 ];
 
@@ -20,6 +21,7 @@ export const AGENT_WATCH_LABELS: Readonly<Record<WatchedAgent, string>> = {
   codex: "Codex",
   opencode: "OpenCode",
   cursor: "Cursor",
+  grok: "Grok",
   speg: "SPEG",
 };
 

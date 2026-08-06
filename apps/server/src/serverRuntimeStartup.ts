@@ -25,6 +25,7 @@ import * as Scope from "effect/Scope";
 import * as ServerConfig from "./config.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
+import * as CacmDaemonProcess from "./speg/CacmDaemonProcess.ts";
 import * as OrchestrationEngine from "./orchestration/Services/OrchestrationEngine.ts";
 import * as ProjectionSnapshotQuery from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import * as OrchestrationReactor from "./orchestration/Services/OrchestrationReactor.ts";
@@ -343,6 +344,18 @@ export const make = (options?: StartupOptions) =>
             }),
           ),
         ),
+      );
+
+      // The CACM panel needs the local cacm-daemon sidecar. Start it now (in
+      // the server's scope, so it dies with the app); never blocks startup or
+      // fails it — `start` reports every outcome as a status and logs.
+      yield* Effect.logDebug("startup phase: auto-starting cacm-daemon sidecar");
+      yield* runStartupPhase(
+        "cacm-daemon.start",
+        Effect.gen(function* () {
+          const daemonProcess = yield* CacmDaemonProcess.CacmDaemonProcess;
+          yield* daemonProcess.start;
+        }).pipe(Effect.forkScoped, Effect.asVoid),
       );
 
       yield* Effect.logDebug("startup phase: parking orchestration roots at activation");

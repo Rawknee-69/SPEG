@@ -378,6 +378,7 @@ fn milestone(group: &[&CrossAgentContext], session: String) -> CrossAgentContext
         file_paths,
         decisions,
         errors,
+        project: group.first().and_then(|e| e.project.clone()),
         timestamp: newest,
     }
 }
@@ -507,6 +508,7 @@ mod tests {
             file_paths: files.iter().map(|f| f.to_string()).collect(),
             decisions: vec![],
             errors: vec![],
+            project: None,
             timestamp: at_iso("2026-06-25T10:00:00Z"),
         }
     }

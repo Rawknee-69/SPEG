@@ -29,6 +29,9 @@ pub enum AgentType {
     /// Cursor agent transcripts (watch `~/.cursor/projects/`).
     #[serde(rename = "cursor")]
     Cursor,
+    /// Grok CLI sessions (watch `~/.grok/sessions/`).
+    #[serde(rename = "grok")]
+    Grok,
     /// SPEG's own agent (watch `~/.speg/sessions/`).
     #[serde(rename = "speg")]
     Speg,
@@ -36,11 +39,12 @@ pub enum AgentType {
 
 impl AgentType {
     /// All known agent types, in a stable order (used for defaults/iteration).
-    pub const ALL: [AgentType; 5] = [
+    pub const ALL: [AgentType; 6] = [
         AgentType::ClaudeCode,
         AgentType::Codex,
         AgentType::OpenCode,
         AgentType::Cursor,
+        AgentType::Grok,
         AgentType::Speg,
     ];
 
@@ -51,6 +55,7 @@ impl AgentType {
             AgentType::Codex => "codex",
             AgentType::OpenCode => "opencode",
             AgentType::Cursor => "cursor",
+            AgentType::Grok => "grok",
             AgentType::Speg => "speg",
         }
     }
@@ -64,6 +69,7 @@ impl fmt::Display for AgentType {
             AgentType::Codex => "codex",
             AgentType::OpenCode => "opencode",
             AgentType::Cursor => "cursor",
+            AgentType::Grok => "grok",
             AgentType::Speg => "speg",
         };
         f.write_str(s)
@@ -79,6 +85,7 @@ impl FromStr for AgentType {
             "codex" => Ok(AgentType::Codex),
             "opencode" | "open-code" => Ok(AgentType::OpenCode),
             "cursor" => Ok(AgentType::Cursor),
+            "grok" | "grok-cli" => Ok(AgentType::Grok),
             "speg" => Ok(AgentType::Speg),
             other => Err(format!("unknown agent type: {other}")),
         }
@@ -107,6 +114,11 @@ pub struct AgentSession {
     pub agent_type: AgentType,
     /// Filesystem path of the session (manifest, JSONL transcript, or dir).
     pub path: std::path::PathBuf,
+    /// Workspace/project root this session ran under, when the agent records
+    /// it (OpenCode stores the cwd in its DB). `None` when unknown — the
+    /// session then only matches a project filter via its path.
+    #[serde(default)]
+    pub project: Option<String>,
     pub created_at: DateTime<Utc>,
     pub status: SessionStatus,
 }
@@ -122,9 +134,16 @@ impl AgentSession {
             session_id: session_id.into(),
             agent_type,
             path: path.into(),
+            project: None,
             created_at,
             status: SessionStatus::Active,
         }
+    }
+
+    /// Attach the workspace root this session ran under.
+    pub fn with_project(mut self, project: impl Into<Option<String>>) -> Self {
+        self.project = project.into();
+        self
     }
 }
 
@@ -180,6 +199,10 @@ pub struct CrossAgentContext {
     pub decisions: Vec<String>,
     /// Errors encountered while this context was produced.
     pub errors: Vec<String>,
+    /// Workspace/project root the source session ran under (mirrors
+    /// [`AgentSession::project`]). Used by the per-workspace filters.
+    #[serde(default)]
+    pub project: Option<String>,
     pub timestamp: DateTime<Utc>,
 }
 
@@ -292,6 +315,7 @@ mod tests {
             file_paths: vec!["Cargo.toml".into()],
             decisions: vec!["resolver = 2".into()],
             errors: vec![],
+            project: Some("/repo".into()),
             timestamp: chrono::Utc::now(),
         };
         let json = serde_json::to_string(&ctx).unwrap();

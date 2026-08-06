@@ -113,6 +113,11 @@ pub fn context_matches_project(ctx: &CrossAgentContext, project: &str) -> bool {
     if ctx.session_id == project {
         return true;
     }
+    if let Some(proj) = ctx.project.as_deref() {
+        if path_within(proj, project) || path_within(project, proj) {
+            return true;
+        }
+    }
     ctx.file_paths
         .iter()
         .any(|p| path_within(p, project) || path_within(project, p))
@@ -124,16 +129,36 @@ pub fn context_matches_project(ctx: &CrossAgentContext, project: &str) -> bool {
 /// ending in a separator (including the root `"/"`) matches every path under
 /// it. `pub(crate)` so the sessions handler can filter with the same rules as
 /// `cacm.query`.
+///
+/// Both sides are normalized first: `\` separators become `/` (agents and the
+/// panel can disagree on Windows), and on Windows the case is folded so
+/// `E:\SPEG\repo` matches `e:/speg/REPO`.
 pub(crate) fn path_within(path: &str, base: &str) -> bool {
+    let path = normalize_path_for_match(path);
+    let base = normalize_path_for_match(base);
     if path == base {
         return true;
     }
-    if base.ends_with('/') || base.ends_with('\\') {
+    if base.ends_with('/') {
         // Directory-style base (e.g. "/" or "/repo/"): any path below it.
-        return path.strip_prefix(base).is_some_and(|rest| !rest.is_empty());
+        return path.strip_prefix(&base).is_some_and(|rest| !rest.is_empty());
     }
-    path.strip_prefix(base)
-        .is_some_and(|rest| rest.starts_with('/') || rest.starts_with('\\'))
+    path.strip_prefix(&base)
+        .is_some_and(|rest| rest.starts_with('/'))
+}
+
+/// Fold a filesystem path for [`path_within`] comparisons: `\` → `/` and
+/// (on Windows) lowercase.
+fn normalize_path_for_match(input: &str) -> String {
+    let normalized = input.replace('\\', "/");
+    #[cfg(windows)]
+    {
+        normalized.to_ascii_lowercase()
+    }
+    #[cfg(not(windows))]
+    {
+        normalized
+    }
 }
 
 /// Shared in-memory store used by [`SqliteBackend`]-adjacent tests and
@@ -409,16 +434,22 @@ impl SqliteBackend {
                  file_paths  TEXT NOT NULL DEFAULT '[]',
                  decisions   TEXT NOT NULL DEFAULT '[]',
                  errors      TEXT NOT NULL DEFAULT '[]',
+                 project     TEXT,
                  timestamp   TEXT NOT NULL
              );
              CREATE TABLE IF NOT EXISTS sessions (
                  session_id TEXT PRIMARY KEY,
                  agent_type TEXT NOT NULL,
                  path       TEXT NOT NULL,
+                 project    TEXT,
                  created_at TEXT NOT NULL,
                  status     TEXT NOT NULL
              );",
         )?;
+        // Migration for databases created before the `project` column:
+        // `CREATE TABLE IF NOT EXISTS` leaves existing tables untouched.
+        migrate_add_project_column(&conn, "contexts")?;
+        migrate_add_project_column(&conn, "sessions")?;
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -444,7 +475,8 @@ impl SqliteBackend {
         let file_paths: String = row.get(5)?;
         let decisions: String = row.get(6)?;
         let errors: String = row.get(7)?;
-        let timestamp: String = row.get(8)?;
+        let project: Option<String> = row.get(8)?;
+        let timestamp: String = row.get(9)?;
 
         fn conversion(
             idx: usize,
@@ -481,9 +513,28 @@ impl SqliteBackend {
             file_paths: serde_json::from_str(&file_paths).map_err(|err| conversion(5, err))?,
             decisions: serde_json::from_str(&decisions).map_err(|err| conversion(6, err))?,
             errors: serde_json::from_str(&errors).map_err(|err| conversion(7, err))?,
+            project,
             timestamp,
         })
     }
+}
+
+/// Add a `project` column to `table` when it is missing (older DBs).
+/// No-op once present; idempotent across restarts.
+fn migrate_add_project_column(conn: &Connection, table: &str) -> Result<(), StorageError> {
+    let has_column = conn
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(StorageError::from)?
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(StorageError::from)?
+        .filter_map(Result::ok)
+        .any(|name| name == "project");
+    if has_column {
+        return Ok(());
+    }
+    conn.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN project TEXT"))
+        .map_err(StorageError::from)?;
+    Ok(())
 }
 
 impl Storage for SqliteBackend {
@@ -496,8 +547,8 @@ impl Storage for SqliteBackend {
         conn.execute(
             "INSERT OR REPLACE INTO contexts
                  (id, session_id, agent_type, context_type, content,
-                  file_paths, decisions, errors, timestamp)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                  file_paths, decisions, errors, project, timestamp)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 ctx.id,
                 ctx.session_id,
@@ -507,6 +558,7 @@ impl Storage for SqliteBackend {
                 serde_json::to_string(&ctx.file_paths)?,
                 serde_json::to_string(&ctx.decisions)?,
                 serde_json::to_string(&ctx.errors)?,
+                ctx.project,
                 ctx.timestamp.to_rfc3339(),
             ],
         )?;
@@ -521,7 +573,7 @@ impl Storage for SqliteBackend {
         let conn = self.lock()?;
         let mut stmt = conn.prepare(
             "SELECT id, session_id, agent_type, context_type, content,
-                    file_paths, decisions, errors, timestamp
+                    file_paths, decisions, errors, project, timestamp
              FROM contexts
              ORDER BY timestamp DESC",
         )?;
@@ -542,7 +594,7 @@ impl Storage for SqliteBackend {
     fn list_sessions(&self) -> Result<Vec<AgentSession>, StorageError> {
         let conn = self.lock()?;
         let mut stmt = conn.prepare(
-            "SELECT session_id, agent_type, path, created_at, status
+            "SELECT session_id, agent_type, path, project, created_at, status
              FROM sessions ORDER BY created_at",
         )?;
         let rows = stmt.query_map([], |row| {
@@ -557,15 +609,15 @@ impl Storage for SqliteBackend {
                     )),
                 )
             })?;
-            let status_raw: String = row.get(4)?;
+            let status_raw: String = row.get(5)?;
             let status: SessionStatus =
                 serde_json::from_str(&status_raw).unwrap_or(SessionStatus::Active);
-            let created_raw: String = row.get(3)?;
+            let created_raw: String = row.get(4)?;
             let created_at: DateTime<Utc> = DateTime::parse_from_rfc3339(&created_raw)
                 .map(|dt| dt.with_timezone(&Utc))
                 .map_err(|err| {
                     rusqlite::Error::FromSqlConversionFailure(
-                        3,
+                        4,
                         rusqlite::types::Type::Text,
                         Box::new(err),
                     )
@@ -574,6 +626,7 @@ impl Storage for SqliteBackend {
                 session_id: row.get(0)?,
                 agent_type,
                 path: PathBuf::from(row.get::<_, String>(2)?),
+                project: row.get(3)?,
                 created_at,
                 status,
             })
@@ -589,12 +642,13 @@ impl Storage for SqliteBackend {
         let conn = self.lock()?;
         conn.execute(
             "INSERT OR REPLACE INTO sessions
-                 (session_id, agent_type, path, created_at, status)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+                 (session_id, agent_type, path, project, created_at, status)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 session.session_id,
                 session.agent_type.to_string(),
                 session.path.to_string_lossy(),
+                session.project,
                 session.created_at.to_rfc3339(),
                 serde_json::to_string(&session.status)?,
             ],
@@ -646,6 +700,7 @@ mod tests {
             file_paths: vec![path.into()],
             decisions: vec!["resolver = 2".into()],
             errors: vec![],
+            project: None,
             timestamp: Utc::now(),
         }
     }
@@ -668,6 +723,26 @@ mod tests {
     }
 
     #[test]
+    fn context_matches_project_via_stamped_project() {
+        let mut ctx = sample_context("c1", "sess-a", "src/lib.rs");
+        // Without the stamp, a relative path cannot match an absolute root.
+        assert!(!context_matches_project(&ctx, "/repo"));
+        ctx.project = Some("/repo".into());
+        assert!(context_matches_project(&ctx, "/repo"));
+        assert!(context_matches_project(&ctx, "/repo/src"));
+        assert!(context_matches_project(&ctx, "/repo/src/lib.rs"));
+        assert!(!context_matches_project(&ctx, "/other"));
+        // Windows spelling differences still match after normalization.
+        assert!(context_matches_project(&ctx, "\\repo"));
+        // A nested worktree under the workspace also matches the workspace.
+        let worktree = CrossAgentContext {
+            project: Some("/repo/.worktrees/feature".into()),
+            ..sample_context("c2", "sess-b", "src/lib.rs")
+        };
+        assert!(context_matches_project(&worktree, "/repo"));
+    }
+
+    #[test]
     fn path_within_is_separator_aware() {
         assert!(path_within("/repo/src/lib.rs", "/repo"));
         assert!(path_within("/repo", "/repo"));
@@ -686,6 +761,12 @@ mod tests {
         // Windows-style separators count too.
         assert!(path_within("C:/repo/src/lib.rs", "C:/repo"));
         assert!(!path_within("C:/repo2/x", "C:/repo"));
+        // Separator/case normalization: backslash paths match slash queries.
+        assert!(path_within("C:\\repo\\src\\lib.rs", "C:/repo"));
+        assert!(path_within("C:/repo/src/lib.rs", "C:\\repo"));
+        assert!(!path_within("C:\\repo2\\x", "C:/repo"));
+        // Trailing-separator bases match after normalization.
+        assert!(path_within("C:\\repo\\src", "C:\\repo\\"));
     }
 
     #[test]

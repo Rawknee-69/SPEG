@@ -21,8 +21,8 @@ import {
   type ContextType,
   type CrossAgentContext,
 } from "@cacm/sdk";
-import { ChevronDown, ChevronRight, ClipboardPaste, Network, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronRight, ClipboardPaste, Network, RefreshCw, RotateCw, Send } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "~/lib/utils";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
@@ -37,6 +37,17 @@ export interface CacmPanelProps {
   project?: string | null;
   /** Receives the formatted cross-agent context when the user injects. */
   onInjectContext?: (formatted: string) => void;
+  /**
+   * The agent currently driving the chat (e.g. "opencode"). When it changes
+   * to a different agent, the panel suggests sending the collected context
+   * to the new agent first.
+   */
+  activeAgent?: AgentType | null;
+  /**
+   * Auto-send path: insert the formatted context into the composer AND send
+   * it, so the new agent starts with the full cross-agent picture.
+   */
+  onSendContext?: (formatted: string) => void;
 }
 
 type LoadStatus = "loading" | "ready" | "error";
@@ -51,6 +62,7 @@ export const AGENT_META: Record<AgentType, { label: string; dotClass: string }> 
   codex: { label: "Codex", dotClass: "bg-emerald-500" },
   opencode: { label: "OpenCode", dotClass: "bg-cyan-500" },
   cursor: { label: "Cursor", dotClass: "bg-sky-500" },
+  grok: { label: "Grok", dotClass: "bg-purple-500" },
   speg: { label: "SPEG", dotClass: "bg-fuchsia-500" },
 };
 
@@ -138,6 +150,16 @@ export function CacmPanel(props: CacmPanelProps) {
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [injectingSessionId, setInjectingSessionId] = useState<string | null>(null);
   const [injectError, setInjectError] = useState<string | null>(null);
+  const [restarting, setRestarting] = useState(false);
+  const [restartError, setRestartError] = useState<string | null>(null);
+  // Agent-switch suggestion: `{ from, to }` when the active agent changed.
+  const [switchNotice, setSwitchNotice] = useState<{
+    from: AgentType;
+    to: AgentType;
+  } | null>(null);
+  const [sendingSwitchContext, setSendingSwitchContext] = useState(false);
+  const [switchSendError, setSwitchSendError] = useState<string | null>(null);
+  const previousAgentRef = useRef<AgentType | null | undefined>(undefined);
 
   const load = useCallback(async () => {
     try {
@@ -173,6 +195,20 @@ export function CacmPanel(props: CacmPanelProps) {
     };
   }, [client, load]);
 
+  // Detect a change of the active agent (e.g. opencode → claude/grok/codex)
+  // and surface the "send the collected context first" suggestion. Registered
+  // after the load effect so callers that run `effects[0]` keep the load
+  // behavior.
+  useEffect(() => {
+    const previous = previousAgentRef.current;
+    const next = props.activeAgent ?? null;
+    previousAgentRef.current = next;
+    if (previous !== undefined && previous !== null && next !== null && previous !== next) {
+      setSwitchNotice({ from: previous, to: next });
+      setSwitchSendError(null);
+    }
+  }, [props.activeAgent]);
+
   const handleInject = useCallback(
     async (session: AgentSession) => {
       if (injectingSessionId !== null) return;
@@ -193,6 +229,30 @@ export function CacmPanel(props: CacmPanelProps) {
     [client, injectingSessionId, props.onInjectContext],
   );
 
+  /**
+   * "Send context first" — gather the full cross-agent context for the new
+   * agent (`sessionId: "*"` = project-wide, matching the daemon's wildcard)
+   * and hand it to the composer's auto-send path, so the agent the user just
+   * switched to starts with the complete picture.
+   */
+  const handleSendContextToNewAgent = useCallback(async () => {
+    if (!switchNotice || sendingSwitchContext) return;
+    setSwitchSendError(null);
+    setSendingSwitchContext(true);
+    try {
+      const { formatted } = await client.inject({
+        sessionId: "*",
+        agent: switchNotice.to,
+      });
+      props.onSendContext?.(formatted);
+      setSwitchNotice(null);
+    } catch (err) {
+      setSwitchSendError(`Failed to send context to ${agentLabel(switchNotice.to)}: ${errorMessage(err)}`);
+    } finally {
+      setSendingSwitchContext(false);
+    }
+  }, [client, props.onSendContext, sendingSwitchContext, switchNotice]);
+
   const toggleExpanded = useCallback((sessionId: string) => {
     setExpandedSessionId((current) => (current === sessionId ? null : sessionId));
   }, []);
@@ -201,6 +261,40 @@ export function CacmPanel(props: CacmPanelProps) {
     setStatus("loading");
     void load();
   }, [load]);
+
+  /**
+   * Restart the local cacm-daemon sidecar. The daemon cannot restart itself,
+   * so this asks the T3 server (which owns the daemon lifecycle) to stop the
+   * current instance — including a stale one from an earlier run — and spawn
+   * a fresh one with the current origins. Then reload the timeline.
+   */
+  const restartDaemon = useCallback(async () => {
+    setRestartError(null);
+    setRestarting(true);
+    try {
+      const response = await fetch("/api/speg/cacm/restart", { method: "POST" });
+      const body = (await response.json().catch(() => null)) as
+        | { status?: string; reason?: string }
+        | null;
+      if (!response.ok || body?.status === "failed") {
+        throw new Error(body?.reason ?? `Server returned ${response.status}`);
+      }
+      // The daemon restarts asynchronously (kill → port free → spawn); poll
+      // its healthz until it answers again, then reload.
+      const daemonHealthUrl = `${(props.daemonUrl ?? DEFAULT_DAEMON_URL).replace(/^ws/, "http").replace(/\/ws$/, "")}/healthz`;
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        const health = await fetch(daemonHealthUrl, { method: "GET" }).catch(() => null);
+        if (health?.ok) break;
+      }
+      setStatus("loading");
+      await load();
+    } catch (err) {
+      setRestartError(`Failed to restart cacm-daemon: ${errorMessage(err)}`);
+    } finally {
+      setRestarting(false);
+    }
+  }, [client, load]);
 
   return (
     <ScrollArea className="size-full" data-cacm-panel>
@@ -227,6 +321,51 @@ export function CacmPanel(props: CacmPanelProps) {
           />
         </header>
 
+        {switchNotice ? (
+          <div
+            role="status"
+            data-agent-switch-notice
+            className="flex flex-col gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm"
+          >
+            <p className="text-foreground">
+              You switched from{" "}
+              <span className="font-semibold">{agentLabel(switchNotice.from)}</span> to{" "}
+              <span className="font-semibold">{agentLabel(switchNotice.to)}</span>. Send the
+              collected cross-agent context first so the new agent has the full picture.
+            </p>
+            {switchSendError ? (
+              <p role="alert" className="text-xs text-destructive-foreground">
+                {switchSendError}
+              </p>
+            ) : null}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleSendContextToNewAgent()}
+                disabled={sendingSwitchContext}
+                aria-label={`Send cross-agent context to ${agentLabel(switchNotice.to)}`}
+                className="inline-flex items-center gap-1.5 self-start rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+              >
+                {sendingSwitchContext ? (
+                  <Spinner className="size-3.5" />
+                ) : (
+                  <Send className="size-3.5" aria-hidden />
+                )}
+                {sendingSwitchContext ? "Sending…" : "Send context first"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSwitchNotice(null)}
+                disabled={sendingSwitchContext}
+                aria-label="Dismiss"
+                className="inline-flex items-center gap-1 self-start rounded-md border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {status === "loading" ? (
           <div className="flex items-center gap-2 px-1 py-4 text-sm text-muted-foreground">
             <Spinner className="size-4" />
@@ -242,15 +381,32 @@ export function CacmPanel(props: CacmPanelProps) {
             <p className="text-destructive-foreground">
               Could not reach cacm-daemon{props.project ? ` for ${props.project}` : ""}: {loadError}
             </p>
-            <button
-              type="button"
-              onClick={retry}
-              aria-label="Retry connecting to CACM daemon"
-              className="inline-flex items-center gap-1.5 self-start rounded-md border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-accent"
-            >
-              <RefreshCw className="size-3.5" />
-              Retry
-            </button>
+            {restartError ? (
+              <p role="alert" className="text-xs text-destructive-foreground">
+                {restartError}
+              </p>
+            ) : null}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={retry}
+                aria-label="Retry connecting to CACM daemon"
+                className="inline-flex items-center gap-1.5 self-start rounded-md border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-accent"
+              >
+                <RefreshCw className="size-3.5" />
+                Retry
+              </button>
+              <button
+                type="button"
+                onClick={() => void restartDaemon()}
+                disabled={restarting}
+                aria-label="Restart CACM daemon"
+                className="inline-flex items-center gap-1.5 self-start rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+              >
+                <RotateCw className={cn("size-3.5", restarting && "animate-spin")} aria-hidden />
+                {restarting ? "Restarting…" : "Restart daemon"}
+              </button>
+            </div>
           </div>
         ) : null}
 

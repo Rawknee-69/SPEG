@@ -195,6 +195,7 @@ dependencies = [
  "chrono",
  "notify",
  "regex",
+ "rusqlite",
  "serde",
  "serde_json",
  "tokio",

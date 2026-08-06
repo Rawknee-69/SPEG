@@ -184,25 +184,45 @@ in v6).
 
 ---
 
-### Task 1.3: cacm-core Rust Crate
+### Task 1.3: cacm-core Rust Crate ✅ COMPLETE (parsers + watch dirs)
 
-**Files**: `cacm/cacm-core/` — types, watcher, parser trait, stub parsers
+**Files**: `cacm/cacm-core/` — types, watcher, parser trait, real parsers
 
-**Verification**: `cargo build -p cacm-core` compiles.
+**Status**: Extended beyond scaffolding: the parser trait now has
+`discover_sessions` + `read_session_turns`, and the Phase-2 stubs were
+replaced with **real parsers** for Claude Code (`~/.claude/projects/*/*.jsonl`),
+Codex (`~/.codex/sessions/*/*.jsonl`), OpenCode (SQLite `opencode.db` via
+rusqlite), Cursor (`~/.cursor/projects/*/agent-transcripts/*/*.jsonl`), and
+Grok (`~/.grok/sessions/*/<id>/chat_history.jsonl`). `AgentType::Grok` added
+throughout (serde, Display, FromStr, injector formatting, settings,
+`@cacm/sdk`, CACM panel). Windows watch dir fixed: opencode resolves to
+`~/.local/share/opencode` (modern XDG-style storage) before `%APPDATA%`.
+
+**Verification**: `cargo test -p cacm-core` green; real-data smoke test reads
+this machine's opencode.db and grok sessions.
 
 ---
 
-### Task 1.4: cacm-daemon
+### Task 1.4: cacm-daemon ✅ COMPLETE (extraction wired)
 
 **Files**: `cacm/cacm-daemon/` — HTTP + WebSocket server, JSON-RPC API
 
-**Verification**: Daemon starts, WebSocket accepts connections, responds to ping.
+**Status**: The daemon now registers `ParserRegistry::with_defaults()`,
+seeds sessions via each parser's `discover_sessions`, and **runs the
+`ContextExtractor` on startup backfill and on every watcher activity**
+(opencode DB writes trigger a full session re-scan). Contexts are persisted
+to storage, so `cacm.query`/`cacm.inject` return real extracted content.
+
+**Verification**: `cargo test -p cacm-daemon` green; end-to-end: daemon on
+the default port reports 6→14 sessions (opencode/cursor/grok) and 11 context
+entries; `cacm.inject` with `sessionId:"*"` returns project-wide context
+formatted for the target agent.
 
 ---
 
 ### Task 1.5: ~~Jcode~~ Session Parser 🔄 SUPERSEDED
 
-**Status**: Removed in v6 — the jcode parser (`cacm/cacm-core/src/parsers/jcode.rs`) was deleted with the jcode strip. The parser slot stays closed for now: only the already-supported harnesses (claude-code/codex/opencode/cursor) are watched.
+**Status**: Removed in v6 — the jcode parser (`cacm/cacm-core/src/parsers/jcode.rs`) was deleted with the jcode strip. Real per-agent parsers for the already-supported harnesses (claude-code/codex/opencode/cursor/grok) replaced the Phase-2 stubs (see task 1.3).
 
 ---
 
@@ -253,10 +273,11 @@ in v6).
 - Recent context extracted from each session
 - "Inject context" button for current thread
 - Links to related memories
+- **Agent-switch handoff** (added later): when the active chat provider changes (opencode → claude/grok/codex), the panel detects it (`activeAgent` prop mapped from `ProviderDriverKind` in ChatView) and shows a "Send context first" banner whose button gathers the full project-wide context (`cacm.inject` with `sessionId:"*"`) and auto-sends it through the composer (`onSendContext` → insert + `onSend`).
 
 Follows `rightPanelStore.ts` pattern — registers as a new surface type.
 
-**Verification**: Right panel shows CACM tab. Timeline populated from cacm-daemon via @cacm/sdk.
+**Verification**: Right panel shows CACM tab. Timeline populated from cacm-daemon via @cacm/sdk. Agent switch surfaces the suggestion; the auto-send button posts the context to the newly selected agent.
 
 ---
 
@@ -308,6 +329,34 @@ Follows existing T3 Code settings panel pattern.
 **Files**: None — verification only
 
 **Verification**: All builds pass, all tests pass, CACM right panel populates, the already-supported providers (Claude Code, Codex, OpenCode, Cursor, Grok) drive turns, `git tag speg-v0.1.0-phase1`.
+
+### Task 1.17: Daemon Lifecycle Management (auto-start + restart) ✅ COMPLETE
+
+**Files**: `apps/server/src/speg/CacmDaemonProcess.ts`, `apps/server/src/http.ts`, `apps/server/src/server.ts`, `cacm/cacm-daemon/src/server.rs`, `apps/web/src/components/speg/CacmPanel.tsx`
+
+**What**: The CACM tab needs the local `cacm-daemon` sidecar alive and healthy.
+
+- **Auto-start**: the T3 Code server probes `GET /healthz` and spawns the
+  daemon binary (`cargo build -p cacm-daemon`) as a scoped child, passing
+  every origin the server can serve via `--allow-origin`; killed on server
+  shutdown (`SIGTERM` + `forceKillAfter` → `taskkill` on Windows).
+- **Restart**: `CacmDaemonProcess.restart` stops the owned child — or a
+  *stale* daemon (detected by the `pid` the daemon now reports in `/healthz`)
+  — waits for the port to free, then spawns a fresh instance with the current
+  origin list. Exposed to the editor as `POST /api/speg/cacm/restart`
+  (auth-scoped), surfaced in the CACM panel error state as a
+  "Restart daemon" button that reloads the timeline once healthy.
+
+**Why this matters**: a daemon left running by an earlier session (e.g. with
+an outdated origin list) would otherwise be silently reused and reject the
+editor's WebSocket upgrades — the panel showed "Could not reach cacm-daemon"
+with no way to recover.
+
+**Verification**: `CacmDaemonProcess.test.ts` (9 tests incl. restart
+kill+re-spawn), `CacmPanel.test.tsx` (18 tests incl. restart button +
+POST), `cargo test --workspace` (165), `tsgo` clean. Manual: `curl
+/healthz` reports `pid`; WS upgrade from the dev origin returns 101; restart
+frees port 9786 and re-binds.
 
 ---
 

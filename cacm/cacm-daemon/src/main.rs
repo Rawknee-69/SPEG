@@ -10,8 +10,10 @@
 //! runtime task panics, the crash is recorded and the daemon starts a fresh
 //! runtime after a backoff, up to `--max-restarts` times.
 
-use cacm_core::parsers::ParserRegistry;
-use cacm_core::types::AgentSession;
+use cacm_core::extractor::ContextExtractor;
+use cacm_core::parsers::opencode;
+use cacm_core::parsers::{ParseError, ParserRegistry};
+use cacm_core::types::{AgentSession, AgentType};
 use cacm_core::watcher::{default_agent_dirs, SessionActivity, SessionWatcher};
 use cacm_daemon::crashpad::{Crashpad, CURRENT_MEMORY_USED};
 use cacm_daemon::memory::MemoryManager;
@@ -229,13 +231,15 @@ async fn daemon_main(
     storage_box.set_budgets(cli.memory_soft.max(1), storage::MEMORY_GRAPH_CAP);
 
     // Session index: hydrate from persisted sessions, then overlay a
-    // best-effort scan of the default agent directories.
+    // best-effort scan of the default agent directories (parser-driven:
+    // discover_sessions reads each agent's real storage layout).
+    let registry = ParserRegistry::with_defaults();
     let mut sessions: HashMap<String, AgentSession> = storage_box
         .list_sessions()?
         .into_iter()
         .map(|s| (s.session_id.clone(), s))
         .collect();
-    for scanned in scan_default_dirs() {
+    for scanned in scan_default_dirs(&registry) {
         if !sessions.contains_key(&scanned.session_id) {
             let _ = storage_box.store_session(&scanned);
         }
@@ -249,15 +253,29 @@ async fn daemon_main(
     let watched = watcher.watch_defaults()?;
     tracing::info!(dirs = watched, "watching agent session directories");
 
-    // Parser registry: concrete parsers land in task 1.5; registered here so
-    // the daemon has the extension point wired up.
-    let registry = ParserRegistry::new();
-
     let mut state = AppState::new(storage_box, registry, sessions);
     state.memory = MemoryManager::new(cli.memory_soft, cli.memory_hard);
     state.debug = cli.debug;
     state.crash_dir = Arc::new(crash_dir_for_state);
     state.allow_origins = Arc::new(cli.allow_origin.clone());
+
+    // Backfill: extract + persist context for every seeded session so the
+    // panel has decisions/errors/patterns even before new activity arrives.
+    let sessions_snapshot: Vec<AgentSession> = state
+        .sessions
+        .lock()
+        .map(|s| s.values().cloned().collect())
+        .unwrap_or_default();
+    for session in sessions_snapshot {
+        if let Err(err) = extract_and_store_context(&state, &session) {
+            tracing::debug!(
+                session = %session.session_id,
+                agent = %session.agent_type,
+                error = %err,
+                "skipping context backfill"
+            );
+        }
+    }
 
     // Watchdog: respawn the watcher task if it ever dies.
     tokio::spawn(watcher_supervisor(
@@ -358,7 +376,14 @@ async fn memory_sampler(state: AppState) {
 /// must not swallow the storage write or the client notification.
 async fn watcher_task(mut rx: mpsc::Receiver<SessionActivity>, state: AppState) {
     while let Some(activity) = rx.recv().await {
-        let session = session_from_activity(&activity);
+        if activity.agent_type == AgentType::OpenCode {
+            // OpenCode is a single SQLite store: a write touches every
+            // session. Re-discover all sessions from the DB and re-extract.
+            process_opencode_db_change(&state).await;
+            broadcast_activity(&state.events, &activity);
+            continue;
+        }
+        let session = session_from_activity(&state, &activity);
         match state.sessions.lock() {
             Ok(mut index) => {
                 index.insert(session.session_id.clone(), session.clone());
@@ -372,6 +397,16 @@ async fn watcher_task(mut rx: mpsc::Receiver<SessionActivity>, state: AppState) 
         } else {
             tracing::warn!("storage lock poisoned — skipping session persist");
         }
+        // Parse the touched session's turns and persist any new context so
+        // activity shows up in the panel without a manual refresh.
+        if let Err(err) = extract_and_store_context(&state, &session) {
+            tracing::debug!(
+                session = %activity.session_id,
+                agent = %activity.agent_type,
+                error = %err,
+                "skipping context extraction"
+            );
+        }
         broadcast_activity(&state.events, &activity);
         tracing::debug!(
             session = %activity.session_id,
@@ -381,6 +416,67 @@ async fn watcher_task(mut rx: mpsc::Receiver<SessionActivity>, state: AppState) 
         );
     }
 }
+
+/// Re-scan the opencode session store after a DB write: upsert every session
+/// from the parser's `discover_sessions` and extract context for each.
+///
+/// Debounced: SQLite writes under an active session arrive as bursts of
+/// notify events (`opencode.db`, `-wal`, `-shm`), so a full re-scan runs at
+/// most once per [`OPENCODE_RESCAN_DEBOUNCE`].
+async fn process_opencode_db_change(state: &AppState) {
+    let Some(dir) = default_agent_dirs()
+        .into_iter()
+        .find(|(agent, _)| *agent == AgentType::OpenCode)
+        .map(|(_, dir)| dir)
+    else {
+        return;
+    };
+    let Some(parser) = state.registry.get(AgentType::OpenCode) else {
+        return;
+    };
+
+    {
+        let mut last = LAST_OPENCODE_RESCAN.lock().unwrap_or_else(|e| e.into_inner());
+        let now = std::time::Instant::now();
+        if let Some(prev) = *last {
+            if now.duration_since(prev) < OPENCODE_RESCAN_DEBOUNCE {
+                return;
+            }
+        }
+        *last = Some(now);
+    }
+
+    for session in parser.discover_sessions(&dir) {
+        match state.sessions.lock() {
+            Ok(mut index) => {
+                index.insert(session.session_id.clone(), session.clone());
+            }
+            Err(_) => {
+                tracing::warn!("session index lock poisoned — skipping index update");
+            }
+        }
+        if let Ok(mut storage) = state.storage.lock() {
+            let _ = storage.store_session(&session);
+        } else {
+            tracing::warn!("storage lock poisoned — skipping session persist");
+        }
+        if let Err(err) = extract_and_store_context(state, &session) {
+            tracing::debug!(
+                session = %session.session_id,
+                agent = %session.agent_type,
+                error = %err,
+                "skipping opencode context extraction"
+            );
+        }
+    }
+}
+
+/// Minimum interval between full opencode re-scans (SQLite WAL bursts).
+const OPENCODE_RESCAN_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(800);
+/// Timestamp of the last full opencode re-scan (module-level: the watcher
+/// task is the only writer).
+static LAST_OPENCODE_RESCAN: std::sync::Mutex<Option<std::time::Instant>> =
+    std::sync::Mutex::new(None);
 
 /// Normalize a `--host` value for binding: `localhost` → loopback address,
 /// and surrounding brackets stripped so IPv6 literals can be re-bracketed
@@ -470,54 +566,89 @@ fn is_loopback_host(host: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Best-effort scan of the default agent directories into [`AgentSession`]s.
-///
-/// Mirrors the watcher's path heuristic: for files the stem is the session id
-/// (Claude Code / Codex transcripts), for directories the entry name is
-/// (SPEG session dirs). Real extraction comes with the parsers
-/// (task 1.5).
-fn scan_default_dirs() -> Vec<AgentSession> {
+/// Best-effort scan of the default agent directories into [`AgentSession`]s,
+/// driven by each agent's parser (`discover_sessions` reads the agent's real
+/// storage layout — SQLite for OpenCode, transcript dirs for the others).
+fn scan_default_dirs(registry: &ParserRegistry) -> Vec<AgentSession> {
     let mut out = Vec::new();
     for (agent, dir) in default_agent_dirs() {
-        if !dir.is_dir() {
+        let Some(parser) = registry.get(agent) else {
             continue;
-        }
-        let entries = match std::fs::read_dir(&dir) {
-            Ok(entries) => entries,
-            Err(_) => continue,
         };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let created_at = entry
-                .metadata()
-                .ok()
-                .and_then(|m| m.modified().ok())
-                .map(chrono::DateTime::<chrono::Utc>::from)
-                .unwrap_or_else(chrono::Utc::now);
-            let session_id = if path.is_file() {
-                path.file_stem()
-                    .map(|s| s.to_string_lossy().to_string())
-                    .unwrap_or_default()
-            } else {
-                path.file_name()
-                    .map(|s| s.to_string_lossy().to_string())
-                    .unwrap_or_default()
-            };
-            if session_id.is_empty() {
-                continue;
-            }
-            out.push(AgentSession::new(session_id, agent, path, created_at));
+        for session in parser.discover_sessions(&dir) {
+            out.push(session);
         }
     }
     out
 }
 
-/// Build an [`AgentSession`] from a watcher event (path is best-effort).
-fn session_from_activity(activity: &SessionActivity) -> AgentSession {
+/// Parse a session's turns with its registered parser and persist the
+/// extracted cross-agent context. Best-effort: returns the first error so the
+/// caller can log and continue.
+fn extract_and_store_context(state: &AppState, session: &AgentSession) -> Result<usize, ParseError> {
+    let Some(parser) = state.registry.get(session.agent_type) else {
+        return Ok(0);
+    };
+    let turns = parser.read_session_turns(session)?;
+    if turns.is_empty() {
+        return Ok(0);
+    }
+    let mut extractor = ContextExtractor::new(&session.session_id, session.agent_type)
+        .with_project(session.project.clone());
+    let contexts = extractor.extract_context(&turns);
+    if contexts.is_empty() {
+        return Ok(0);
+    }
+    let mut stored = 0;
+    if let Ok(mut storage) = state.storage.lock() {
+        for ctx in &contexts {
+            if storage.store_context(ctx).is_ok() {
+                stored += 1;
+            }
+        }
+    }
+    tracing::debug!(
+        session = %session.session_id,
+        agent = %session.agent_type,
+        turns = turns.len(),
+        stored,
+        "extracted cross-agent context"
+    );
+    Ok(stored)
+}
+
+/// Build an [`AgentSession`] from a watcher event.
+///
+/// The parser-discovered sessions carry the *correct* full path (e.g.
+/// `~/.claude/projects/<proj>/<sid>.jsonl`), so a live event first reuses the
+/// seeded entry from the session index; only when the index has no such
+/// session is a best-effort path synthesized (OpenCode → the SQLite store).
+fn session_from_activity(state: &AppState, activity: &SessionActivity) -> AgentSession {
+    let seeded = state
+        .sessions
+        .lock()
+        .ok()
+        .and_then(|index| {
+            index
+                .get(&activity.session_id)
+                .filter(|s| s.agent_type == activity.agent_type)
+                .cloned()
+        });
+    if let Some(session) = seeded {
+        return session;
+    }
     let path = default_agent_dirs()
         .into_iter()
         .find(|(agent, _)| *agent == activity.agent_type)
-        .map(|(_, dir)| dir.join(&activity.session_id))
+        .map(|(_, dir)| {
+            if activity.agent_type == AgentType::OpenCode {
+                // OpenCode sessions live in the SQLite store, not as files;
+                // point at the DB so `read_session_turns` can open it.
+                dir.join(opencode::OPENCODE_DB_FILE)
+            } else {
+                dir.join(&activity.session_id)
+            }
+        })
         .unwrap_or_else(|| PathBuf::from(&activity.session_id));
     AgentSession::new(
         &activity.session_id,
@@ -561,6 +692,14 @@ mod tests {
 
     #[test]
     fn session_from_activity_uses_agent_default_dir() {
+        let state = AppState::new(
+            Box::new(
+                cacm_daemon::storage::SqliteBackend::open_in_memory()
+                    .expect("in-memory sqlite backend"),
+            ),
+            ParserRegistry::new(),
+            HashMap::new(),
+        );
         let activity = SessionActivity {
             session_id: "fox".into(),
             agent_type: AgentType::Speg,
@@ -568,10 +707,46 @@ mod tests {
             turn: None,
             timestamp: chrono::Utc::now(),
         };
-        let session = session_from_activity(&activity);
+        let session = session_from_activity(&state, &activity);
         assert_eq!(session.session_id, "fox");
         assert_eq!(session.agent_type, AgentType::Speg);
         assert!(session.path.ends_with(".speg/sessions/fox"));
+    }
+
+    #[test]
+    fn session_from_activity_reuses_seeded_path() {
+        // The parser-discovered path (full transcript location) must win over
+        // the synthetic `dir/<id>` guess for live watcher events.
+        let mut index = HashMap::new();
+        index.insert(
+            "ses-1".to_string(),
+            AgentSession::new(
+                "ses-1",
+                AgentType::ClaudeCode,
+                "/home/u/.claude/projects/demo/ses-1.jsonl",
+                chrono::Utc::now(),
+            ),
+        );
+        let state = AppState::new(
+            Box::new(
+                cacm_daemon::storage::SqliteBackend::open_in_memory()
+                    .expect("in-memory sqlite backend"),
+            ),
+            ParserRegistry::new(),
+            index,
+        );
+        let activity = SessionActivity {
+            session_id: "ses-1".into(),
+            agent_type: AgentType::ClaudeCode,
+            event_type: SessionEventType::Modified,
+            turn: None,
+            timestamp: chrono::Utc::now(),
+        };
+        let session = session_from_activity(&state, &activity);
+        assert_eq!(
+            session.path,
+            std::path::PathBuf::from("/home/u/.claude/projects/demo/ses-1.jsonl")
+        );
     }
 
     #[test]

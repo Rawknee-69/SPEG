@@ -36,6 +36,7 @@ export const SpegAgentWatchDefaults: Record<AgentType, boolean> = {
   codex: true,
   opencode: true,
   cursor: true,
+  grok: true,
   speg: true,
 };
 

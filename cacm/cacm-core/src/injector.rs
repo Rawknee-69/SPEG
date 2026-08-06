@@ -360,9 +360,9 @@ pub fn time_ago(now: DateTime<Utc>, timestamp: DateTime<Utc>) -> String {
 /// Per-target header line(s).
 fn target_header(target: AgentType) -> &'static str {
     match target {
-        // SPEG system reminders and Codex's first user message are
-        // plain text — mirror the `# System Reminder` pattern in prose.
-        AgentType::Speg | AgentType::Codex => "[Cross-Agent Context]\n",
+        // SPEG system reminders, Codex's first user message, and Grok CLI
+        // prompts are plain text — mirror the `# System Reminder` pattern.
+        AgentType::Speg | AgentType::Codex | AgentType::Grok => "[Cross-Agent Context]\n",
         // Markdown files get a real heading.
         AgentType::ClaudeCode | AgentType::OpenCode => "## Cross-Agent Context\n\n",
         AgentType::Cursor => "# Cross-Agent Context\n\n",
@@ -395,7 +395,7 @@ fn format_entry_line(ranked: &RankedContext, target: AgentType, now: DateTime<Ut
         time_ago(now, ranked.context.timestamp)
     );
     match target {
-        AgentType::Speg | AgentType::Codex => {
+        AgentType::Speg | AgentType::Codex | AgentType::Grok => {
             format!("• {label}: {content} {suffix}")
         }
         AgentType::ClaudeCode | AgentType::OpenCode => {
@@ -536,6 +536,7 @@ mod tests {
             file_paths: vec![],
             decisions: vec![],
             errors: vec![],
+            project: None,
             timestamp: at,
         }
     }

@@ -9,6 +9,7 @@
 //! [`default_agent_dirs`]; callers can register additional roots with
 //! [`SessionWatcher::watch`].
 
+use crate::parsers::grok;
 use crate::types::AgentType;
 use chrono::{DateTime, Utc};
 use notify::{Event, EventKind, RecursiveMode, Watcher};
@@ -101,6 +102,7 @@ pub fn home_dir() -> Option<PathBuf> {
 /// | Codex      | `~/.codex/sessions/`                        |
 /// | OpenCode   | platform data dir (see [`opencode_dir`])    |
 /// | Cursor     | `~/.cursor/projects/`                       |
+/// | Grok       | `~/.grok/sessions/`                         |
 /// | Speg       | `~/.speg/sessions/`                         |
 pub fn default_agent_dirs() -> Vec<(AgentType, PathBuf)> {
     let Some(home) = home_dir() else {
@@ -111,11 +113,19 @@ pub fn default_agent_dirs() -> Vec<(AgentType, PathBuf)> {
         (AgentType::Codex, home.join(".codex").join("sessions")),
         (AgentType::OpenCode, opencode_dir(&home)),
         (AgentType::Cursor, home.join(".cursor").join("projects")),
+        (AgentType::Grok, home.join(".grok").join("sessions")),
         (AgentType::Speg, home.join(".speg").join("sessions")),
     ]
 }
 
 /// OpenCode's platform-specific data directory.
+///
+/// OpenCode resolves its data dir as `$XDG_DATA_HOME/opencode` (or the
+/// platform equivalent) — on macOS `~/Library/Application Support/opencode`,
+/// on Windows the *local* app-data/XDG-style `~/.local/share/opencode`
+/// (modern OpenCode writes `opencode.db` there), elsewhere
+/// `~/.local/share/opencode`. The watcher prefers whichever of these paths
+/// exists, falling back to the historical `%APPDATA%\opencode` guess.
 fn opencode_dir(home: &Path) -> PathBuf {
     #[cfg(target_os = "macos")]
     {
@@ -123,6 +133,10 @@ fn opencode_dir(home: &Path) -> PathBuf {
     }
     #[cfg(target_os = "windows")]
     {
+        let xdg = home.join(".local").join("share").join("opencode");
+        if xdg.is_dir() {
+            return xdg;
+        }
         std::env::var_os("APPDATA")
             .map(PathBuf::from)
             .unwrap_or_else(|| home.join("AppData").join("Roaming"))
@@ -130,7 +144,10 @@ fn opencode_dir(home: &Path) -> PathBuf {
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        home.join(".local").join("share").join("opencode")
+        std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".local").join("share"))
+            .join("opencode")
     }
 }
 
@@ -260,16 +277,26 @@ fn longest_matching_root<'a>(
 
 /// Best-effort session-id extraction from the path relative to an agent root.
 ///
-/// Heuristic (parsers refine this per agent in later tasks):
+/// Heuristic (per-agent layouts):
 /// - paths with a file extension: the file stem (Claude Code / Codex
 ///   transcripts are `<root>/<project>/<session-id>.jsonl`),
 /// - other paths (session directories): the component directly under the root
-///   (session directories are `<root>/<agent>/<session-id>/...`).
+///   (session directories are `<root>/<agent>/<session-id>/...`),
+/// - Grok's `chat_history.jsonl`: the *parent directory* is the session id
+///   (every grok session is `<root>/<encoded-cwd>/<session-id>/chat_history.jsonl`).
 ///
 /// Extension-based (rather than event-kind-based) so the heuristic is stable
 /// across platforms: Windows notify may deliver a create as `Create(Any)` or
 /// a follow-up `Modify(Metadata)` before the file write event.
 fn session_id_from_relative(relative: &Path, _kind: &EventKind) -> Option<String> {
+    if relative.file_name().is_some_and(|n| n == grok::GROK_CHAT_HISTORY_FILE) {
+        // The grok transcript lives one level under the session dir.
+        return relative
+            .parent()
+            .and_then(|p| p.file_name())
+            .map(|s| s.to_string_lossy().to_string())
+            .filter(|s| !s.is_empty());
+    }
     if relative.extension().is_some() {
         if let Some(stem) = relative.file_stem() {
             let stem = stem.to_string_lossy().to_string();
@@ -366,6 +393,21 @@ mod tests {
         let activity = resolve_activity(&event, &roots).expect("should resolve");
         assert_eq!(activity.agent_type, AgentType::Speg);
         assert_eq!(activity.session_id, "demo");
+    }
+
+    #[test]
+    fn resolve_activity_grok_chat_history_uses_parent_session_dir() {
+        let roots = vec![(AgentType::Grok, PathBuf::from("/home/u/.grok/sessions"))];
+        let event = Event {
+            kind: EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Content)),
+            paths: vec![PathBuf::from(
+                "/home/u/.grok/sessions/C%3A%5Crepo/019f-abc/chat_history.jsonl",
+            )],
+            attrs: notify::event::EventAttributes::default(),
+        };
+        let activity = resolve_activity(&event, &roots).expect("should resolve");
+        assert_eq!(activity.agent_type, AgentType::Grok);
+        assert_eq!(activity.session_id, "019f-abc");
     }
 
     #[test]

@@ -38,6 +38,7 @@ fn entry(
         file_paths: files.iter().map(|f| f.to_string()).collect(),
         decisions: vec![],
         errors: vec![],
+        project: None,
         timestamp: base_time(),
     }
 }

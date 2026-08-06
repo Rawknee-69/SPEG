@@ -195,6 +195,9 @@ pub fn extract_patterns(turns: &[AgentTurn]) -> Vec<String> {
 pub struct ContextExtractor {
     session_id: String,
     agent_type: AgentType,
+    /// Workspace/project root of the source session; stamped on every
+    /// extracted context so the daemon's per-workspace filters work.
+    project: Option<String>,
     buffer: Vec<AgentTurn>,
     batch_size: usize,
     next_seq: u64,
@@ -211,11 +214,19 @@ impl ContextExtractor {
         Self {
             session_id: session_id.into(),
             agent_type,
+            project: None,
             buffer: Vec::new(),
             batch_size: DEFAULT_BATCH_SIZE,
             next_seq: 0,
             task_decided: false,
         }
+    }
+
+    /// Attach the workspace root of the source session so extracted context
+    /// is attributable to a project.
+    pub fn with_project(mut self, project: impl Into<Option<String>>) -> Self {
+        self.project = project.into();
+        self
     }
 
     /// Override the number of turns accumulated before extraction runs.
@@ -354,6 +365,7 @@ impl ContextExtractor {
             file_paths,
             decisions,
             errors,
+            project: self.project.clone(),
             timestamp,
         }
     }

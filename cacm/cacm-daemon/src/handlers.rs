@@ -86,6 +86,13 @@ pub fn handle_sessions(
         // plus an exact session-id match for directory-named sessions.
         all.retain(|s| {
             s.session_id == project
+                || s
+                    .project
+                    .as_deref()
+                    .is_some_and(|proj| {
+                        crate::storage::path_within(proj, project)
+                            || crate::storage::path_within(project, proj)
+                    })
                 || crate::storage::path_within(&s.path.to_string_lossy(), project)
         });
     }
@@ -212,6 +219,7 @@ mod tests {
                 file_paths: vec![path.into()],
                 decisions: vec![],
                 errors: vec![],
+                project: None,
                 timestamp: Utc::now(),
             })
             .unwrap();
@@ -306,6 +314,7 @@ mod tests {
                 file_paths: vec![],
                 decisions: vec![],
                 errors: vec![],
+                project: None,
                 timestamp: Utc::now(),
             })
             .unwrap();
@@ -406,6 +415,7 @@ mod tests {
             session_id: "s1".into(),
             agent_type: AgentType::Codex,
             path: PathBuf::from("/x"),
+            project: None,
             created_at: Utc::now(),
             status: SessionStatus::Active,
         });

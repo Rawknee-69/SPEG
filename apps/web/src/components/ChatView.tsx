@@ -395,6 +395,31 @@ const CacmPanel = lazy(() =>
   import("./speg/CacmPanel").then((module) => ({ default: module.CacmPanel })),
 );
 const EMPTY_PENDING_FILE_SURFACE_IDS: ReadonlySet<string> = new Set();
+
+/**
+ * Map a T3 Code provider driver kind to the CACM agent type it corresponds
+ * to, so the CACM panel can detect agent switches (opencode → claude/grok/
+ * codex) and suggest sending the collected context first. Unknown drivers
+ * (e.g. "unconfigured") map to null — no suggestion.
+ */
+function cacmAgentForProvider(
+  provider: ProviderDriverKind,
+): "claude-code" | "codex" | "opencode" | "cursor" | "grok" | null {
+  switch (provider) {
+    case ProviderDriverKind.make("claudeAgent"):
+      return "claude-code";
+    case ProviderDriverKind.make("codex"):
+      return "codex";
+    case ProviderDriverKind.make("opencode"):
+      return "opencode";
+    case ProviderDriverKind.make("cursor"):
+      return "cursor";
+    case ProviderDriverKind.make("grok"):
+      return "grok";
+    default:
+      return null;
+  }
+}
 const TYPE_TO_FOCUS_EDITABLE_SELECTOR = [
   "input",
   "textarea",
@@ -4968,6 +4993,23 @@ function ChatViewContent(props: ChatViewProps) {
     }
   };
 
+  /**
+   * Auto-send the collected cross-agent context: insert it into the composer
+   * and send it immediately, so the newly selected agent starts with the full
+   * picture (used by the CACM panel's "send context first" button).
+   */
+  const sendCacmContext = useCallback(
+    (formatted: string) => {
+      const inserted = composerRef.current?.insertTextAtEnd(formatted, {
+        ensureLeadingBoundary: true,
+      });
+      if (inserted) {
+        void onSend();
+      }
+    },
+    [composerRef, onSend],
+  );
+
   const onInterrupt = async () => {
     if (!activeThread) return;
     const result = await interruptThreadTurn({
@@ -5723,7 +5765,12 @@ function ChatViewContent(props: ChatViewProps) {
       />
     ) : activeRightPanelSurface?.kind === "cacm" ? (
       <Suspense fallback={null}>
-        <CacmPanel project={activeWorkspaceRoot ?? null} onInjectContext={injectCacmContext} />
+        <CacmPanel
+          project={activeWorkspaceRoot ?? null}
+          onInjectContext={injectCacmContext}
+          activeAgent={cacmAgentForProvider(selectedProvider)}
+          onSendContext={sendCacmContext}
+        />
       </Suspense>
     ) : (activeRightPanelSurface?.kind === "files" || activeRightPanelSurface?.kind === "file") &&
       activeProject &&

@@ -221,12 +221,13 @@ describe("SpegSettings.logic", () => {
   });
 
   it("labels every watchable agent", () => {
-    expect(WATCH_AGENT_ORDER).toHaveLength(5);
+    expect(WATCH_AGENT_ORDER).toHaveLength(6);
     for (const agent of WATCH_AGENT_ORDER) {
       expect(AGENT_WATCH_LABELS[agent]).toBeTruthy();
     }
     expect(AGENT_WATCH_LABELS.codex).toBe("Codex");
     expect(AGENT_WATCH_LABELS["claude-code"]).toBe("Claude Code");
+    expect(AGENT_WATCH_LABELS.grok).toBe("Grok");
   });
 });
 

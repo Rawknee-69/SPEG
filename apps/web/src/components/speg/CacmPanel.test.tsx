@@ -94,6 +94,13 @@ const hooks = vi.hoisted(() => {
       }
       return slots[index] as unknown[];
     },
+    useRef<T>(initialValue: T): { current: T } {
+      const index = nextIndex();
+      if (!slots[index]) {
+        slots[index] = { current: initialValue };
+      }
+      return slots[index] as { current: T };
+    },
     useState<T>(initialValue: T | (() => T)): [T, (nextValue: T | ((value: T) => T)) => void] {
       const index = nextIndex();
       if (index >= slots.length) {
@@ -117,6 +124,7 @@ vi.mock("react", async (importOriginal) => {
     useCallback: hooks.useCallback,
     useEffect: hooks.useEffect,
     useMemo: hooks.useMemo,
+    useRef: hooks.useRef,
     useState: hooks.useState,
   };
 });
@@ -133,6 +141,7 @@ const codexSession: AgentSession = {
   session_id: "ses-codex-1",
   agent_type: "codex",
   path: "/repo/.codex/sessions/ses-codex-1",
+  project: "/repo",
   created_at: "2026-08-05T10:00:00Z",
   status: "active",
 };
@@ -141,6 +150,7 @@ const claudeSession: AgentSession = {
   session_id: "ses-claude-1",
   agent_type: "claude-code",
   path: "/repo/.claude/projects/ses-claude-1.jsonl",
+  project: "/repo",
   created_at: "2026-08-05T09:00:00Z",
   status: "completed",
 };
@@ -154,6 +164,7 @@ const decisionContext: CrossAgentContext = {
   file_paths: ["apps/server/src/provider/Drivers/CodexDriver.ts"],
   decisions: ["Use Effect v4 idioms for the adapter layer."],
   errors: [],
+  project: "/repo",
   timestamp: "2026-08-05T10:05:00Z",
 };
 
@@ -166,6 +177,7 @@ const errorContext: CrossAgentContext = {
   file_paths: [],
   decisions: [],
   errors: ["Codex session terminated unexpectedly mid-turn."],
+  project: "/repo",
   timestamp: "2026-08-05T10:06:00Z",
 };
 
@@ -233,6 +245,13 @@ function runInitialEffect(): void {
   effect();
 }
 
+/** Invoke the effect at `index` (0-based registration order per render). */
+function runEffect(index: number): void {
+  const effect = hooks.effects[index];
+  if (!effect) throw new Error(`no effect registered at index ${index}`);
+  effect();
+}
+
 async function flushPromises(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
@@ -259,6 +278,7 @@ describe("CacmPanel presentation helpers", () => {
       ["codex", "Codex"],
       ["opencode", "OpenCode"],
       ["cursor", "Cursor"],
+      ["grok", "Grok"],
       ["speg", "SPEG"],
     ];
     for (const [agent, label] of agents) {
@@ -482,5 +502,86 @@ describe("CacmPanel", () => {
 
     expect(testState.client.sessions).toHaveBeenCalledTimes(2);
     expect(findByAriaLabel(renderPanel(), "Session ses-claude-1")).not.toBeNull();
+  });
+
+  it("suggests sending the collected context first when the agent switches", async () => {
+    const onSendContext = vi.fn();
+    // Render 1 with opencode active: no notice (no prior agent to switch
+    // *from*). effects[0]=load, effects[1]=switch-detection.
+    const first = renderPanel({ activeAgent: "opencode", onSendContext });
+    expect(collectText(first)).not.toContain("Send context first");
+    runEffect(1); // records previous=opencode
+
+    // Render 2 with a different agent: effects[2]=load, effects[3]=switch.
+    renderPanel({ activeAgent: "claude-code", onSendContext });
+    runEffect(3); // sees opencode → claude-code, sets the notice
+
+    const noticed = renderPanel({ activeAgent: "claude-code", onSendContext });
+    const text = collectText(noticed);
+    expect(text).toContain("You switched from");
+    expect(text).toContain("OpenCode");
+    expect(text).toContain("Claude Code");
+
+    // The button gathers the full cross-agent context (wildcard session) and
+    // hands it to the composer's auto-send path.
+    testState.client.inject.mockResolvedValue({ formatted: "[Cross-Agent Context]\n• task" });
+    const send = findByAriaLabel(noticed, "Send cross-agent context to Claude Code");
+    expect(send).not.toBeNull();
+    (send!.props as { onClick: () => void }).onClick();
+    await flushPromises();
+
+    expect(testState.client.inject).toHaveBeenCalledWith({
+      sessionId: "*",
+      agent: "claude-code",
+    });
+    expect(onSendContext).toHaveBeenCalledWith("[Cross-Agent Context]\n• task");
+    // The notice clears after sending.
+    expect(collectText(renderPanel({ activeAgent: "claude-code", onSendContext }))).not.toContain(
+      "Send context first",
+    );
+  });
+
+  it("dismisses the switch suggestion without sending", async () => {
+    const onSendContext = vi.fn();
+    renderPanel({ activeAgent: "opencode", onSendContext });
+    runEffect(1); // record previous=opencode
+    renderPanel({ activeAgent: "grok", onSendContext });
+    runEffect(3); // detect the switch
+    const noticed = renderPanel({ activeAgent: "grok", onSendContext });
+    expect(collectText(noticed)).toContain("Send context first");
+
+    const dismiss = findByAriaLabel(noticed, "Dismiss");
+    expect(dismiss).not.toBeNull();
+    (dismiss!.props as { onClick: () => void }).onClick();
+    expect(onSendContext).not.toHaveBeenCalled();
+    expect(collectText(renderPanel({ activeAgent: "grok", onSendContext }))).not.toContain(
+      "Send context first",
+    );
+  });
+
+  it("shows a restart daemon button in the error state", async () => {
+    renderPanel(); // constructs the client (constructor applies resolved defaults)
+    testState.client.connect.mockRejectedValue(new Error("connect refused"));
+    runInitialEffect();
+    await flushPromises();
+    const tree = renderPanel();
+    expect(collectText(tree)).toContain("Could not reach cacm-daemon");
+    expect(findByAriaLabel(tree, "Restart CACM daemon")).not.toBeNull();
+  });
+
+  it("restart posts to the server route and reloads the timeline", async () => {
+    renderPanel(); // constructs the client
+    testState.client.connect.mockRejectedValue(new Error("connect refused"));
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ status: "started" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    runInitialEffect();
+    await flushPromises();
+    const tree = renderPanel();
+    const restartButton = findByAriaLabel(tree, "Restart CACM daemon");
+    expect(restartButton).not.toBeNull();
+    (restartButton!.props as { onClick: () => void }).onClick();
+    await flushPromises();
+    expect(fetchMock).toHaveBeenCalledWith("/api/speg/cacm/restart", { method: "POST" });
+    vi.unstubAllGlobals();
   });
 });

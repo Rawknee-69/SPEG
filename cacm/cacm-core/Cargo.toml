@@ -13,3 +13,7 @@ chrono = { version = "0.4", features = ["serde"] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync", "time"] }
 notify = "8"
 regex = "1"
+# OpenCode stores its sessions in a SQLite database (opencode.db); the parser
+# reads turns straight from it. `bundled` compiles SQLite from source (no
+# system dependency), matching cacm-daemon's storage backend.
+rusqlite = { version = "0.32", features = ["bundled"] }

@@ -10,7 +10,7 @@
  */
 
 /** The coding agents CACM watches and shares context between. */
-export type AgentType = "claude-code" | "codex" | "opencode" | "cursor" | "speg";
+export type AgentType = "claude-code" | "codex" | "opencode" | "cursor" | "grok" | "speg";
 
 /** Lifecycle status of a watched agent session. */
 export type SessionStatus = "active" | "idle" | "completed" | "failed";
@@ -21,6 +21,11 @@ export interface AgentSession {
   agent_type: AgentType;
   /** Filesystem path of the session (manifest, JSONL transcript, or dir). */
   path: string;
+  /**
+   * Workspace/project root this session ran under, when the agent records it
+   * (OpenCode stores the cwd in its DB). `null` when unknown.
+   */
+  project: string | null;
   /** ISO-8601 timestamp (RFC 3339) as serialized by chrono. */
   created_at: string;
   status: SessionStatus;
@@ -72,6 +77,11 @@ export interface CrossAgentContext {
   decisions: string[];
   /** Errors encountered while this context was produced. */
   errors: string[];
+  /**
+   * Workspace/project root the source session ran under (mirrors
+   * {@link AgentSession.project}). Used by the per-workspace filters.
+   */
+  project: string | null;
   timestamp: string;
 }
 

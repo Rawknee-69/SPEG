@@ -69,6 +69,7 @@ fn entry(
         file_paths: vec![],
         decisions: vec![],
         errors: vec![],
+        project: None,
         timestamp: at(seconds_offset),
     }
 }
