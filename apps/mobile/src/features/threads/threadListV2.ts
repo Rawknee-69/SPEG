@@ -180,6 +180,7 @@ export interface ThreadListV2Item {
   readonly variant: "card" | "slim";
   /** Snoozed-shelf row: shows the wake countdown and offers Wake. */
   readonly snoozed: boolean;
+  readonly pinned: boolean;
   readonly isLast: boolean;
 }
 
@@ -350,7 +351,7 @@ export function buildThreadListV2Items(input: {
   const projectKeys = input.projectRefs
     ? new Set(input.projectRefs.map((ref) => `${ref.environmentId}:${ref.projectId}`))
     : null;
-
+  const pinned: EnvironmentThreadShell[] = [];
   const active: EnvironmentThreadShell[] = [];
   const settled: EnvironmentThreadShell[] = [];
   const snoozed: EnvironmentThreadShell[] = [];
@@ -378,9 +379,10 @@ export function buildThreadListV2Items(input: {
     const supportsSnooze = input.snoozeEnvironmentIds?.has(thread.environmentId) ?? true;
     const changeRequestState =
       input.changeRequestStateByKey?.get(`${thread.environmentId}:${thread.id}`) ?? null;
-    // Visibility parity with web: a snoozed thread leaves the list until it
-    // wakes (or raises its hand — effectiveSnoozed refuses blocked/failed
-    // work). Snooze outranks settled classification, same as web.
+    // Visibility parity with web: snooze outranks everything, including a
+    // pin — a snoozed thread leaves the list until it wakes (or raises its
+    // hand). The pin survives underneath, so a woken thread reappears at
+    // its original spot in the creation-ordered pinned block.
     if (supportsSnooze && effectiveSnoozed(thread, { now: snoozeNow })) {
       snoozed.push(thread);
       if (
@@ -390,6 +392,12 @@ export function buildThreadListV2Items(input: {
       ) {
         nextSnoozeWakeAt = thread.snoozedUntil;
       }
+      continue;
+    }
+    // A pin otherwise overrides the lifecycle: pinned threads render above
+    // the inbox and never auto-settle out of sight.
+    if (thread.pinnedAt != null) {
+      pinned.push(thread);
       continue;
     }
     if (
@@ -434,12 +442,22 @@ export function buildThreadListV2Items(input: {
         );
 
   const items: ThreadListV2Item[] = [];
+  for (const thread of sortThreadsForListV2(pinned)) {
+    items.push({
+      thread,
+      variant: "card",
+      snoozed: false,
+      pinned: true,
+      isLast: false,
+    });
+  }
   for (const thread of orderedActive) {
     items.push({
       thread,
       variant: "card",
       snoozed: false,
       isLast: false,
+      pinned: true,
     });
   }
   const snoozedShelfHeaderIndex = orderedSnoozed.length > 0 ? items.length : null;
@@ -448,6 +466,7 @@ export function buildThreadListV2Items(input: {
       thread,
       variant: "slim",
       snoozed: true,
+      pinned: false,
       isLast: false,
     });
   }
@@ -457,6 +476,7 @@ export function buildThreadListV2Items(input: {
       thread,
       variant: "slim",
       snoozed: false,
+      pinned: false,
       isLast: false,
     });
   }

@@ -70,6 +70,8 @@ import {
   IconWifiOff,
   IconWorld,
   IconX,
+  IconPin,
+  IconPinnedOff,
   type Icon,
 } from "@tabler/icons-react-native";
 import { Platform } from "react-native";
@@ -121,6 +123,8 @@ const ANDROID_ICON_BY_SF_SYMBOL: Partial<Record<SFSymbol, Icon>> = {
   magnifyingglass: IconSearch,
   paintbrush: IconPalette,
   "person.crop.circle": IconUserCircle,
+  pin: IconPin,
+  "pin.slash": IconPinnedOff,
   play: IconPlayerPlay,
   plus: IconPlus,
   "qrcode.viewfinder": IconQrcode,
