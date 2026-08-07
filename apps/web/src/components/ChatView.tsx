@@ -170,6 +170,7 @@ import { useClientSettings, useEnvironmentSettings } from "../hooks/useSettings"
 import { useNowMinute } from "../hooks/useNowMinute";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { resolveAppModelSelectionForInstance } from "../modelSelection";
+import { SpegStatusBar } from "./speg/SpegStatusBar";
 import { getTerminalFocusOwner } from "../lib/terminalFocus";
 import { preventRepeatedTerminalCloseShortcut } from "../lib/terminalCloseShortcut";
 import { resolveNewDraftStartFromOrigin } from "../lib/chatThreadActions";
@@ -2526,6 +2527,23 @@ function ChatViewContent(props: ChatViewProps) {
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
   const activeWorkspaceRoot = activeThreadWorktreePath ?? activeProjectCwd ?? undefined;
+  // Resolved model slug for the status-bar footer. Async: recomputed when
+  // the thread's model selection changes.
+  const statusBarModelName = useMemo(() => {
+    const selection = activeThread?.modelSelection;
+    if (!selection) {
+      return null;
+    }
+    return (
+      resolveAppModelSelectionForInstance(
+        selection.instanceId,
+        settings,
+        providerStatuses,
+        selection.model,
+      ) ?? selection.model
+    );
+  }, [activeThread?.modelSelection, providerStatuses, settings]);
+  const statusBarGitBranch = activeThread?.branch ?? null;
   const activeTerminalLaunchContext =
     terminalUiLaunchContext?.threadId === activeThreadId ? terminalUiLaunchContext : null;
   // Default true while loading to avoid toolbar flicker.
@@ -6161,6 +6179,13 @@ function ChatViewContent(props: ChatViewProps) {
             ) : null}
           </div>
           {/* end chat column */}
+
+          <SpegStatusBar
+            activities={threadActivities}
+            model={statusBarModelName}
+            workspaceRoot={activeWorkspaceRoot ?? null}
+            gitBranch={statusBarGitBranch}
+          />
         </div>
         {/* end horizontal flex container */}
 

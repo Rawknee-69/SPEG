@@ -192,6 +192,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Skills",
     to: "/settings/speg",
   },
+  {
+    id: "speg-status-bar",
+    title: "Status bar",
+    to: "/settings/speg",
+  },
 ] as const satisfies ReadonlyArray<SettingsSearchItem>;
 
 export type SettingsSearchItemId = (typeof SETTINGS_SEARCH_ITEMS)[number]["id"];

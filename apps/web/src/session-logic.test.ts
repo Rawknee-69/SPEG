@@ -1576,6 +1576,56 @@ describe("deriveWorkLogEntries context window handling", () => {
     expect(entries).toHaveLength(1);
     expect(entries[0]?.label).toBe("Context compacted");
   });
+
+  it("excludes status-bar telemetry kinds from the work log", () => {
+    const entries = deriveWorkLogEntries([
+      makeActivity({
+        id: "turn-started-1",
+        turnId: "turn-1",
+        kind: "turn.started",
+        summary: "Turn started",
+        tone: "info",
+      }),
+      makeActivity({
+        id: "turn-completed-1",
+        turnId: "turn-1",
+        kind: "turn.completed",
+        summary: "Turn completed",
+        tone: "info",
+      }),
+      makeActivity({
+        id: "account-1",
+        turnId: "turn-1",
+        kind: "account.updated",
+        summary: "Account updated",
+        tone: "info",
+      }),
+      makeActivity({
+        id: "rate-limits-1",
+        turnId: "turn-1",
+        kind: "account.rate-limits.updated",
+        summary: "Account rate limits updated",
+        tone: "info",
+      }),
+      makeActivity({
+        id: "model-rerouted-1",
+        turnId: "turn-1",
+        kind: "model.rerouted",
+        summary: "Model rerouted",
+        tone: "info",
+      }),
+      makeActivity({
+        id: "tool-1",
+        turnId: "turn-1",
+        kind: "tool.completed",
+        summary: "Ran command",
+        tone: "tool",
+      }),
+    ]);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.label).toBe("Ran command");
+  });
 });
 
 describe("isLatestTurnSettled", () => {

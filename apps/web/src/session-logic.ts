@@ -633,6 +633,13 @@ export function deriveWorkLogEntries(
     if (activity.kind === "tool.started") continue;
     if (activity.kind === "task.started") continue;
     if (activity.kind === "context-window.updated") continue;
+    // Status-bar telemetry (task 1.18): these carry the footer's cost/balance/
+    // model/turn data but have no user-facing work-log row.
+    if (activity.kind === "turn.started") continue;
+    if (activity.kind === "turn.completed") continue;
+    if (activity.kind === "account.updated") continue;
+    if (activity.kind === "account.rate-limits.updated") continue;
+    if (activity.kind === "model.rerouted") continue;
     if (activity.summary === "Checkpoint captured") continue;
     if (isPlanBoundaryToolActivity(activity)) continue;
     entries.push(toDerivedWorkLogEntry(activity));

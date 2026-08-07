@@ -309,6 +309,10 @@ describe("ClientSettings speg blob (task 1.12)", () => {
     expect(decoded.speg.contextInjectionMode).toBe("auto");
     expect(decoded.speg.maxContextBudgetTokens).toBe(8000);
     expect(decoded.speg.skillToggles).toEqual({});
+    expect(decoded.speg.statusBar.enabled).toBe(true);
+    for (const [item, visible] of Object.entries(decoded.speg.statusBar.items)) {
+      expect(visible, `status bar item ${item}`).toBe(true);
+    }
     for (const agent of ["claude-code", "codex", "opencode", "cursor", "speg"]) {
       expect(decoded.speg.watchedAgents[agent as keyof typeof decoded.speg.watchedAgents]).toBe(
         true,
@@ -328,6 +332,10 @@ describe("ClientSettings speg blob (task 1.12)", () => {
       maxContextBudgetTokens: 16000,
       watchedAgents: { ...decodeClientSettings({}).speg.watchedAgents, codex: false },
       skillToggles: { "context-reminder": true },
+      statusBar: {
+        enabled: false,
+        items: { ...decodeClientSettings({}).speg.statusBar.items, balance: false },
+      },
     } as const;
     const encoded = Schema.encodeSync(ClientSettingsSchema)({
       ...decodeClientSettings({}),

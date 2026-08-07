@@ -31,6 +31,7 @@ import {
   parseWatchPathList,
   watchPathListToText,
 } from "./SpegSettings.logic";
+import { STATUS_BAR_ITEM_LABELS, STATUS_BAR_ITEM_ORDER } from "./SpegStatusBar.logic";
 
 const CONTEXT_INJECTION_LABELS: Readonly<Record<SpegContextInjectionMode, string>> = {
   auto: "Auto",
@@ -331,6 +332,43 @@ export function SpegSettings() {
             />
           ))
         )}
+      </SettingsSection>
+
+      <SettingsSection {...searchableSetting("speg-status-bar")}>
+        <SettingsRow
+          title="Status bar"
+          description="Show the live harness telemetry footer at the bottom of the chat: model, workspace, cache hit rates, tokens, costs, context share, and more. Pick which chips appear below."
+          control={
+            <Switch
+              checked={speg.statusBar.enabled}
+              onCheckedChange={(checked) =>
+                updateSpeg({ statusBar: { ...speg.statusBar, enabled: Boolean(checked) } })
+              }
+              aria-label="Enable SPEG status bar"
+            />
+          }
+        />
+        {STATUS_BAR_ITEM_ORDER.map((item) => (
+          <SettingsRow
+            key={item}
+            title={STATUS_BAR_ITEM_LABELS[item]}
+            description="Show this chip in the status bar. Hidden automatically when the active harness doesn't report the datum."
+            control={
+              <Switch
+                checked={speg.statusBar.items[item] ?? true}
+                onCheckedChange={(checked) =>
+                  updateSpeg({
+                    statusBar: {
+                      ...speg.statusBar,
+                      items: { ...speg.statusBar.items, [item]: Boolean(checked) },
+                    },
+                  })
+                }
+                aria-label={`Show ${STATUS_BAR_ITEM_LABELS[item]} in status bar`}
+              />
+            }
+          />
+        ))}
       </SettingsSection>
     </SettingsPageContainer>
   );

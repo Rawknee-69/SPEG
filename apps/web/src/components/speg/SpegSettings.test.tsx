@@ -11,6 +11,7 @@ import {
   parseWatchPathList,
   watchPathListToText,
 } from "./SpegSettings.logic";
+import { STATUS_BAR_ITEM_LABELS, STATUS_BAR_ITEM_ORDER } from "./SpegStatusBar.logic";
 import {
   DraftNumberInput,
   DraftTextInput,
@@ -311,7 +312,7 @@ describe("SpegSettings", () => {
     expect(testState.updateCalls[0]!.speg!.skillToggles["context-reminder"]).toBe(false);
   });
 
-  it("registers four SPEG sections in the settings catalog", () => {
+  it("registers five SPEG sections in the settings catalog", () => {
     const sectionIds = [] as string[];
     walk(renderSettings(), (element) => {
       if (element.type === SettingsSection) {
@@ -323,7 +324,40 @@ describe("SpegSettings", () => {
       "speg-context-injection",
       "speg-agent-watching",
       "speg-skills",
+      "speg-status-bar",
     ]);
+  });
+
+  it("renders the status-bar section with every item toggle, checked by default", () => {
+    const tree = renderSettings();
+    const titles = collectPropText(tree, "title");
+    expect(titles).toContain("Status bar");
+    for (const item of STATUS_BAR_ITEM_ORDER) {
+      const toggle = findByAriaLabel(tree, `Show ${STATUS_BAR_ITEM_LABELS[item]} in status bar`);
+      expect(toggle, `missing toggle for ${item}`).not.toBeNull();
+      expect((toggle!.props as { checked: boolean }).checked).toBe(true);
+    }
+  });
+
+  it("toggles a status-bar item off by replacing the whole speg blob", () => {
+    const tree = renderSettings();
+    const toggle = findByAriaLabel(tree, "Show Balance in status bar")!;
+    (toggle.props as { onCheckedChange: (next: boolean) => void }).onCheckedChange(false);
+
+    expect(testState.updateCalls).toHaveLength(1);
+    const patch = testState.updateCalls[0]!;
+    expect(patch.speg!.statusBar.items.balance).toBe(false);
+    expect(patch.speg!.statusBar.items.model).toBe(true);
+  });
+
+  it("toggles the whole status bar off via the master switch", () => {
+    const tree = renderSettings();
+    const toggle = findByAriaLabel(tree, "Enable SPEG status bar")!;
+    expect((toggle.props as { checked: boolean }).checked).toBe(true);
+    (toggle.props as { onCheckedChange: (next: boolean) => void }).onCheckedChange(false);
+
+    expect(testState.updateCalls).toHaveLength(1);
+    expect(testState.updateCalls[0]!.speg!.statusBar.enabled).toBe(false);
   });
 });
 

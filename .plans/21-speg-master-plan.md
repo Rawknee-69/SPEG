@@ -360,6 +360,56 @@ frees port 9786 and re-binds.
 
 ---
 
+### Task 1.18: SPEG Status Bar Footer (T3 Code Web) ✅ COMPLETE
+
+**Files**: `packages/contracts/src/speg/spegSettings.ts` (`statusBar`
+settings), `apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts`
+(status-bar telemetry activities), `apps/web/src/components/speg/SpegStatusBar.tsx`
++ `.logic.ts` + tests, `apps/web/src/components/ChatView.tsx` (footer mount),
+`apps/web/src/components/speg/SpegSettings.tsx` + `settingsSearch.ts`
+(status-bar section), `apps/web/src/session-logic.ts` (work-log skip).
+
+**What**: A live status-bar footer at the bottom of the chat view showing
+per-harness telemetry, mirroring the reference screenshots:
+
+- **model** — resolved active model slug (async: recomputes when the thread's
+  model selection changes, and follows `model.rerouted`).
+- **workspace** — active workspace basename, full path in the tooltip.
+- **gitBranch** — active thread branch.
+- **turnHit / avgHit** — prompt-cache hit rate for the latest request / the
+  session, from the latest `context-window.updated` token-usage snapshot
+  (`lastCachedInputTokens` vs `lastInputTokens`, `cachedInputTokens` vs
+  `inputTokens`).
+- **sessionTokens / turnTokens** — cumulative processed tokens and the
+  last turn's input+output+reasoning tokens.
+- **turnCost / sessionCost** — harness-reported `turn.completed.totalCostUsd`
+  (Claude) when present; else `null` (hidden).
+- **sessions** — distinct turn count from `turn.started`/`turn.completed`
+  activities.
+- **ctx** — context-window share (used/max).
+- **compactAt** — shown when the harness auto-compacts (`compactsAutomatically`),
+  at the configured threshold (default 80%).
+- **balance** — wallet balance from `account.rate-limits.updated`
+  `credits.balance` (Codex) or `account.updated`.
+
+**Server wiring**: `runtimeEventToActivities` now maps `turn.started`,
+`turn.completed`, `account.updated`, `account.rate-limits.updated`, and
+`model.rerouted` into thread activities so the footer (and any future
+consumer) sees cost/balance/model/turn data per harness. The work-log
+derivation skips these telemetry kinds so the sidebar stays clean.
+
+**Settings**: the SPEG settings panel gains a "Status bar" section with a
+master enable switch and one toggle per item; all items default on, and a
+chip is hidden automatically when the active harness doesn't report that
+datum. Search catalog includes `speg-status-bar`.
+
+**Verification**: `SpegStatusBar.logic.test.ts` (20), `SpegStatusBar.test.tsx`
+(6), `SpegSettings.test.tsx` (18), `session-logic.test.ts` (60),
+`ProviderRuntimeIngestion.test.ts` (45) + approval (5), contracts
+`settings.test.ts` (34); `tsgo` clean on changed packages.
+
+---
+
 ## Language Split
 
 | Component | Language | Why |

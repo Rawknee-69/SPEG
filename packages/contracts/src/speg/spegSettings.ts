@@ -31,6 +31,59 @@ export const DEFAULT_SPEG_CACM_HOST = "localhost";
 export const DEFAULT_SPEG_CACM_PORT = 9786;
 export const DEFAULT_SPEG_MAX_CONTEXT_BUDGET_TOKENS = 8_000;
 
+/**
+ * Status-bar footer item ids (task 1.18). Each maps to one chip in the
+ * bottom status bar. Items are stored as a visibility map so the settings
+ * panel can toggle each independently, mirroring the status-bar settings
+ * dialog in the reference screenshots.
+ */
+export const SpegStatusBarItem = Schema.Literals([
+  "model",
+  "workspace",
+  "gitBranch",
+  "turnHit",
+  "avgHit",
+  "sessionTokens",
+  "turnTokens",
+  "turnCost",
+  "sessionCost",
+  "sessions",
+  "ctx",
+  "compactAt",
+  "balance",
+]);
+export type SpegStatusBarItem = typeof SpegStatusBarItem.Type;
+
+export const SpegStatusBarItemDefaults: Record<SpegStatusBarItem, boolean> = {
+  model: true,
+  workspace: true,
+  gitBranch: true,
+  turnHit: true,
+  avgHit: true,
+  sessionTokens: true,
+  turnTokens: true,
+  turnCost: true,
+  sessionCost: true,
+  sessions: true,
+  ctx: true,
+  compactAt: true,
+  balance: true,
+};
+
+/** Status-bar footer configuration (task 1.18). */
+export const SpegStatusBarSettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  // Per-item visibility. Each id in `SpegStatusBarItem` defaults to true.
+  items: Schema.Record(SpegStatusBarItem, Schema.Boolean).pipe(
+    Schema.withDecodingDefault(Effect.succeed(SpegStatusBarItemDefaults)),
+  ),
+});
+export type SpegStatusBarSettings = typeof SpegStatusBarSettings.Type;
+
+export const DEFAULT_SPEG_STATUS_BAR_SETTINGS: SpegStatusBarSettings = Schema.decodeSync(
+  SpegStatusBarSettings,
+)({});
+
 export const SpegAgentWatchDefaults: Record<AgentType, boolean> = {
   "claude-code": true,
   codex: true,
@@ -65,6 +118,10 @@ export const SpegSettingsSchema = Schema.Struct({
   // Phase 3 placeholder: per-skill on/off. Empty until the skill manager lands.
   skillToggles: Schema.Record(TrimmedNonEmptyString, Schema.Boolean).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
+  ),
+  // Bottom status-bar footer: enabled + per-item visibility.
+  statusBar: SpegStatusBarSettings.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_SPEG_STATUS_BAR_SETTINGS)),
   ),
 }).pipe(Schema.withDecodingDefault(Effect.succeed({})));
 export type SpegSettings = typeof SpegSettingsSchema.Type;
