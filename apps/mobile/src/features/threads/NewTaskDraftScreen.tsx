@@ -6,7 +6,7 @@ import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-co
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useThemeColor } from "../../lib/useThemeColor";
 import { useFontFamily } from "../../lib/useFontFamily";
-
+import { resolveDraftProjectSelection } from "./new-task-project-selection";
 import { EnvironmentId } from "@t3tools/contracts";
 import {
   isAtomCommandInterrupted,
@@ -89,7 +89,7 @@ export function NewTaskDraftScreen(props: {
   const colorScheme = useColorScheme();
   const isKeyboardVisible = useKeyboardState((state) => state.isVisible);
   const controlsBottomPadding = isKeyboardVisible ? 8 : Math.max(insets.bottom, 10);
-  const { logicalProjects, selectedProject, setProject } = flow;
+  const { projectScopes, selectedProject, selectedProjectKey, setProject } = flow;
   const { connectedEnvironments } = useRemoteConnectionStatus();
   const selectedEnvironmentServerConfig = useEnvironmentServerConfig(
     selectedProject?.environmentId ?? null,
@@ -277,24 +277,26 @@ export function NewTaskDraftScreen(props: {
       return;
     }
 
-    if (selectedProject) {
+    const selection = resolveDraftProjectSelection(selectedProjectKey, projects, projectScopes);
+    if (selection.kind === "preserve") {
       return;
     }
 
-    if (logicalProjects.length === 1) {
-      setProject(logicalProjects[0]!.project);
+    if (selection.kind === "select") {
+      setProject(selection.project);
       return;
     }
 
     navigation.dispatch(StackActions.replace("NewTask"));
   }, [
-    logicalProjects,
+    projectScopes,
     projects,
     props.initialProjectRef,
     props.incomingShareId,
     props.pendingTaskId,
     navigation,
     selectedProject,
+    selectedProjectKey,
     setProject,
   ]);
 
