@@ -13,7 +13,7 @@ import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
-
+import type { RpcSession } from "../rpc/session.ts";
 import { EnvironmentRegistry } from "../connection/registry.ts";
 import { connectionProjectionPhase } from "../connection/model.ts";
 import { EnvironmentSupervisor } from "../connection/supervisor.ts";
@@ -71,6 +71,8 @@ export const makeEnvironmentShellState = Effect.fn("EnvironmentShellState.make")
     error: Option.none(),
   });
   const awaitingCompletion = yield* Ref.make(false);
+  const lastAuthoritativeSession = yield* Ref.make<RpcSession | null>(null);
+  const activeSubscriptionSession = yield* Ref.make<RpcSession | null>(null);
   const persistence = yield* Queue.sliding<OrchestrationShellSnapshot>(1);
 
   const persist = Effect.fn("EnvironmentShellState.persist")(function* (
@@ -166,6 +168,12 @@ export const makeEnvironmentShellState = Effect.fn("EnvironmentShellState.make")
       status: waiting ? "synchronizing" : "live",
       error: Option.none(),
     });
+    if (item.kind === "snapshot") {
+      const session = yield* Ref.get(activeSubscriptionSession);
+      if (session !== null) {
+        yield* Ref.set(lastAuthoritativeSession, session);
+      }
+    }
     yield* Queue.offer(persistence, nextSnapshot);
   });
 
@@ -180,6 +188,7 @@ export const makeEnvironmentShellState = Effect.fn("EnvironmentShellState.make")
     subscribeDynamic(
       ORCHESTRATION_WS_METHODS.subscribeShell,
       Effect.fn("EnvironmentShellState.makeSubscribeInput")(function* (session) {
+        yield* Ref.set(activeSubscriptionSession, session);
         const supportsCompletionMarker = yield* session.initialConfig.pipe(
           Effect.map((config) => config.shellResumeCompletionMarker === true),
           Effect.orElseSucceed(() => false),
@@ -187,30 +196,53 @@ export const makeEnvironmentShellState = Effect.fn("EnvironmentShellState.make")
         yield* Ref.set(awaitingCompletion, supportsCompletionMarker);
         yield* setSynchronizing;
 
-        const prepared = yield* SubscriptionRef.get(supervisor.prepared).pipe(
-          Effect.flatMap(
-            Option.match({
-              onSome: Effect.succeed,
-              onNone: () =>
-                SubscriptionRef.changes(supervisor.prepared).pipe(
-                  Stream.filter(Option.isSome),
-                  Stream.map((value) => value.value),
-                  Stream.runHead,
-                  Effect.map(Option.getOrThrow),
-                ),
-            }),
-          ),
-        );
-        const httpSnapshot = yield* snapshotLoader.load(prepared);
-        if (Option.isSome(httpSnapshot)) {
-          yield* applyItem({ kind: "snapshot", snapshot: httpSnapshot.value });
-          return {
-            afterSequence: httpSnapshot.value.snapshotSequence,
-            ...(supportsCompletionMarker ? { requestCompletionMarker: true as const } : {}),
-          };
+        // Foreground resubscriptions on the same live session can resume from
+        // the in-memory cursor. A new session reloads the authoritative HTTP
+        // snapshot so a valid cursor cannot preserve incomplete cached data.
+        const hasAuthoritativeSnapshot = (yield* Ref.get(lastAuthoritativeSession)) === session;
+        let canResume = hasAuthoritativeSnapshot;
+        let current = yield* SubscriptionRef.get(state);
+        if (!hasAuthoritativeSnapshot || Option.isNone(current.snapshot)) {
+          const prepared = yield* SubscriptionRef.get(supervisor.prepared).pipe(
+            Effect.flatMap(
+              Option.match({
+                onSome: Effect.succeed,
+                onNone: () =>
+                  SubscriptionRef.changes(supervisor.prepared).pipe(
+                    Stream.filter(Option.isSome),
+                    Stream.map((value) => value.value),
+                    Stream.runHead,
+                    Effect.map(Option.getOrThrow),
+                  ),
+              }),
+            ),
+          );
+          const httpSnapshot = yield* snapshotLoader.load(prepared);
+          if (Option.isSome(httpSnapshot)) {
+            yield* applyItem({ kind: "snapshot", snapshot: httpSnapshot.value });
+            canResume = true;
+            current = yield* SubscriptionRef.get(state);
+          }
         }
 
-        return supportsCompletionMarker ? { requestCompletionMarker: true as const } : {};
+        // If the authoritative refresh failed, omit the cached cursor so the
+        // socket fallback sends a complete snapshot for this new session.
+        if (!canResume || Option.isNone(current.snapshot)) {
+          return supportsCompletionMarker ? { requestCompletionMarker: true as const } : {};
+        }
+        if (!supportsCompletionMarker) {
+          // Without a completion marker there is no synchronized signal for a
+          // resumed subscription, so report live immediately, like threads.
+          yield* SubscriptionRef.update(state, (value) => ({
+            ...value,
+            status: "live" as const,
+            error: Option.none(),
+          }));
+        }
+        return {
+          afterSequence: current.snapshot.value.snapshotSequence,
+          ...(supportsCompletionMarker ? { requestCompletionMarker: true as const } : {}),
+        };
       }),
       {
         onExpectedFailure: (cause) => setStreamError(Cause.squash(cause)),
