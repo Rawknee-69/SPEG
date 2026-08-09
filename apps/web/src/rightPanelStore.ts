@@ -22,6 +22,7 @@ export const RIGHT_PANEL_KINDS = [
   "preview",
   "terminal",
   "cacm",
+  "agents",
 ] as const;
 export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
 
@@ -46,10 +47,11 @@ export type RightPanelSurface =
       revealRequestId: number;
     }
   | { id: "plan"; kind: "plan" }
+  | { id: "agents"; kind: "agents" }
   | { id: "cacm"; kind: "cacm" };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
-const RIGHT_PANEL_STORAGE_VERSION = 7;
+const RIGHT_PANEL_STORAGE_VERSION = 8;
 
 export interface ThreadRightPanelState {
   isOpen: boolean;
@@ -101,6 +103,8 @@ const singletonSurface = (
       return { id: "files", kind };
     case "plan":
       return { id: "plan", kind };
+    case "agents":
+      return { id: "agents", kind };
     case "cacm":
       return { id: "cacm", kind };
   }

@@ -16,6 +16,13 @@ export function createOrchestrationEnvironmentAtoms<R, E>(
       label: "environment-data:orchestration:full-thread-diff",
       tag: ORCHESTRATION_WS_METHODS.getFullThreadDiff,
     }),
+    workflowScript: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:orchestration:workflow-script",
+      tag: ORCHESTRATION_WS_METHODS.getWorkflowScript,
+      // Scripts are immutable per run: cache generously.
+      staleTimeMs: 300_000,
+      idleTtlMs: 300_000,
+    }),
     threadSearch: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:orchestration:thread-search",
       tag: ORCHESTRATION_WS_METHODS.searchThreads,

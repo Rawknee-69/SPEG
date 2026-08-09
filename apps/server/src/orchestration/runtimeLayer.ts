@@ -1,5 +1,5 @@
 import * as Layer from "effect/Layer";
-
+import * as ThreadBackgroundLiveness from "./ThreadBackgroundLiveness.ts";
 import { OrchestrationCommandReceiptRepositoryLive } from "../persistence/Layers/OrchestrationCommandReceipts.ts";
 import { OrchestrationEventStoreLive } from "../persistence/Layers/OrchestrationEventStore.ts";
 import { OrchestrationEngineLive } from "./Layers/OrchestrationEngine.ts";
@@ -19,7 +19,7 @@ export const OrchestrationInfrastructureLayerLive = Layer.mergeAll(
   OrchestrationProjectionSnapshotQueryLive,
   OrchestrationEventInfrastructureLayerLive,
   OrchestrationProjectionPipelineLayerLive,
-);
+).pipe(Layer.provideMerge(ThreadBackgroundLiveness.layer));
 
 export const OrchestrationLayerLive = Layer.mergeAll(
   OrchestrationInfrastructureLayerLive,

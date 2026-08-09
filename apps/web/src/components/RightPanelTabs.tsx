@@ -9,6 +9,7 @@ import {
   Plus,
   TerminalSquare,
   X,
+  Bot,
 } from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
@@ -53,6 +54,7 @@ interface RightPanelTabsProps {
   onAddTerminal: () => void;
   onAddDiff: () => void;
   onAddFiles: () => void;
+  onAddAgents: () => void;
   onAddCacm: () => void;
   browserAvailable: boolean;
   diffAvailable: boolean;
@@ -101,6 +103,7 @@ function RightPanelEmptyState(props: {
   onAddTerminal: () => void;
   onAddDiff: () => void;
   onAddFiles: () => void;
+  onAddAgents: () => void;
   onAddCacm: () => void;
   browserAvailable: boolean;
   diffAvailable: boolean;
@@ -138,6 +141,14 @@ function RightPanelEmptyState(props: {
       available: props.diffAvailable,
       disabledReason: SURFACE_DISABLED_REASONS.diff,
       onClick: props.onAddDiff,
+    },
+    {
+      label: "Agents",
+      description: "Watch subagents and workflows run.",
+      icon: Bot,
+      available: true,
+      disabledReason: null,
+      onClick: props.onAddAgents,
     },
     {
       label: "CACM",
@@ -224,6 +235,8 @@ function surfaceTitle(
       );
     case "plan":
       return "Plan";
+    case "agents":
+      return "Agents";
     case "cacm":
       return "CACM";
     case "preview": {
@@ -287,6 +300,8 @@ function SurfaceIcon({
       return <TerminalSquare className="size-3 shrink-0" />;
     case "plan":
       return <ClipboardList className="size-3 shrink-0" />;
+    case "agents":
+      return <Bot className="size-3 shrink-0" />;
     case "cacm":
       return <Network className="size-3 shrink-0" />;
   }
@@ -489,6 +504,10 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                     <FileDiff />
                     Diff
                   </SurfaceMenuItem>
+                  <SurfaceMenuItem available onClick={props.onAddAgents}>
+                    <Bot />
+                    Agents
+                  </SurfaceMenuItem>
                   <SurfaceMenuItem available onClick={props.onAddCacm}>
                     <Network />
                     CACM
@@ -507,6 +526,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddTerminal={props.onAddTerminal}
             onAddDiff={props.onAddDiff}
             onAddFiles={props.onAddFiles}
+            onAddAgents={props.onAddAgents}
             onAddCacm={props.onAddCacm}
             browserAvailable={props.browserAvailable}
             diffAvailable={props.diffAvailable}
