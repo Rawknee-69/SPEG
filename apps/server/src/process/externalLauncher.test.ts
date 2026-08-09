@@ -12,6 +12,7 @@ import * as TestClock from "effect/testing/TestClock";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import { SpawnExecutableResolution } from "@t3tools/shared/shell";
 import * as ExternalLauncher from "./externalLauncher.ts";
+import * as Fiber from "effect/Fiber";
 
 function makeMockDetachedHandle(onUnref: () => void = () => undefined) {
   return ChildProcessSpawner.makeHandle({
@@ -214,6 +215,70 @@ it.effect("discovers editors through the service API", () =>
     assert.equal(editors.includes("file-manager"), true);
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
+
+// A client that disconnects mid-scan interrupts the shared discovery effect on
+// the connection fiber. The cache must not retain that interrupt: doing so
+// replayed it to every later connect for the whole TTL, so `server.getConfig`
+// failed and no client could reconnect until the server restarted.
+it.effect("rescans after an interrupted discovery instead of caching the interrupt", () => {
+  const fileInfo = { type: "File" } as FileSystem.File.Info;
+  let blockFirstScan = true;
+  let scans = 0;
+  const launcherLayer = ExternalLauncher.layer.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        FileSystem.layerNoop({
+          // The first scan parks inside `stat` so the interrupt lands while
+          // discovery is in flight, which is what a client disconnecting
+          // mid-connect does to the shared effect.
+          stat: () =>
+            Effect.gen(function* () {
+              scans += 1;
+              if (blockFirstScan) {
+                return yield* Effect.never;
+              }
+              return fileInfo;
+            }),
+        }),
+        Path.layer,
+        Layer.succeed(
+          ChildProcessSpawner.ChildProcessSpawner,
+          ChildProcessSpawner.make(() => Effect.sync(() => makeMockDetachedHandle())),
+        ),
+      ),
+    ),
+  );
+
+  return Effect.gen(function* () {
+    const launcher = yield* ExternalLauncher.ExternalLauncher;
+
+    const fiber = yield* Effect.forkChild(launcher.resolveAvailableEditors());
+    yield* Effect.yieldNow;
+    yield* Fiber.interrupt(fiber);
+
+    // The next connect must still get a real answer well inside the TTL.
+    blockFirstScan = false;
+    scans = 0;
+    const editors = yield* launcher.resolveAvailableEditors();
+    assert.equal(editors.includes("vscode"), true);
+    assert.isAbove(scans, 0);
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        launcherLayer,
+        Layer.succeed(HostProcessPlatform, "win32"),
+        ConfigProvider.layer(
+          ConfigProvider.fromEnv({
+            env: {
+              PATH: "C:\\t3-editor-discovery-interrupt-test",
+              PATHEXT: ".COM;.EXE;.BAT;.CMD",
+            },
+          }),
+        ),
+      ),
+    ),
+  );
+});
 
 it.effect("rejects unknown editors through the service API", () =>
   Effect.gen(function* () {
