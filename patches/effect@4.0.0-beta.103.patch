@@ -285,11 +285,11 @@ index b536d0a..12ffac0 100644
 -const makePinger = /*#__PURE__*/Effect.fnUntraced(function* (writePing) {
 +const makePinger = /*#__PURE__*/Effect.fnUntraced(function* (writePing, hooks) {
    let recievedPong = true;
-   let missedPongs = 0;
++  let missedPongs = 0;
    const latch = Latch.makeUnsafe();
    const reset = () => {
      recievedPong = true;
-     missedPongs = 0;
++    missedPongs = 0;
      latch.closeUnsafe();
    };
 -  const onPong = () => {
