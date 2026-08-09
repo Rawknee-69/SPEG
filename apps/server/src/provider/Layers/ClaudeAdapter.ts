@@ -354,6 +354,7 @@ function resultErrorsText(result: SDKResultMessage): string {
  * entries are CLI-internal telemetry (the CLI hides them from its own UI too),
  * so they must never become the error banner.
  */
+//#5555
 function resultUserFacingError(result: SDKResultMessage): string | undefined {
   if (result.subtype === "success" || !Array.isArray(result.errors)) {
     return undefined;
