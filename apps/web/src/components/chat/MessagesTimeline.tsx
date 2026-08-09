@@ -220,6 +220,13 @@ interface MessagesTimelineProps {
   onAnchorReady: (messageId: MessageId, anchorIndex: number) => void;
   onAnchorSizeChanged: (messageId: MessageId, size: number) => void;
   contentInsetEndAdjustment: number;
+  /**
+   * Whether the timeline should keep pinning to the live edge as content
+   * grows. Off while the user is reading history; LegendList's own
+   * maintainScrollAtEnd would otherwise re-pin regardless of ChatView's
+   * scroll-mode refs whenever the user drifts near the bottom.
+   */
+  liveFollowEnabled: boolean;
   onIsAtEndChange: (isAtEnd: boolean) => void;
   onManualNavigation: () => void;
   hideEmptyPlaceholder?: boolean;
@@ -259,6 +266,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   onAnchorReady,
   onAnchorSizeChanged,
   contentInsetEndAdjustment,
+  liveFollowEnabled,
   onIsAtEndChange,
   onManualNavigation,
   hideEmptyPlaceholder = false,
@@ -402,7 +410,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 
   const handleScroll = useCallback(() => {
     const state = listRef.current?.getState?.();
-    const isAtEnd = resolveTimelineIsAtEnd(state);
+    const isAtEnd = resolveTimelineIsAtEnd(state, contentInsetEndAdjustment);
     if (isAtEnd !== undefined) {
       onIsAtEndChange(isAtEnd);
     }
@@ -428,7 +436,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 
       strip.dataset.inView = inView ? "true" : "false";
     }
-  }, [listRef, minimapItems, minimapStripMap, onIsAtEndChange]);
+  }, [contentInsetEndAdjustment, listRef, minimapItems, minimapStripMap, onIsAtEndChange]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(handleScroll);
@@ -544,7 +552,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             {...(anchoredEndSpace ? { anchoredEndSpace } : {})}
             contentInsetEndAdjustment={contentInsetEndAdjustment}
             maintainScrollAtEnd={
-              anchoredEndSpace
+              anchoredEndSpace || !liveFollowEnabled
                 ? false
                 : {
                     animated: false,
