@@ -8,6 +8,7 @@ import {
   trackRpcRequestSent,
   SLOW_RPC_ACK_THRESHOLD_MS,
   MAX_TRACKED_RPC_ACK_REQUESTS,
+  LONG_RUNNING_RPC_ACK_THRESHOLD_MS,
 } from "./requestLatencyState";
 
 describe("requestLatencyState", () => {
@@ -42,6 +43,32 @@ describe("requestLatencyState", () => {
 
     acknowledgeRpcRequest("1");
     expect(getSlowRpcAckRequests()).toEqual([]);
+  });
+
+  it("keeps ignoring untracked methods when a display tag is supplied", () => {
+    trackRpcRequestSent(
+      "1",
+      WS_METHODS.previewAutomationConnect,
+      `${WS_METHODS.previewAutomationConnect} · env-1`,
+    );
+    vi.advanceTimersByTime(SLOW_RPC_ACK_THRESHOLD_MS * 2);
+
+    expect(getSlowRpcAckRequests()).toEqual([]);
+  });
+
+  it("gives provider updates a longer threshold before warning", () => {
+    trackRpcRequestSent("1", WS_METHODS.serverUpdateProvider, "server.updateProvider · env-1");
+    vi.advanceTimersByTime(LONG_RUNNING_RPC_ACK_THRESHOLD_MS - 1);
+    expect(getSlowRpcAckRequests()).toEqual([]);
+
+    vi.advanceTimersByTime(1);
+    expect(getSlowRpcAckRequests()).toMatchObject([
+      {
+        requestId: "1",
+        tag: "server.updateProvider · env-1",
+        thresholdMs: LONG_RUNNING_RPC_ACK_THRESHOLD_MS,
+      },
+    ]);
   });
 
   it("ignores long-lived subscribe requests", () => {
