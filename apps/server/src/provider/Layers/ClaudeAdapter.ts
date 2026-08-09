@@ -4430,6 +4430,8 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         yield* Effect.forEach(
           liveIds,
           (taskId) =>
+            //#5568
+
             Effect.gen(function* () {
               const stopAcknowledged = yield* Effect.tryPromise({
                 // Invoke through the query object: SDK methods rely on `this`.
