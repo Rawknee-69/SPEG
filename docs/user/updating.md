@@ -35,10 +35,10 @@ If the requested version includes a database update, remote installation stops b
 asks you to run the exact `npx t3@<version> service update` command on the server machine. This is
 an intentional rollback-safety boundary.
 
-After selecting **Update server**, the warning becomes a three-step progress rail:
-**Download**, **Install**, and **Resume**. The same progress appears in the conversation and in
-Connections, so navigating between them does not lose the update. A failed step remains visible
-with its error and an option to retry.
+After selecting **Update**, the notice becomes a live status line: **Downloading…** while the new
+version is fetched and verified, then **Restarting…** while the server restarts into it. The same
+status appears in the conversation and in Connections, so navigating between them does not lose the
+update. A failure remains visible with its error and an option to retry.
 
 **Copy update command** gives you `npx t3@<client-version>`, which relaunches the server directly
 at the matching version. Add whatever startup options you normally use.

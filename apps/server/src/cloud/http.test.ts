@@ -10,7 +10,17 @@ import {
   HttpServerRequest,
   type HttpClientRequest,
 } from "effect/unstable/http";
-
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as ServerConfigModule from "../config.ts";
+import { writeServiceState } from "../serviceLauncher.ts";
+import {
+  SERVICE_LAUNCHER_PROTOCOL,
+  SERVICE_STATE_FILE,
+  SERVICE_STOP_MARKER_FILE,
+  type ServiceUpdateRecord,
+} from "./serviceProtocol.ts";
 import { EnvironmentId } from "@t3tools/contracts";
 import { RelayClientTracer } from "@t3tools/shared/relayTracing";
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
@@ -24,6 +34,7 @@ import {
   consumeCloudReplayGuards,
   isSupportedLinkProviderKind,
   linkProofScopes,
+  pendingServiceUpdateExists,
   reconcileDesiredCloudLink,
   releaseManagedTunnelOnShutdown,
 } from "./http.ts";
@@ -256,6 +267,23 @@ describe("releaseManagedTunnelOnShutdown", () => {
     readonly respond?: () => Response;
   }
 
+  // Writes the launcher's durable state file into this test's baseDir with
+  // the launcher's own writer; the release reads it to detect an in-flight
+  // update handoff.
+  const writeLauncherState = (update: ServiceUpdateRecord) =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const config = yield* ServerConfigModule.ServerConfig;
+      const statePath = path.join(config.baseDir, "runtime", SERVICE_STATE_FILE);
+      yield* Effect.promise(() =>
+        writeServiceState(statePath, {
+          protocol: SERVICE_LAUNCHER_PROTOCOL,
+          activeVersion: "0.0.30",
+          update,
+        }),
+      );
+    });
+
   const provideReleaseHarness =
     (harness: ReleaseHarness) =>
     <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -306,6 +334,14 @@ describe("releaseManagedTunnelOnShutdown", () => {
             }),
           ),
         ),
+        // The release consults the launcher state file under the configured
+        // baseDir, so every harness run gets a scoped temp baseDir.
+        Effect.provide(
+          ServerConfigModule.layerTest("/", { prefix: "t3-http-release-test-" }).pipe(
+            Layer.provideMerge(NodeServices.layer),
+          ),
+        ),
+        Effect.scoped,
       );
 
   // The persisted state of a CLI-managed link whose tunnel is releasable.
@@ -387,6 +423,84 @@ describe("releaseManagedTunnelOnShutdown", () => {
       expect(applyConfigCalls).toEqual([]);
       expect(requests).toEqual([]);
       expect(values.has(CLOUD_ENDPOINT_RUNTIME_CONFIG)).toBe(true);
+    }).pipe(provideReleaseHarness({ store, applyConfigCalls, requests }));
+  });
+
+  it.effect("keeps the tunnel when shutdown hands off to a pending update", () => {
+    const { store, values } = makeMemorySecretStore(managedLinkSecrets);
+    const applyConfigCalls: Array<unknown> = [];
+    const requests: Array<HttpClientRequest.HttpClientRequest> = [];
+
+    return Effect.gen(function* () {
+      yield* writeLauncherState({
+        id: "update-1",
+        fromVersion: "0.0.30",
+        targetVersion: "0.0.31",
+        dbPath: "/tmp/state.sqlite",
+        status: "pending",
+      });
+
+      const released = yield* releaseManagedTunnelOnShutdown();
+
+      // The launcher restarts a server immediately, so the tunnel is not
+      // orphaned; keeping it avoids the hostname route re-propagation that
+      // dominates update downtime. The stored config must survive so the
+      // next boot respawns the connector against the same tunnel.
+      expect(released).toBe(false);
+      expect(applyConfigCalls).toEqual([]);
+      expect(requests).toEqual([]);
+      expect(values.has(CLOUD_ENDPOINT_RUNTIME_CONFIG)).toBe(true);
+    }).pipe(provideReleaseHarness({ store, applyConfigCalls, requests }));
+  });
+
+  it.effect("still releases a pending update when the launcher is stopping", () => {
+    // `t3 service uninstall` or `systemctl stop` during the pending window:
+    // the launcher writes its stop marker before signalling the child, so no
+    // replacement server is coming and the tunnel must not be kept.
+    const { store, values } = makeMemorySecretStore(managedLinkSecrets);
+    const applyConfigCalls: Array<unknown> = [];
+    const requests: Array<HttpClientRequest.HttpClientRequest> = [];
+
+    return Effect.gen(function* () {
+      yield* writeLauncherState({
+        id: "update-1",
+        fromVersion: "0.0.30",
+        targetVersion: "0.0.31",
+        dbPath: "/tmp/state.sqlite",
+        status: "pending",
+      });
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const config = yield* ServerConfigModule.ServerConfig;
+      yield* fs.writeFileString(path.join(config.baseDir, "runtime", SERVICE_STOP_MARKER_FILE), "");
+
+      expect(yield* pendingServiceUpdateExists).toBe(true);
+      const released = yield* releaseManagedTunnelOnShutdown();
+
+      expect(released).toBe(true);
+      expect(requests).toHaveLength(1);
+      expect(values.has(CLOUD_ENDPOINT_RUNTIME_CONFIG)).toBe(false);
+    }).pipe(provideReleaseHarness({ store, applyConfigCalls, requests }));
+  });
+
+  it.effect("still releases when the recorded update already settled", () => {
+    const { store, values } = makeMemorySecretStore(managedLinkSecrets);
+    const applyConfigCalls: Array<unknown> = [];
+    const requests: Array<HttpClientRequest.HttpClientRequest> = [];
+
+    return Effect.gen(function* () {
+      yield* writeLauncherState({
+        id: "update-1",
+        fromVersion: "0.0.30",
+        targetVersion: "0.0.31",
+        status: "committed",
+      });
+
+      const released = yield* releaseManagedTunnelOnShutdown();
+
+      expect(released).toBe(true);
+      expect(requests).toHaveLength(1);
+      expect(values.has(CLOUD_ENDPOINT_RUNTIME_CONFIG)).toBe(false);
     }).pipe(provideReleaseHarness({ store, applyConfigCalls, requests }));
   });
 
