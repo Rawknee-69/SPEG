@@ -3061,6 +3061,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     // ({kind: commit|push|rebase}) and `code_change_published`
     // ({provider, url, repo}) are informational CLI notices; the work log
     // already shows the underlying git/gh tool calls.
+    //#5559
     switch (message.subtype as string) {
       case "background_tasks_changed":
       case "vcs_state_changed":
