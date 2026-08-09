@@ -2,9 +2,11 @@ import {
   parseScopedThreadKey,
   scopeProjectRef,
   scopeThreadRef,
+  scopedThreadKey,
 } from "@t3tools/client-runtime/environment";
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { canSettle, canSnooze } from "@t3tools/client-runtime/state/thread-settled";
+import { canSettle, canSnooze, threadWokeAt } from "@t3tools/client-runtime/state/thread-settled";
+import { useUiStateStore } from "../uiStateStore";
 import { EnvironmentId, type ScopedThreadRef, ThreadId } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Schema from "effect/Schema";
@@ -150,6 +152,7 @@ export function useThreadActions() {
     (store) => store.clearProjectDraftThreadById,
   );
   const clearTerminalUiState = useTerminalUiStateStore((state) => state.clearTerminalUiState);
+  const markThreadVisited = useUiStateStore((state) => state.markThreadVisited);
   const router = useRouter();
   const handleNewThread = useNewThreadHandler();
   // Keep a ref so archiveThread can call handleNewThread without appearing in
@@ -201,6 +204,10 @@ export function useThreadActions() {
       if (archiveResult._tag === "Failure") {
         return archiveResult;
       }
+      const wokeAt = threadWokeAt(thread, { now: new Date().toISOString() });
+      if (wokeAt !== null) {
+        markThreadVisited(scopedThreadKey(threadRef), wokeAt);
+      }
       refreshArchivedThreadsForEnvironment(threadRef.environmentId);
       opts.onArchived?.();
 
@@ -216,7 +223,7 @@ export function useThreadActions() {
 
       return archiveResult;
     },
-    [archiveThreadMutation, getCurrentRouteThreadRef, resolveThreadTarget],
+    [archiveThreadMutation, getCurrentRouteThreadRef, markThreadVisited, resolveThreadTarget],
   );
 
   const unarchiveThread = useCallback(
@@ -461,10 +468,11 @@ export function useThreadActions() {
       }
       // Settle is a high-frequency lifecycle action and stays silent — no
       // toast.
-      return settleThreadMutation({
+      const result = await settleThreadMutation({
         environmentId: target.environmentId,
         input: { threadId: target.threadId },
       });
+      return result;
     },
     [resolveThreadTarget, settleThreadMutation],
   );
