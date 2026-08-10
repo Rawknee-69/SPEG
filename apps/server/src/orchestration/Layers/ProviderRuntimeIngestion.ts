@@ -28,7 +28,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
-
+import { ThreadPlanProgressService } from "../ThreadPlanProgress.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { ProjectionTurnRepository } from "../../persistence/Services/ProjectionTurns.ts";
 import { ProjectionTurnRepositoryLive } from "../../persistence/Layers/ProjectionTurns.ts";
@@ -966,6 +966,7 @@ export function runtimeEventToActivities(
 
 const make = Effect.gen(function* () {
   const threadBackgroundLiveness = yield* ThreadBackgroundLivenessService;
+  const threadPlanProgress = yield* ThreadPlanProgressService;
   const crypto = yield* Crypto.Crypto;
   const orchestrationEngine = yield* OrchestrationEngineService;
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
@@ -2032,6 +2033,21 @@ const make = Effect.gen(function* () {
         const description = event.payload.description?.trim();
         if (description) {
           yield* rememberTaskDescription(thread.id, event.payload.taskId, description);
+        }
+      }
+
+      // Working-indicator plan progress: current step while the turn runs,
+      // cleared on settle so a finished plan never lingers as stale UI.
+      // Events carrying a turn id that conflicts with the active turn are
+      // stale (superseded turn) and must neither overwrite nor clear the
+      // active turn's progress; session.exited always clears.
+      if (event.type === "session.exited") {
+        threadPlanProgress.clearThreadPlanProgress(thread.id);
+      } else if (!conflictsWithActiveTurn) {
+        if (event.type === "turn.plan.updated") {
+          threadPlanProgress.recordPlanProgress(thread.id, event.payload.plan);
+        } else if (event.type === "turn.completed" || event.type === "turn.aborted") {
+          threadPlanProgress.clearThreadPlanProgress(thread.id);
         }
       }
 

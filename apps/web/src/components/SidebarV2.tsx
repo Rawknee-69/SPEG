@@ -286,7 +286,18 @@ function SidebarV2ThreadTooltip({
               <div className="min-w-0 truncate text-foreground/75">{environmentLabel}</div>
             </div>
           ) : null}
-          {thread.branch ? (
+          {/* While working, the current plan step outranks the branch:
+                  it's the one line that says what the thread is doing. */}
+          {status === "working" && thread.planProgress ? (
+            <span className="min-w-0 flex-1 truncate whitespace-nowrap">
+              {thread.planProgress.step}
+              {/* Completed count, matching the transcript chip's n/m. */}
+              <span className="text-muted-foreground/50 tabular-nums">
+                {" "}
+                {thread.planProgress.completedSteps}/{thread.planProgress.totalSteps}
+              </span>
+            </span>
+          ) : thread.branch ? (
             <div className="flex min-w-0 items-center gap-2">
               <GitBranchIcon className="size-3 shrink-0 stroke-muted-foreground" />
               <div className="min-w-0 truncate text-foreground/75">{thread.branch}</div>

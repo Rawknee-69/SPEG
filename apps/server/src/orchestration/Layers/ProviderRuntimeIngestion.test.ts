@@ -22,6 +22,7 @@ import {
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
+import * as ThreadPlanProgress from "../ThreadPlanProgress.ts";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -240,6 +241,7 @@ describe("ProviderRuntimeIngestion", () => {
       // Single shared liveness instance across ingestion (writer), the
       // engine, and the snapshot query (reader).
       Layer.provideMerge(ThreadBackgroundLiveness.layer),
+      Layer.provideMerge(ThreadPlanProgress.layer),
       Layer.provideMerge(SqlitePersistenceMemory),
       Layer.provideMerge(Layer.succeed(ProviderService, provider.service)),
       Layer.provideMerge(makeTestServerSettingsLayer(options?.serverSettings)),
