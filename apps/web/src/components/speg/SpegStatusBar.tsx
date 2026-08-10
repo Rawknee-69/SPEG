@@ -12,8 +12,8 @@
  * harness reports through thread activities, so harnesses that don't expose
  * a datum (e.g. a wallet balance for Claude) simply omit that chip.
  */
-import type { OrchestrationThreadActivity } from "@t3tools/contracts";
-import { DEFAULT_SPEG_STATUS_BAR_SETTINGS } from "@t3tools/contracts/settings";
+import type { OrchestrationThreadActivity } from "@speg/contracts";
+import { DEFAULT_SPEG_STATUS_BAR_SETTINGS } from "@speg/contracts/settings";
 import { useMemo } from "react";
 
 import { useClientSettings } from "~/hooks/useSettings";

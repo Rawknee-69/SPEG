@@ -1,6 +1,6 @@
-import { EnvironmentId } from "@t3tools/contracts";
-import { stripPairingTokenFromUrl } from "@t3tools/shared/remote";
-import { type EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
+import { EnvironmentId } from "@speg/contracts";
+import { stripPairingTokenFromUrl } from "@speg/shared/remote";
+import { type EnvironmentConnectionPhase } from "@speg/client-runtime/connection";
 
 export { authClientMetadata } from "./authClientMetadata";
 

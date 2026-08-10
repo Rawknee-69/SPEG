@@ -1,7 +1,7 @@
 # SPEG — Implementation Plan v3 (Final)
 
 > **Updated**: 2026-08-04
-> **Based on**: Full T3 Code analysis + Jcode internal architecture + Memory Architecture docs
+> **Based on**: Full SPEG analysis + Jcode internal architecture + Memory Architecture docs
 > **Core innovation**: Universal Cross-Agent Context Continuity (CACM)
 
 ---
@@ -341,7 +341,7 @@ External agents (Claude Code, Codex, Cursor, OpenCode)
 - **Test**: Create context in memory, start new SPEG session, verify context injected
 
 #### 1.7 Basic Web UI
-- `ChatView` composed micro-components (learned from T3 Code's mistake)
+- `ChatView` composed micro-components (learned from SPEG's mistake)
 - Agent session browser (list recent sessions across agents)
 - Context continuity indicator (shows injected context at session start)
 - Basic composer with send
@@ -566,8 +566,8 @@ SPEG is designed to be **lightweight** — the SPEG server is a thin proxy with 
 
 | # | File | Content |
 |---|---|---|
-| 1 | `01-architecture.md` | T3 Code architecture reference (35KB) |
-| 2 | `02-performance-analysis.md` | T3 Code bottleneck analysis (17KB) |
+| 1 | `01-architecture.md` | SPEG architecture reference (35KB) |
+| 2 | `02-performance-analysis.md` | SPEG bottleneck analysis (17KB) |
 | 3 | `03-implementation-plan.md` | v1 plan (superseded) |
 | 4 | `04-jcode-research.md` | Jcode SDK + architecture research (11KB) |
 | 5 | `05-implementation-plan-v2.md` | v2 plan (superseded) |

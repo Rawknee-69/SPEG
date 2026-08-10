@@ -20,8 +20,8 @@ import type {
   VcsStatusRemoteResult,
   VcsStatusResult,
   VcsStatusStreamEvent,
-} from "@t3tools/contracts";
-import { GitManagerError } from "@t3tools/contracts";
+} from "@speg/contracts";
+import { GitManagerError } from "@speg/contracts";
 
 import * as VcsStatusBroadcaster from "./VcsStatusBroadcaster.ts";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
@@ -359,10 +359,10 @@ describe("VcsStatusBroadcaster", () => {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const realDir = yield* fileSystem.makeTempDirectoryScoped({
-        prefix: "t3-vcs-status-real-",
+        prefix: "speg-vcs-status-real-",
       });
       const linkParent = yield* fileSystem.makeTempDirectoryScoped({
-        prefix: "t3-vcs-status-link-",
+        prefix: "speg-vcs-status-link-",
       });
       const linkDir = path.join(linkParent, "repo-link");
       yield* fileSystem.symlink(realDir, linkDir);

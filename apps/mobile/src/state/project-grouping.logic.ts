@@ -1,5 +1,5 @@
-import type { ProjectGroupingSettings } from "@t3tools/client-runtime/state/project-grouping";
-import type { SidebarProjectGroupingMode } from "@t3tools/contracts";
+import type { ProjectGroupingSettings } from "@speg/client-runtime/state/project-grouping";
+import type { SidebarProjectGroupingMode } from "@speg/contracts";
 import type { Preferences } from "../persistence/mobile-preferences";
 export const DEFAULT_MOBILE_PROJECT_GROUPING_SETTINGS: ProjectGroupingSettings = {
   sidebarProjectGroupingMode: "repository",

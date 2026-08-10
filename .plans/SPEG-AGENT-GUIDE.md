@@ -126,7 +126,7 @@ vp run test <files>              → 7 passed, 0 failed
 
 ## Report Directory
 
-All reports go in `t3code/research/report/`:
+All reports go in `speg/research/report/`:
 ```
 research/report/
 ├── 1.1-scaffolding.md

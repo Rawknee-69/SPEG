@@ -6,7 +6,7 @@ import {
   type OrchestrationThreadDetailSnapshot,
   type OrchestrationThreadStreamItem,
   type ThreadId as ThreadIdType,
-} from "@t3tools/contracts";
+} from "@speg/contracts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Semaphore from "effect/Semaphore";
@@ -102,7 +102,7 @@ const defaultOlderTurnRequestRegistry = makeThreadOlderTurnRequestRegistry();
  * the apps get working wiring without providing anything.
  */
 export class ThreadOlderTurnRequests extends Context.Reference<ThreadOlderTurnRequestRegistry>(
-  "@t3tools/client-runtime/state/threads/ThreadOlderTurnRequests",
+  "@speg/client-runtime/state/threads/ThreadOlderTurnRequests",
   { defaultValue: () => defaultOlderTurnRequestRegistry },
 ) {}
 

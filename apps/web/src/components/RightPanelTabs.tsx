@@ -1,5 +1,5 @@
-import type { ContextMenuItem, PreviewSessionSnapshot } from "@t3tools/contracts";
-import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
+import type { ContextMenuItem, PreviewSessionSnapshot } from "@speg/contracts";
+import { getTerminalLabel } from "@speg/shared/terminalLabels";
 import { FileDiff, Files, Globe2, Network, Plus, TerminalSquare, X, Bot } from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
@@ -53,7 +53,7 @@ interface RightPanelTabsProps {
 }
 
 const SURFACE_DISABLED_REASONS = {
-  browser: "Browser previews are only available in the T3 Code desktop app.",
+  browser: "Browser previews are only available in the SPEG desktop app.",
   files: "Files are only available when a project is open.",
   diff: "Diff is only available for server threads in Git repositories.",
 } as const;

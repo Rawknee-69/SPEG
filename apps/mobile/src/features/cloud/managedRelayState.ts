@@ -3,11 +3,11 @@ import {
   createManagedRelayQueryManager,
   managedRelaySessionAtom,
   readManagedRelaySnapshotState,
-} from "@t3tools/client-runtime/relay";
+} from "@speg/client-runtime/relay";
 import type {
   RelayClientEnvironmentRecord,
   RelayEnvironmentStatusResponse,
-} from "@t3tools/contracts/relay";
+} from "@speg/contracts/relay";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
 import { useCallback, useEffect } from "react";
 
@@ -40,7 +40,7 @@ export function useManagedRelayEnvironments() {
   const snapshot = readManagedRelaySnapshotState(result);
   useEffect(() => {
     if (snapshot.error) {
-      console.error("[t3-cloud] Relay environment listing failed", {
+      console.error("[speg-cloud] Relay environment listing failed", {
         message: snapshot.error,
         traceId: snapshot.errorTraceId,
       });
@@ -69,7 +69,7 @@ export function useManagedRelayEnvironmentStatus(environment: RelayClientEnviron
   const snapshot = readManagedRelaySnapshotState(result);
   useEffect(() => {
     if (snapshot.error) {
-      console.error("[t3-cloud] Relay environment status failed", {
+      console.error("[speg-cloud] Relay environment status failed", {
         environmentId: environment.environmentId,
         message: snapshot.error,
         traceId: snapshot.errorTraceId,

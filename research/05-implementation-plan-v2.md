@@ -1,6 +1,6 @@
 # SPEG — Custom AI Agent System: Implementation Plan v2
 
-> **Updated**: 2026-08-04 | **Based on**: Full T3 Code analysis + Jcode SDK research
+> **Updated**: 2026-08-04 | **Based on**: Full SPEG analysis + Jcode SDK research
 > This plan reflects the discovery that Jcode is a **complete, production-grade platform**
 > with a GA TypeScript SDK — SPEG is a UI orchestration layer on top, not a from-scratch agent system.
 
@@ -140,7 +140,7 @@
   - `MessageTimeline` — virtualized (LegendList)
   - `ComposerBar` — text input with send
   - `AgentStatusIndicator` — Jcode session status
-- `ConnectionDriver` + `EnvironmentSupervisor` (adapted from T3 Code)
+- `ConnectionDriver` + `EnvironmentSupervisor` (adapted from SPEG)
 - Client-side state with Effect Atoms
 - **Integration test**: Open web UI, send message, see Jcode agent response stream
 
@@ -383,7 +383,7 @@ Every phase closes with:
 | Decision | Choice | Rationale |
 |---|---|---|
 | Desktop framework | **Electron** | Mature ecosystem, browser preview, SSH |
-| Server runtime | **Bun** | Fast startup, good SQLite, T3 Code-aligned |
+| Server runtime | **Bun** | Fast startup, good SQLite, SPEG-aligned |
 | Jcode integration | **`@1jehuang/jcode-sdk`** | GA quality, protocol v1, semver stable |
 | Jcode mode | **`JcodeClient.launch()`** per project | Isolation, clean lifecycle, ephemeral state |
 | Contracts | Effect/Schema + `protocolVersion` | Type safety, version negotiation |
@@ -397,8 +397,8 @@ Every phase closes with:
 
 | File | Content |
 |---|---|
-| `research/01-architecture.md` | Complete T3 Code architecture reference |
-| `research/02-performance-analysis.md` | T3 Code bottleneck analysis + fixes |
+| `research/01-architecture.md` | Complete SPEG architecture reference |
+| `research/02-performance-analysis.md` | SPEG bottleneck analysis + fixes |
 | `research/03-implementation-plan.md` | **v1 plan (SUPERSEDED)** — based on incorrect Jcode assumptions |
 | `research/04-jcode-research.md` | Jcode architecture research — SDK, server, swarm, memory |
 | `research/05-implementation-plan-v2.md` | **This document** — corrected v2 plan |

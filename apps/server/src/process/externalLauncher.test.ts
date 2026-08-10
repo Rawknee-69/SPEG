@@ -9,8 +9,8 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import * as TestClock from "effect/testing/TestClock";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
-import { SpawnExecutableResolution } from "@t3tools/shared/shell";
+import { HostProcessPlatform } from "@speg/shared/hostProcess";
+import { SpawnExecutableResolution } from "@speg/shared/shell";
 import * as ExternalLauncher from "./externalLauncher.ts";
 import * as Fiber from "effect/Fiber";
 
@@ -97,7 +97,7 @@ it.effect("launches an installed editor with platform-safe arguments", () =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const binDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-editors-" });
+    const binDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "speg-editors-" });
     yield* fileSystem.writeFileString(path.join(binDir, "code.CMD"), "@echo off\r\n");
 
     let spawned: ChildProcess.StandardCommand | undefined;
@@ -180,7 +180,7 @@ it.effect("memoizes editor discovery and refreshes after the cache window", () =
         ConfigProvider.layer(
           ConfigProvider.fromEnv({
             env: {
-              PATH: "C:\\t3-editor-discovery-cache-test",
+              PATH: "C:\\speg-editor-discovery-cache-test",
               PATHEXT: ".COM;.EXE;.BAT;.CMD",
             },
           }),
@@ -195,7 +195,7 @@ it.effect("discovers editors through the service API", () =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const binDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-editors-" });
+    const binDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "speg-editors-" });
     yield* fileSystem.writeFileString(path.join(binDir, "code.CMD"), "@echo off\r\n");
     yield* fileSystem.writeFileString(path.join(binDir, "explorer.CMD"), "@echo off\r\n");
 
@@ -270,7 +270,7 @@ it.effect("rescans after an interrupted discovery instead of caching the interru
         ConfigProvider.layer(
           ConfigProvider.fromEnv({
             env: {
-              PATH: "C:\\t3-editor-discovery-interrupt-test",
+              PATH: "C:\\speg-editor-discovery-interrupt-test",
               PATHEXT: ".COM;.EXE;.BAT;.CMD",
             },
           }),

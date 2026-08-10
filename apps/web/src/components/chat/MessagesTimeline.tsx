@@ -4,15 +4,15 @@ import {
   type ScopedThreadRef,
   type ServerProviderSkill,
   type TurnId,
-} from "@t3tools/contracts";
-import type { AgentPanelModel } from "@t3tools/client-runtime/state/subagentRuntime";
+} from "@speg/contracts";
+import type { AgentPanelModel } from "@speg/client-runtime/state/subagentRuntime";
 import {
   emptyAgentPanelModel,
   formatSubagentTokenCount,
-} from "@t3tools/client-runtime/state/subagentRuntime";
+} from "@speg/client-runtime/state/subagentRuntime";
 
-import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
-import { resolveChatListAnchoredEndSpace } from "@t3tools/shared/chatList";
+import { parseScopedThreadKey } from "@speg/client-runtime/environment";
+import { resolveChatListAnchoredEndSpace } from "@speg/shared/chatList";
 import {
   createContext,
   Fragment,
@@ -102,7 +102,7 @@ import {
 } from "~/lib/previewAnnotation";
 import { cn } from "~/lib/utils";
 import { useUiStateStore } from "~/uiStateStore";
-import { type TimestampFormat } from "@t3tools/contracts/settings";
+import { type TimestampFormat } from "@speg/contracts/settings";
 import { formatChatTimestampTooltip, formatShortTimestamp } from "../../timestampFormat";
 
 import {

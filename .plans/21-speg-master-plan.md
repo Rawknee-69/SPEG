@@ -4,8 +4,8 @@
 >
 > **Revision (v5 → v6): jcode is DROPPED as the harness.** The jcode
 > provider adapter, session parser, and harness-API storage were removed from
-> t3code (see commit "revert(speg): strip jcode"). **We will not build a
-> self-built harness for now** — support is limited to the harnesses T3 Code
+> speg (see commit "revert(speg): strip jcode"). **We will not build a
+> self-built harness for now** — support is limited to the harnesses SPEG
 > already supports (Claude Code, Codex, OpenCode, Cursor, Grok), which CACM
 > also watches (claude-code/codex/opencode/cursor). The harness slot below
 > shows those existing providers. Historical jcode task records are kept but
@@ -63,7 +63,7 @@
 ## Package Structure
 
 ```
-t3code/
+speg/
 ├── cacm/                          ← STANDALONE CACM PACKAGE
 │   ├── cacm-core/                 ← Rust crate: core logic
 │   │   ├── Cargo.toml
@@ -141,7 +141,7 @@ cacm-daemon (Rust)        ← HTTP/WS server, depends on cacm-core
 
 The jcode bridge route (a `jcode-cacm-bridge` crate registering CACM tools
 and a `turn_start` injection hook inside jcode) is **removed**. There is
-**no self-built harness for now**: integration covers the harnesses T3 Code
+**no self-built harness for now**: integration covers the harnesses SPEG
 already supports (Claude Code, Codex, OpenCode, Cursor, Grok), which talk to
 CACM through its WebSocket API, and any future harness would follow the same
 shape — a thin adapter that imports `cacm-sdk-rs`/`cacm-sdk-ts`, registers
@@ -262,13 +262,13 @@ formatted for the target agent.
 
 ---
 
-### Task 1.11: CACM Right Panel Tab (T3 Code Web)
+### Task 1.11: CACM Right Panel Tab (SPEG Web)
 
 **Status**: ✅ (report: `research/report/1.11-cacm-panel.md`)
 
 **Files**: `apps/web/src/components/speg/CacmPanel.tsx` — new right panel tab
 
-**What**: Like Cursor IDE's sidebar, T3 Code has a right panel with tabs (Plan, Diff, Files, Preview, Terminal). We add a CACM tab showing:
+**What**: Like Cursor IDE's sidebar, SPEG has a right panel with tabs (Plan, Diff, Files, Preview, Terminal). We add a CACM tab showing:
 - Cross-agent session timeline (all agents, color-coded)
 - Recent context extracted from each session
 - "Inject context" button for current thread
@@ -281,7 +281,7 @@ Follows `rightPanelStore.ts` pattern — registers as a new surface type.
 
 ---
 
-### Task 1.12: SPEG Settings Panel (T3 Code Web)
+### Task 1.12: SPEG Settings Panel (SPEG Web)
 
 **Status**: ✅ (report: `research/report/1.12-speg-settings.md`)
 
@@ -294,9 +294,9 @@ Follows `rightPanelStore.ts` pattern — registers as a new surface type.
 - Skill toggle switches
 - Memory graph storage backend selection
 
-Follows existing T3 Code settings panel pattern.
+Follows existing SPEG settings panel pattern.
 
-**Verification**: Settings appear in T3 Code's settings sidebar. Changes persist.
+**Verification**: Settings appear in SPEG's settings sidebar. Changes persist.
 
 ---
 
@@ -336,7 +336,7 @@ Follows existing T3 Code settings panel pattern.
 
 **What**: The CACM tab needs the local `cacm-daemon` sidecar alive and healthy.
 
-- **Auto-start**: the T3 Code server probes `GET /healthz` and spawns the
+- **Auto-start**: the SPEG server probes `GET /healthz` and spawns the
   daemon binary (`cargo build -p cacm-daemon`) as a scoped child, passing
   every origin the server can serve via `--allow-origin`; killed on server
   shutdown (`SIGTERM` + `forceKillAfter` → `taskkill` on Windows).
@@ -360,7 +360,7 @@ frees port 9786 and re-binds.
 
 ---
 
-### Task 1.18: SPEG Status Bar Footer (T3 Code Web) ✅ COMPLETE
+### Task 1.18: SPEG Status Bar Footer (SPEG Web) ✅ COMPLETE
 
 **Files**: `packages/contracts/src/speg/spegSettings.ts` (`statusBar`
 settings), `apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts`
@@ -443,7 +443,7 @@ cacm-sdk-rs = "0.1"               # Cargo.toml for Rust tools
 ## Done Criteria (Full Plan)
 
 - [ ] CACM daemon watches all agent types, extracts context
-- [ ] The already-supported harnesses (Claude Code, Codex, OpenCode, Cursor, Grok) integrate with CACM → cross-agent context visible in T3 Code
+- [ ] The already-supported harnesses (Claude Code, Codex, OpenCode, Cursor, Grok) integrate with CACM → cross-agent context visible in SPEG
 - [ ] SPEG web imports `@cacm/sdk` → cross-agent timeline visible
 - [ ] Context transfers seamlessly between Claude Code → Codex → SPEG → harness
 - [ ] Any tool can `npm install @cacm/sdk` or add `cacm-sdk-rs` to Cargo.toml

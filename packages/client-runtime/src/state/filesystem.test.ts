@@ -9,10 +9,10 @@ import {
 
 describe("filesystem browse model", () => {
   it("derives the browse target and navigation state", () => {
-    expect(getFilesystemBrowsePath("~/projects/t3")).toEqual({
+    expect(getFilesystemBrowsePath("~/projects/speg")).toEqual({
       isBrowsing: true,
       directoryPath: "~/projects/",
-      filterQuery: "t3",
+      filterQuery: "speg",
       parentPath: "~/",
       canBrowseUp: true,
     });

@@ -1,13 +1,13 @@
 # Research Index
 
-> T3 Code + Jcode source analysis for SPEG implementation
+> SPEG + Jcode source analysis for SPEG implementation
 > **Integration**: Jcode source at `jcode/` — we build from source and speak the harness API protocol directly (NDJSON over socket). No npm SDK dependency.
 
 ## Research Documents
 
 | #   | File                           | Content                                                                   | KB  |
 | --- | ------------------------------ | ------------------------------------------------------------------------- | --- |
-| 1   | `01-architecture.md`           | Complete T3 Code architecture reference                                   | 35  |
+| 1   | `01-architecture.md`           | Complete SPEG architecture reference                                   | 35  |
 | 2   | `02-performance-analysis.md`   | 13 bottlenecks + root causes + fixes                                      | 17  |
 | 3   | `03-implementation-plan.md`    | v1 plan (superseded — pre-Jcode SDK discovery)                            | 30  |
 | 4   | `04-jcode-research.md`         | Jcode SDK, server, swarm, memory architecture                             | 11  |

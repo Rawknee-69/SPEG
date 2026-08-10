@@ -5,7 +5,7 @@ import type {
   PreviewReportStatusInput,
   ScopedThreadRef,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@speg/contracts";
 import { useEffect, useRef } from "react";
 
 import { useBrowserPointerStore } from "~/browser/browserPointerStore";

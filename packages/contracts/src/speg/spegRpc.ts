@@ -55,7 +55,7 @@ export const SpegCacmInjectContextRpc = Rpc.make(SPEG_METHODS.spegCacmInjectCont
 
 /**
  * Standalone RPC group for the SPEG wire surface (chat + CACM). Kept separate
- * from `WsRpcGroup` (packages/contracts/src/rpc.ts) so the existing T3 Code
+ * from `WsRpcGroup` (packages/contracts/src/rpc.ts) so the existing SPEG
  * contract surface stays untouched; consumers can merge it into their own
  * transport groups or register it as its own group.
  */

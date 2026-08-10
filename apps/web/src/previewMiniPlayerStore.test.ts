@@ -1,5 +1,5 @@
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { type EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { scopeThreadRef } from "@speg/client-runtime/environment";
+import { type EnvironmentId, ThreadId } from "@speg/contracts";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { selectThreadPreviewMiniPlayer, usePreviewMiniPlayerStore } from "./previewMiniPlayerStore";

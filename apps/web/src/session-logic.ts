@@ -11,8 +11,8 @@ import {
   type UserInputQuestion,
   type ThreadId,
   type TurnId,
-} from "@t3tools/contracts";
-import { isBackgroundTaskActivity } from "@t3tools/client-runtime/state/subagentRuntime";
+} from "@speg/contracts";
+import { isBackgroundTaskActivity } from "@speg/client-runtime/state/subagentRuntime";
 import type {
   ChatMessage,
   ProposedPlan,

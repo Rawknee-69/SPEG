@@ -6,12 +6,12 @@ Make remote access feel first-class while keeping the free DIY path open.
 
 The immediate product goal is:
 
-- users can expose a backend through LAN, their own Tailscale, MagicDNS, a manual HTTPS endpoint, or later T3 Tunnel
+- users can expose a backend through LAN, their own Tailscale, MagicDNS, a manual HTTPS endpoint, or later SPEG Tunnel
 - users can generate a hosted pairing link for `app.t3.codes`
 - the hosted app can pair, persist, reconnect, and operate against saved environments without requiring a backend at the hosted app origin
 - all transports reuse the same backend auth, WebSocket runtime, saved environment registry, and pairing UX
 
-This plan intentionally leaves the paid T3 cloud tunnel fabric out of scope. It defines the OSS foundation that T3 Tunnel should later plug into.
+This plan intentionally leaves the paid SPEG cloud tunnel fabric out of scope. It defines the OSS foundation that SPEG Tunnel should later plug into.
 
 ## Current State
 
@@ -58,7 +58,7 @@ Examples:
 - Tailscale IP URL
 - MagicDNS/Serve URL
 - manual URL
-- future T3 Tunnel URL
+- future SPEG Tunnel URL
 - browser compatibility and exposure level
 
 Those are different lifecycles. One environment can have many endpoints, endpoints can appear/disappear as network interfaces change, and the same descriptor is returned regardless of which endpoint the client used. Extending the descriptor would blur environment identity with transport reachability and make saved environments harder to reason about.
@@ -74,7 +74,7 @@ type AdvertisedEndpointProvider =
   | "tailscale-ip"
   | "tailscale-magicdns"
   | "manual"
-  | "t3-tunnel";
+  | "speg-tunnel";
 
 type AdvertisedEndpointVisibility = "local" | "private-network" | "tailnet" | "public";
 
@@ -146,7 +146,7 @@ Endpoint records can come from several providers:
    - hidden/disabled endpoints
 
 4. **Future cloud provider**
-   - T3 Tunnel endpoint
+   - SPEG Tunnel endpoint
    - billing/account status
    - tunnel lifecycle state
 
@@ -312,19 +312,19 @@ Use fragment tokens by default. Continue accepting `?token=` for compatibility.
 - HTTP endpoints are still supported in desktop/native/local contexts.
 - Hosted HTTPS app only promises compatibility for HTTPS/WSS endpoints.
 
-## Phase 4: Future T3 Tunnel Provider
+## Phase 4: Future SPEG Tunnel Provider
 
 Not part of the current implementation, but the endpoint abstraction should make it straightforward.
 
 Future tunnel provider responsibilities:
 
-- create endpoint with `provider: "t3-tunnel"`
+- create endpoint with `provider: "speg-tunnel"`
 - surface tunnel status
 - provide stable HTTPS URL
 - use existing backend pairing/session auth
 - never bypass server auth
 
-The tunnel fabric can later be Pipenet-derived, Tailscale-derived, or another reverse tunnel implementation. The rest of T3 Code should only see an `AdvertisedEndpoint`.
+The tunnel fabric can later be Pipenet-derived, Tailscale-derived, or another reverse tunnel implementation. The rest of SPEG should only see an `AdvertisedEndpoint`.
 
 ## Security Checklist
 

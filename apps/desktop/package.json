@@ -1,5 +1,5 @@
 {
-  "name": "@t3tools/desktop",
+  "name": "@speg/desktop",
   "version": "0.0.32",
   "private": true,
   "type": "module",
@@ -15,11 +15,11 @@
     "@clerk/electron": "catalog:",
     "@clerk/electron-passkeys": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@t3tools/client-runtime": "workspace:*",
-    "@t3tools/contracts": "workspace:*",
-    "@t3tools/shared": "workspace:*",
-    "@t3tools/ssh": "workspace:*",
-    "@t3tools/tailscale": "workspace:*",
+    "@speg/client-runtime": "workspace:*",
+    "@speg/contracts": "workspace:*",
+    "@speg/shared": "workspace:*",
+    "@speg/ssh": "workspace:*",
+    "@speg/tailscale": "workspace:*",
     "effect": "catalog:",
     "electron": "41.5.0",
     "electron-store": "^8.2.0",
@@ -35,5 +35,5 @@
     "tailwindcss": "^4.0.0",
     "vite-plus": "catalog:"
   },
-  "productName": "T3 Code (Alpha)"
+  "productName": "SPEG (Alpha)"
 }

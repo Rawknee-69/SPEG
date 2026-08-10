@@ -1,7 +1,7 @@
-# T3 Code — Complete Architecture Reference
+# SPEG — Complete Architecture Reference
 
 > Generated: 2026-08-04 | Source: Full repository analysis
-> This document is the single-source-of-truth architecture reference for the T3 Code monorepo.
+> This document is the single-source-of-truth architecture reference for the SPEG monorepo.
 > Every module, file role, and architectural decision is documented here.
 
 ---
@@ -30,22 +30,22 @@
 
 ## 1. Project Overview
 
-**T3 Code** is an open-source "bring-your-own-subscription" agent harness control surface. It wraps provider CLIs (Codex, Claude Code, Cursor, Grok, OpenCode) behind a typed WebSocket server and serves web, desktop, and mobile clients.
+**SPEG** is an open-source "bring-your-own-subscription" agent harness control surface. It wraps provider CLIs (Codex, Claude Code, Cursor, Grok, OpenCode) behind a typed WebSocket server and serves web, desktop, and mobile clients.
 
 - **100K+ users** across all surfaces
 - **Monorepo**: pnpm workspace with catalog versioning
 - **Stack**: TypeScript 6 + Effect 4.0.0-beta.103 + React 19 + Electron 41 + React Native (Expo 56)
 - **Runtime**: Bun (primary) or Node.js 24+
-- **License**: MIT (T3 Tools Inc.)
+- **License**: MIT (SPEG Tools Inc.)
 
 ---
 
 ## 2. Repository Structure
 
 ```
-t3code/
+speg/
 ├── apps/
-│   ├── server/          # Bun/Node WebSocket server (the `t3` CLI)
+│   ├── server/          # Bun/Node WebSocket server (the `speg` CLI)
 │   ├── web/             # React/Vite web UI
 │   ├── desktop/         # Electron shell wrapping web + bundling server
 │   ├── mobile/          # React Native (Expo) for iOS/Android
@@ -59,7 +59,7 @@ t3code/
 │   ├── ssh/             # SSH auth, commands, tunneling
 │   └── tailscale/       # Tailscale integration
 ├── infra/
-│   └── relay/           # T3 Connect relay server
+│   └── relay/           # SPEG Connect relay server
 ├── native/
 │   ├── libghostty-vt/   # Ghostty VT library (Rust → WASM)
 │   └── resource-monitor/ # Native resource monitor (Rust)
@@ -70,8 +70,8 @@ t3code/
 │   └── user/            # Install, keybindings, permissions, remote
 ├── .plans/              # 30+ architectural plans (numbered 01–20 + named)
 ├── .repos/              # Vendored reference repos (alchemy-effect, effect-smol)
-├── .agents/             # Agent skills (ios-debugger, ios-simulator, test-t3-*)
-├── oxlint-plugin-t3code/ # Custom oxlint ESLint plugin (3 rules)
+├── .agents/             # Agent skills (ios-debugger, ios-simulator, test-speg-*)
+├── oxlint-plugin-speg/ # Custom oxlint ESLint plugin (3 rules)
 ├── scripts/             # Dev runner, build, release tooling
 ├── patches/             # 13 pnpm patches
 ├── experiments/         # Experiment files
@@ -86,11 +86,11 @@ t3code/
 
 ```
 Clients (web/desktop/mobile)
-    │  shared: @t3tools/client-runtime
+    │  shared: @speg/client-runtime
     │  (connection supervisor, RPC session, Atom state)
     ▼
 Effect RPC over WebSocket (/ws)
-    │  contract: @t3tools/contracts
+    │  contract: @speg/contracts
     ▼
 apps/server (execution boundary)
     │  orchestration engine (event-sourced)
@@ -108,7 +108,7 @@ Agent CLIs: Codex, Claude, Cursor, Grok, OpenCode
 
 3. **Effect RPC, not hand-rolled push** — Typed `WsRpcGroup` with ~70 methods. Streaming members replace broadcast bus.
 
-4. **Shared client runtime** — Web and mobile compose `@t3tools/client-runtime` identically; they differ only in the platform layer.
+4. **Shared client runtime** — Web and mobile compose `@speg/client-runtime` identically; they differ only in the platform layer.
 
 5. **Provider-neutral architecture** — `ProviderService` routes operations without knowing which agent is behind them. Provider-specific divergence uses `getCapabilities()`.
 
@@ -123,7 +123,7 @@ Agent CLIs: Codex, Claude, Cursor, Grok, OpenCode
 ### 4.1 Entry Point & CLI
 
 **File**: `apps/server/src/bin.ts`
-- Defines CLI via `Command.make("t3")` with subcommands: `start`, `serve`, `pair`, `auth`, `project`, `service`, `connect`
+- Defines CLI via `Command.make("speg")` with subcommands: `start`, `serve`, `pair`, `auth`, `project`, `service`, `connect`
 - Default handler calls `runServerCommand(flags)` from `cli/server.ts`
 
 ### 4.2 Server Startup Sequence
@@ -322,10 +322,10 @@ ChatView → DiffWorkerPoolProvider → ChatViewContent
 
 ### 6.1 Architecture
 - **Electron 41.5.0** shell wrapping the web app
-- Embeds and manages its own `t3` server process
+- Embeds and manages its own `speg` server process
 - `DesktopBackendManager` spawns server, resolves port (default 3773), provides auto-restart with exponential backoff
 - `DesktopBackendPool` supports concurrent backends (Windows primary + optional WSL)
-- Custom `t3code://` protocol for loading the renderer
+- Custom `speg://` protocol for loading the renderer
 
 ### 6.2 IPC Bridge
 - Typed Effect-based IPC (`DesktopIpc` + `preload.ts`)
@@ -333,7 +333,7 @@ ChatView → DiffWorkerPoolProvider → ChatViewContent
 - **80+ IPC channels**: folder picking, native dialogs, theme, context menus, external URLs, window state, auto-updates, branding, client settings, connection catalog, SSH, server exposure, WSL control, in-app browser preview
 
 ### 6.3 Platform-Exclusive Features
-- **SSH-managed remote environments** — `@t3tools/ssh` + `DesktopSshEnvironment`
+- **SSH-managed remote environments** — `@speg/ssh` + `DesktopSshEnvironment`
 - **WSL backend** — second server instance inside WSL2
 - **In-app browser preview** — Chromium `WebContents` with Playwright automation
 - **Auto-updates** — `electron-updater` with channel selection
@@ -348,7 +348,7 @@ ChatView → DiffWorkerPoolProvider → ChatViewContent
 ### 7.1 Tech Stack
 - **React Native 0.85.3** + **Expo SDK 56**
 - Navigation: `@react-navigation/native-stack`
-- Native modules: `t3-composer-editor`, `t3-markdown-text`, `t3-review-diff`, `t3-terminal`
+- Native modules: `speg-composer-editor`, `speg-markdown-text`, `speg-review-diff`, `speg-terminal`
 - SQLite: `expo-sqlite` for cached snapshots
 - Push: `expo-notifications` + `expo-widgets` (Live Activities on iOS)
 
@@ -363,13 +363,13 @@ ChatView → DiffWorkerPoolProvider → ChatViewContent
 | Terminal | Native view module |
 | Review diffs | Native diff rendering with Shiki |
 | Markdown | `react-native-nitro-markdown` |
-| Push | Live Activities + remote push via T3 Connect |
+| Push | Live Activities + remote push via SPEG Connect |
 | Offline | `thread-outbox-manager.ts` queues operations offline |
 | UI | Liquid-glass effects, haptics, font scaling |
 | Background | Reports client activity on 25s interval |
 
 ### 7.3 Shared with Web
-Both use `@t3tools/client-runtime` identically for:
+Both use `@speg/client-runtime` identically for:
 - Connection supervisor (retry with exponential backoff)
 - RPC sessions
 - Atom-based domain state
@@ -379,7 +379,7 @@ Both use `@t3tools/client-runtime` identically for:
 
 ## 8. Packages
 
-### 8.1 @t3tools/contracts (Root Dependency)
+### 8.1 @speg/contracts (Root Dependency)
 
 **Role**: Effect/Schema wire types + small derived helpers. No heavy runtime logic.
 
@@ -394,7 +394,7 @@ Both use `@t3tools/client-runtime` identically for:
 - `ForwardCompatibleArray` — silently drops unknown union members for version-skew survival
 - `Relay` contracts — device registration, environment linking, DPoP, push notifications
 
-### 8.2 @t3tools/shared (~50 subpath exports)
+### 8.2 @speg/shared (~50 subpath exports)
 
 **Key modules**:
 - **Workers**: `DrainableWorker` (transactional queue), `KeyedCoalescingWorker` (keyed atomic merge)
@@ -405,7 +405,7 @@ Both use `@t3tools/client-runtime` identically for:
 - **Model**: `model` (selection helpers, default resolution, slug aliases)
 - **Other**: `semver`, `shell`, `git`, `sourceControl`, `serverSettings`, `keybindings`, `searchRanking`, `qrCode` (42KB), `preview`, `hostProcess`, `cliArgs`, `connectAuth`, `path`, `devHome`, `devProxy`
 
-### 8.3 @t3tools/client-runtime (Subpath-only exports)
+### 8.3 @speg/client-runtime (Subpath-only exports)
 
 **Role**: Shared client behavior for web and mobile. No root export.
 
@@ -434,8 +434,8 @@ Both use `@t3tools/client-runtime` identically for:
 |---|---|
 | `effect-acp` | Effect-idiomatic OpenAI ACP client for Codex |
 | `effect-codex-app-server` | Effect-idiomatic Codex App Server protocol client |
-| `@t3tools/ssh` | SSH auth, commands, config, errors, tunneling |
-| `@t3tools/tailscale` | Tailscale integration |
+| `@speg/ssh` | SSH auth, commands, config, errors, tunneling |
+| `@speg/tailscale` | Tailscale integration |
 
 ---
 
@@ -633,7 +633,7 @@ authorizeEffect(currentSession.scopes, requiredScopeForRpcMethod[method])
 
 - **Bearer tokens**: Manually paired direct HTTP/WS
 - **DPoP tokens**: Relay-based with bootstrap credential exchange
-- **SSH tunnels**: Desktop-only, provisioned via `@t3tools/ssh`
+- **SSH tunnels**: Desktop-only, provisioned via `@speg/ssh`
 - **Tailscale**: Endpoint provider for bearer path
 
 ---
@@ -706,7 +706,7 @@ Pluggable hosting layer:
 ### 16.1 Tooling
 - **Package manager**: pnpm 11.10.0
 - **Build toolchain**: `vite-plus` (vp)
-- **Linter**: oxlint with custom `oxlint-plugin-t3code` (3 rules)
+- **Linter**: oxlint with custom `oxlint-plugin-speg` (3 rules)
 - **Formatter**: vite-plus formatter
 - **Type checker**: TypeScript 6 + Effect language service (20+ diagnostic rules)
 - **Tests**: vitest (node environment, 60s timeouts)
@@ -716,7 +716,7 @@ Pluggable hosting layer:
 - `vp i` — install dependencies
 - `vp run dev` — start server + web
 - `vp test run <files>` — run targeted tests
-- Worktree-isolated `.t3` state directory
+- Worktree-isolated `.speg` state directory
 - Stable ports derived from worktree path
 
 ### 16.3 Custom Lint Rules

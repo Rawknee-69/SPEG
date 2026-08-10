@@ -1,5 +1,5 @@
-import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import { scopedThreadKey } from "@speg/client-runtime/environment";
+import type { ScopedThreadRef } from "@speg/contracts";
 import { create } from "zustand";
 
 export interface PreviewMiniPlayerPosition {

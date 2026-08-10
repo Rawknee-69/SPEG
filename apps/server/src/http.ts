@@ -3,9 +3,9 @@ import {
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
   EnvironmentHttpApi,
-} from "@t3tools/contracts";
-import { isDevProxiedPath } from "@t3tools/shared/devProxy";
-import { decodeOtlpTraceRecords } from "@t3tools/shared/observability";
+} from "@speg/contracts";
+import { isDevProxiedPath } from "@speg/shared/devProxy";
+import { decodeOtlpTraceRecords } from "@speg/shared/observability";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -45,7 +45,7 @@ const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
 /** Restart the local cacm-daemon sidecar (SPEG CACM). */
 const CACM_DAEMON_RESTART_PATH = "/api/speg/cacm/restart";
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
-const DESKTOP_RENDERER_ORIGINS = ["t3code://app", "t3code-dev://app"];
+const DESKTOP_RENDERER_ORIGINS = ["speg://app", "speg-dev://app"];
 export const httpCompressionLayer = HttpRouter.middleware(HttpMiddleware.compression(), {
   global: true,
 });
@@ -57,7 +57,7 @@ export const browserApiCorsLayer = Layer.unwrap(
     // Dev uses credentialed requests from Vite or the Electron custom origin, so both must be
     // explicit. Packaged desktop omits credentials and uses Effect's default wildcard origin.
     //
-    // T3CODE_DEV_ALLOWED_ORIGINS covers dev servers reached from a second
+    // SPEG_DEV_ALLOWED_ORIGINS covers dev servers reached from a second
     // origin — a tailnet name, a LAN IP, a phone. Browser dev normally proxies
     // through Vite and is same-origin (no preflight at all), so this is a
     // safety net for the desktop renderer and any direct-to-backend caller.

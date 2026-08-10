@@ -1,7 +1,7 @@
 import { SymbolView } from "../../components/AppSymbol";
-import { connectionStatusText } from "@t3tools/client-runtime/connection";
-import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
-import type { EnvironmentId } from "@t3tools/contracts";
+import { connectionStatusText } from "@speg/client-runtime/connection";
+import type { AtomCommandResult } from "@speg/client-runtime/state/runtime";
+import type { EnvironmentId } from "@speg/contracts";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useCallback, useState } from "react";
@@ -75,7 +75,7 @@ export function ConnectionEnvironmentRow(props: {
         />
 
         <View className="flex-1 gap-0.5">
-          <Text className="text-base font-t3-bold leading-snug text-foreground" numberOfLines={1}>
+          <Text className="text-base font-speg-bold leading-snug text-foreground" numberOfLines={1}>
             {props.environment.environmentLabel}
           </Text>
           <Text className="text-xs text-foreground-muted" numberOfLines={1}>
@@ -133,12 +133,12 @@ export function ConnectionEnvironmentRow(props: {
         >
           {props.environment.isRelayManaged ? (
             <Text className="text-sm text-foreground-muted">
-              Managed by T3 Connect. Tunnel details update automatically.
+              Managed by SPEG Connect. Tunnel details update automatically.
             </Text>
           ) : (
             <>
               <View className="gap-1.5">
-                <Text className="text-2xs font-t3-bold tracking-[0.8px] uppercase text-foreground-muted">
+                <Text className="text-2xs font-speg-bold tracking-[0.8px] uppercase text-foreground-muted">
                   Label
                 </Text>
                 <TextInput
@@ -152,7 +152,7 @@ export function ConnectionEnvironmentRow(props: {
               </View>
 
               <View className="gap-1.5">
-                <Text className="text-2xs font-t3-bold tracking-[0.8px] uppercase text-foreground-muted">
+                <Text className="text-2xs font-speg-bold tracking-[0.8px] uppercase text-foreground-muted">
                   URL
                 </Text>
                 <TextInput
@@ -175,7 +175,7 @@ export function ConnectionEnvironmentRow(props: {
                 onPress={handleSave}
               >
                 <SymbolView name="checkmark" size={13} tintColor={primaryFg} type="monochrome" />
-                <Text className="text-xs font-t3-bold tracking-[0.8px] uppercase text-primary-foreground">
+                <Text className="text-xs font-speg-bold tracking-[0.8px] uppercase text-primary-foreground">
                   Save
                 </Text>
               </Pressable>

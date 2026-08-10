@@ -1,5 +1,5 @@
 {
-  "name": "@t3tools/client-runtime",
+  "name": "@speg/client-runtime",
   "private": true,
   "type": "module",
   "exports": {
@@ -149,8 +149,8 @@
     "test": "vp test run"
   },
   "dependencies": {
-    "@t3tools/contracts": "workspace:*",
-    "@t3tools/shared": "workspace:*",
+    "@speg/contracts": "workspace:*",
+    "@speg/shared": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

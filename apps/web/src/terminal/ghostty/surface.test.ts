@@ -183,9 +183,9 @@ describe("terminalLinkAtColumn", () => {
       cells: [
         { ...cell("🙂"), wide: 1 },
         { ...cell(""), wide: 2 },
-        ...Array.from("https://t3.code", (character) => cell(character)),
+        ...Array.from("https://speg.code", (character) => cell(character)),
       ],
-      text: "🙂 https://t3.code",
+      text: "🙂 https://speg.code",
       isWrapContinuation: false,
       wrapsToNext: true,
     };

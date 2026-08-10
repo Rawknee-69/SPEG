@@ -1,5 +1,5 @@
 {
-  "name": "t3",
+  "name": "speg",
   "version": "0.0.32",
   "license": "MIT",
   "repository": {
@@ -8,7 +8,7 @@
     "directory": "apps/server"
   },
   "bin": {
-    "t3": "./dist/bin.mjs"
+    "speg": "./dist/bin.mjs"
   },
   "files": [
     "dist"
@@ -36,10 +36,10 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "@t3tools/contracts": "workspace:*",
-    "@t3tools/shared": "workspace:*",
-    "@t3tools/tailscale": "workspace:*",
-    "@t3tools/web": "workspace:*",
+    "@speg/contracts": "workspace:*",
+    "@speg/shared": "workspace:*",
+    "@speg/tailscale": "workspace:*",
+    "@speg/web": "workspace:*",
     "@types/bun": "1.3.14",
     "@types/node": "catalog:",
     "effect-acp": "workspace:*",

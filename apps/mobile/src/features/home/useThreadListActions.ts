@@ -1,5 +1,5 @@
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import { canSettle, canSnooze } from "@t3tools/client-runtime/state/thread-settled";
+import type { EnvironmentThreadShell } from "@speg/client-runtime/state/shell";
+import { canSettle, canSnooze } from "@speg/client-runtime/state/thread-settled";
 import * as Cause from "effect/Cause";
 import * as Haptics from "expo-haptics";
 import { useCallback, useRef } from "react";

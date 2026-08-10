@@ -15,7 +15,7 @@ import {
   type SpegContextInjectionMode,
   type SpegSettings,
   type SpegStorageBackend,
-} from "@t3tools/contracts/settings";
+} from "@speg/contracts/settings";
 import { useClientSettings, useUpdateClientSettings } from "~/hooks/useSettings";
 import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";

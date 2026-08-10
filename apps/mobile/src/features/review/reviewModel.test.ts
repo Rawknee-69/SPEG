@@ -5,7 +5,7 @@ import {
   TurnId,
   type OrchestrationCheckpointSummary,
   type ReviewDiffPreviewSource,
-} from "@t3tools/contracts";
+} from "@speg/contracts";
 
 import {
   buildReviewListItems,
@@ -22,7 +22,7 @@ function makeCheckpoint(
     Pick<OrchestrationCheckpointSummary, "turnId" | "checkpointTurnCount" | "completedAt">,
 ): OrchestrationCheckpointSummary {
   return {
-    checkpointRef: `refs/t3/checkpoints/thread/${input.checkpointTurnCount}` as any,
+    checkpointRef: `refs/speg/checkpoints/thread/${input.checkpointTurnCount}` as any,
     status: "ready",
     files: [],
     assistantMessageId: MessageId.make(`msg-${input.checkpointTurnCount}`),

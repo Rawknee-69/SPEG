@@ -1,5 +1,5 @@
 {
-  "name": "@t3tools/shared",
+  "name": "@speg/shared",
   "private": true,
   "type": "module",
   "exports": {
@@ -91,9 +91,9 @@
       "types": "./src/projectScripts.ts",
       "import": "./src/projectScripts.ts"
     },
-    "./t3ProjectFile": {
-      "types": "./src/t3ProjectFile.ts",
-      "import": "./src/t3ProjectFile.ts"
+    "./spegProjectFile": {
+      "types": "./src/spegProjectFile.ts",
+      "import": "./src/spegProjectFile.ts"
     },
     "./orchestrationTiming": {
       "types": "./src/orchestrationTiming.ts",
@@ -215,7 +215,7 @@
   "dependencies": {
     "@noble/curves": "catalog:",
     "@noble/hashes": "catalog:",
-    "@t3tools/contracts": "workspace:*",
+    "@speg/contracts": "workspace:*",
     "effect": "catalog:",
     "jose": "catalog:",
     "yaml": "catalog:"

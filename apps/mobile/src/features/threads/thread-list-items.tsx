@@ -2,8 +2,8 @@ import { useRecyclingState } from "@legendapp/list/react-native";
 import type {
   EnvironmentProject,
   EnvironmentThreadShell,
-} from "@t3tools/client-runtime/state/shell";
-import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
+} from "@speg/client-runtime/state/shell";
+import type { EnvironmentThreadSearchMatch } from "@speg/client-runtime/state/thread-search";
 import type { MenuAction } from "@react-native-menu/menu";
 import { SymbolView } from "../../components/AppSymbol";
 import { memo, useCallback, useMemo, type ComponentProps } from "react";
@@ -142,8 +142,8 @@ export const ThreadListGroupHeader = memo(function ThreadListGroupHeader(props: 
         <Text
           className={
             compact
-              ? "flex-shrink text-base font-t3-bold tracking-[0.2px] text-foreground-muted"
-              : "flex-shrink text-sm font-t3-bold tracking-[0.2px] text-foreground-muted"
+              ? "flex-shrink text-base font-speg-bold tracking-[0.2px] text-foreground-muted"
+              : "flex-shrink text-sm font-speg-bold tracking-[0.2px] text-foreground-muted"
           }
           numberOfLines={1}
         >
@@ -152,8 +152,8 @@ export const ThreadListGroupHeader = memo(function ThreadListGroupHeader(props: 
         <Text
           className={
             compact
-              ? "flex-1 text-sm font-t3-medium text-foreground-tertiary"
-              : "flex-1 text-xs font-t3-medium text-foreground-tertiary"
+              ? "flex-1 text-sm font-speg-medium text-foreground-tertiary"
+              : "flex-1 text-xs font-speg-medium text-foreground-tertiary"
           }
         >
           {props.threadCount}
@@ -227,8 +227,8 @@ export const ThreadListShowMoreRow = memo(function ThreadListShowMoreRow(props: 
         <Text
           className={
             compact
-              ? "text-sm font-t3-medium text-foreground-muted"
-              : "text-xs font-t3-medium text-foreground-muted"
+              ? "text-sm font-speg-medium text-foreground-muted"
+              : "text-xs font-speg-medium text-foreground-muted"
           }
         >
           {label}
@@ -294,7 +294,7 @@ export const PendingTaskListRow = memo(function PendingTaskListRow(props: {
 
   const statusPill = (
     <View className="rounded-full bg-zinc-500/12 px-1.5 py-0.5 dark:bg-zinc-500/16">
-      <Text className="text-3xs font-t3-bold text-zinc-600 dark:text-zinc-300">Pending</Text>
+      <Text className="text-3xs font-speg-bold text-zinc-600 dark:text-zinc-300">Pending</Text>
     </View>
   );
 
@@ -345,7 +345,7 @@ export const PendingTaskListRow = memo(function PendingTaskListRow(props: {
           }}
         >
           <View className="flex-row items-center justify-between gap-2">
-            <Text className="flex-1 text-lg font-t3-bold text-foreground" numberOfLines={1}>
+            <Text className="flex-1 text-lg font-speg-bold text-foreground" numberOfLines={1}>
               {pendingTask.title}
             </Text>
             <View className="flex-row items-center gap-2">
@@ -381,7 +381,7 @@ export const PendingTaskListRow = memo(function PendingTaskListRow(props: {
     >
       <View className="gap-[3px]">
         <View className="flex-row items-center justify-between gap-2">
-          <Text className="flex-1 text-base font-t3-medium text-foreground" numberOfLines={1}>
+          <Text className="flex-1 text-base font-speg-medium text-foreground" numberOfLines={1}>
             {pendingTask.title}
           </Text>
           <View className="flex-row items-center gap-2">
@@ -489,7 +489,7 @@ export const ThreadListRow = memo(function ThreadListRow(props: {
 
   const statusPill = effectiveStatus ? (
     <View className={`${effectiveStatus.pillClassName} rounded-full px-1.5 py-0.5`}>
-      <Text className={`text-3xs font-t3-bold ${effectiveStatus.textClassName}`}>
+      <Text className={`text-3xs font-speg-bold ${effectiveStatus.textClassName}`}>
         {effectiveStatus.label}
       </Text>
     </View>
@@ -520,7 +520,7 @@ export const ThreadListRow = memo(function ThreadListRow(props: {
               color={selected ? "#ffffff" : pullRequestTintColor(pr.state, colorScheme)}
             />
             <Text
-              className={`${compact ? "text-sm" : "text-xs"} font-t3-medium ${
+              className={`${compact ? "text-sm" : "text-xs"} font-speg-medium ${
                 selected ? "text-white" : pr.textClassName
               }`}
             >
@@ -560,7 +560,7 @@ export const ThreadListRow = memo(function ThreadListRow(props: {
             }}
           >
             <View className="flex-row items-center justify-between gap-2">
-              <Text className="flex-1 text-lg font-t3-bold text-foreground" numberOfLines={1}>
+              <Text className="flex-1 text-lg font-speg-bold text-foreground" numberOfLines={1}>
                 {thread.title}
               </Text>
               <View className="flex-row items-center gap-2">
@@ -615,7 +615,7 @@ export const ThreadListRow = memo(function ThreadListRow(props: {
           <View className="flex-row items-center justify-between gap-2">
             <Text
               className={cn(
-                "flex-1 text-base font-t3-medium",
+                "flex-1 text-base font-speg-medium",
                 selected ? "text-user-bubble-foreground" : "text-foreground",
               )}
               numberOfLines={1}

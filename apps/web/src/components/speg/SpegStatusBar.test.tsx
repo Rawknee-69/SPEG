@@ -1,6 +1,6 @@
 import { Children, isValidElement, type ReactNode } from "react";
-import type { SpegSettings } from "@t3tools/contracts/settings";
-import { DEFAULT_SPEG_SETTINGS } from "@t3tools/contracts/settings";
+import type { SpegSettings } from "@speg/contracts/settings";
+import { DEFAULT_SPEG_SETTINGS } from "@speg/contracts/settings";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { SpegStatusBar, type SpegStatusBarProps } from "./SpegStatusBar";

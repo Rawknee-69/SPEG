@@ -8,7 +8,7 @@ import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 
-import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { HostProcessEnvironment, HostProcessPlatform } from "@speg/shared/hostProcess";
 import * as ServerConfig from "../config.ts";
 import * as CacmDaemonProcess from "./CacmDaemonProcess.ts";
 
@@ -85,7 +85,7 @@ function makeServerConfig(overrides: Partial<ServerConfig.ServerConfig["Service"
     otlpTracesUrl: undefined,
     otlpMetricsUrl: undefined,
     otlpExportIntervalMs: 10_000,
-    otlpServiceName: "t3-server",
+    otlpServiceName: "speg-server",
     cwd: process.cwd(),
     baseDir: process.cwd(),
     stateDir: "/tmp/cacm-test/state",
@@ -162,14 +162,14 @@ describe("resolveBinaryCandidates", () => {
     assert.deepEqual(
       CacmDaemonProcess.resolveBinaryCandidates(
         "win32",
-        "E:/SPEG/t3code/apps/server/src/speg",
-        { T3CODE_CACM_DAEMON_PATH: "C:/custom/cacm-daemon.exe" },
+        "E:/SPEG/speg/apps/server/src/speg",
+        { SPEG_CACM_DAEMON_PATH: "C:/custom/cacm-daemon.exe" },
       ),
       [
         "C:/custom/cacm-daemon.exe",
-        "E:/SPEG/t3code/apps/server/src/speg/../../../../cacm/target/release/cacm-daemon.exe",
-        "E:/SPEG/t3code/apps/server/src/speg/../../../../cacm/target/debug/cacm-daemon.exe",
-        "E:/SPEG/t3code/apps/server/src/speg/cacm-daemon.exe",
+        "E:/SPEG/speg/apps/server/src/speg/../../../../cacm/target/release/cacm-daemon.exe",
+        "E:/SPEG/speg/apps/server/src/speg/../../../../cacm/target/debug/cacm-daemon.exe",
+        "E:/SPEG/speg/apps/server/src/speg/cacm-daemon.exe",
       ],
     );
   });
@@ -226,7 +226,7 @@ describe("CacmDaemonProcess start", () => {
     Effect.gen(function* () {
       let spawned = false;
       const status = yield* runStart({
-        env: { T3CODE_CACM_DAEMON_AUTOSTART: "0" },
+        env: { SPEG_CACM_DAEMON_AUTOSTART: "0" },
         onSpawn: () => {
           spawned = true;
         },
@@ -260,7 +260,7 @@ describe("CacmDaemonProcess start", () => {
 
       const status = yield* Effect.scoped(
         runStart({
-          env: { T3CODE_CACM_DAEMON_PATH: process.execPath, PORT: "5733" },
+          env: { SPEG_CACM_DAEMON_PATH: process.execPath, PORT: "5733" },
           config: { mode: "web", devUrl: new URL("http://localhost:5733") },
           httpStatus: 503,
           onSpawn: (command) => {
@@ -298,7 +298,7 @@ describe("CacmDaemonProcess start", () => {
     Effect.gen(function* () {
       const status = yield* Effect.scoped(
         runStart({
-          env: { T3CODE_CACM_DAEMON_PATH: process.execPath },
+          env: { SPEG_CACM_DAEMON_PATH: process.execPath },
           httpStatus: 503,
           failSpawn: true,
         }),
@@ -336,7 +336,7 @@ describe("CacmDaemonProcess start", () => {
                   }),
                   Layer.succeed(HostProcessPlatform, "win32"),
                   Layer.succeed(HostProcessEnvironment, {
-                    T3CODE_CACM_DAEMON_PATH: process.execPath,
+                    SPEG_CACM_DAEMON_PATH: process.execPath,
                     PORT: "5733",
                   }),
                   makeSpawner({
@@ -382,7 +382,7 @@ describe("CacmDaemonProcess start", () => {
                   }),
                   Layer.succeed(HostProcessPlatform, "win32"),
                   Layer.succeed(HostProcessEnvironment, {
-                    T3CODE_CACM_DAEMON_PATH: process.execPath,
+                    SPEG_CACM_DAEMON_PATH: process.execPath,
                     PORT: "5733",
                   }),
                   makeSpawner({
@@ -450,7 +450,7 @@ describe("CacmDaemonProcess start", () => {
                   }),
                   Layer.succeed(HostProcessPlatform, "win32"),
                   Layer.succeed(HostProcessEnvironment, {
-                    T3CODE_CACM_DAEMON_PATH: process.execPath,
+                    SPEG_CACM_DAEMON_PATH: process.execPath,
                     PORT: "5733",
                   }),
                   makeSpawner({

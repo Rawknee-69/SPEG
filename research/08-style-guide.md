@@ -1,4 +1,4 @@
-# T3 Code / SPEG — Comprehensive Style Guide
+# SPEG / SPEG — Comprehensive Style Guide
 
 > Extracted from: AGENTS.md, tsconfig.base.json, vite.config.ts, oxlint rules, LLMS.md, actual source code
 > **Every agent MUST follow these rules. Violations = rejected code.**
@@ -23,10 +23,10 @@
 
 ```typescript
 // 1. Type-only imports from contracts
-import type { ThreadId, SessionId } from "@t3tools/contracts";
+import type { ThreadId, SessionId } from "@speg/contracts";
 
 // 2. Runtime value imports from contracts
-import { OrchestrationCommand } from "@t3tools/contracts";
+import { OrchestrationCommand } from "@speg/contracts";
 
 // 3. Effect namespace imports (alphabetical)
 import * as Cause from "effect/Cause";
@@ -53,7 +53,7 @@ import { toParseError } from "./Errors.ts";
 import { describe, expect, it } from "vite-plus/test";
 ```
 
-**Forbidden**: `import * as os from "node:os"` — must be `NodeOS`. Namespace aliases enforced by `t3code/namespace-node-imports` rule.
+**Forbidden**: `import * as os from "node:os"` — must be `NodeOS`. Namespace aliases enforced by `speg/namespace-node-imports` rule.
 
 ---
 
@@ -340,7 +340,7 @@ vp lint
 | `Effect.runPromise` in new tests | Use `@effect/vitest` with `it.effect` |
 | `Schema.decodeSync(...)` in function body | Recompiles on every call. Hoist to module scope. |
 | `import * as fs from "node:fs"` | Must use `NodeFS`. Enforced by namespace lint rule. |
-| Barrel imports from `@t3tools/client-runtime` | Use explicit subpath imports |
+| Barrel imports from `@speg/client-runtime` | Use explicit subpath imports |
 | `any` type anywhere | Type safety violation |
 | `Date.now()`, `Math.random()`, `console.log`, `fetch` in Effect | Use Effect services |
 | `pkill -f` / PID-by-name | May kill developer's agent |

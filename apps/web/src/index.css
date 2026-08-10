@@ -11,29 +11,29 @@ html[data-mobile-composer-route-transition="true"]::view-transition-new(root) {
   animation: none;
 }
 
-html[data-mobile-composer-route-transition="true"]::view-transition-group(t3-mobile-composer) {
+html[data-mobile-composer-route-transition="true"]::view-transition-group(speg-mobile-composer) {
   animation-duration: 180ms;
   animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-html[data-mobile-composer-route-transition="true"]::view-transition-image-pair(t3-mobile-composer) {
+html[data-mobile-composer-route-transition="true"]::view-transition-image-pair(speg-mobile-composer) {
   isolation: isolate;
 }
 
-html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobile-composer) {
-  animation: t3-mobile-composer-old 180ms linear both;
+html[data-mobile-composer-route-transition="true"]::view-transition-old(speg-mobile-composer) {
+  animation: speg-mobile-composer-old 180ms linear both;
   mix-blend-mode: normal;
 }
 
-html[data-mobile-composer-route-transition="true"]::view-transition-new(t3-mobile-composer) {
-  animation: t3-mobile-composer-new 180ms linear both;
+html[data-mobile-composer-route-transition="true"]::view-transition-new(speg-mobile-composer) {
+  animation: speg-mobile-composer-new 180ms linear both;
   mix-blend-mode: normal;
 }
 
 /* The expanded and compact composers have different internal layouts. Use a
    brief crossfade while their shared wrapper moves so the layout change does
    not read as a single-frame cut. */
-@keyframes t3-mobile-composer-old {
+@keyframes speg-mobile-composer-old {
   0%,
   35% {
     opacity: 1;
@@ -45,7 +45,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-new(t3-mobil
   }
 }
 
-@keyframes t3-mobile-composer-new {
+@keyframes speg-mobile-composer-new {
   0%,
   35% {
     opacity: 0;
@@ -57,16 +57,16 @@ html[data-mobile-composer-route-transition="true"]::view-transition-new(t3-mobil
   }
 }
 
-html[data-mobile-composer-route-transition="true"]::view-transition-group(t3-mobile-draft-headline) {
+html[data-mobile-composer-route-transition="true"]::view-transition-group(speg-mobile-draft-headline) {
   animation-duration: 130ms;
 }
 
-html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobile-draft-headline) {
-  animation: t3-mobile-draft-headline-exit 130ms cubic-bezier(0.4, 0, 1, 1) both;
+html[data-mobile-composer-route-transition="true"]::view-transition-old(speg-mobile-draft-headline) {
+  animation: speg-mobile-draft-headline-exit 130ms cubic-bezier(0.4, 0, 1, 1) both;
   mix-blend-mode: normal;
 }
 
-@keyframes t3-mobile-draft-headline-exit {
+@keyframes speg-mobile-draft-headline-exit {
   from {
     opacity: 1;
     transform: translateY(0);
@@ -1158,7 +1158,7 @@ html.dark[data-theme-id] {
   --terminal-scrollbar-hover: var(--app-theme-terminal-scrollbar-hover);
 }
 
-/* T3 Chat's composer is a translucent lift over --chat-background. Route its
+/* SPEG Chat's composer is a translucent lift over --chat-background. Route its
    measured flattened color through the raised-surface role instead of deriving
    another tint from the canvas, which made the dark composer too red. */
 html[data-theme-id] .chat-composer-glass-shell {
@@ -1174,8 +1174,8 @@ html.dark[data-theme-id] .chat-composer-glass-shell {
   --chat-composer-highlight: color-mix(in srgb, var(--app-theme-input) 12%, transparent);
 }
 
-html.dark[data-theme-id="t3-chat"] .chat-composer-glass-shell {
-  /* T3 Chat's visible composer edge is a dark plum, not the stock translucent
+html.dark[data-theme-id="speg-chat"] .chat-composer-glass-shell {
+  /* SPEG Chat's visible composer edge is a dark plum, not the stock translucent
      white outline. Its highlight is derived from --chat-input-gradient. */
   --chat-composer-outline: #241e28;
   --chat-composer-highlight: color-mix(in srgb, #432d48 12%, transparent);
@@ -1333,21 +1333,21 @@ html[data-theme-id] .chat-markdown .chat-markdown-chrome-action {
   color: color-mix(in srgb, var(--code-foreground) 72%, transparent);
 }
 
-/* T3 Chat renders inline code and compact chat artifacts with its translucent
+/* SPEG Chat renders inline code and compact chat artifacts with its translucent
    secondary surface flattened over the light chat canvas. The raw muted and
    secondary tokens are substantially darker than those visible pixels. */
-html[data-theme-id="t3-chat"]:not(.dark) .chat-markdown :not(pre) > code,
-html[data-theme-id="t3-chat"]:not(.dark) [data-changed-files-state],
-html[data-theme-id="t3-chat"]:not(.dark) [data-changed-files-header] {
+html[data-theme-id="speg-chat"]:not(.dark) .chat-markdown :not(pre) > code,
+html[data-theme-id="speg-chat"]:not(.dark) [data-changed-files-state],
+html[data-theme-id="speg-chat"]:not(.dark) [data-changed-files-header] {
   background-color: var(--message-surface);
 }
 
-html[data-theme-id="t3-chat"]:not(.dark) .chat-markdown :not(pre) > code,
-html[data-theme-id="t3-chat"]:not(.dark) [data-changed-files-state] {
+html[data-theme-id="speg-chat"]:not(.dark) .chat-markdown :not(pre) > code,
+html[data-theme-id="speg-chat"]:not(.dark) [data-changed-files-state] {
   border-color: transparent;
 }
 
-html[data-theme-id="t3-chat"]:not(.dark) .chat-markdown :not(pre) > code {
+html[data-theme-id="speg-chat"]:not(.dark) .chat-markdown :not(pre) > code {
   color: var(--message-foreground);
 }
 
@@ -1391,9 +1391,9 @@ html.dark[data-theme-id] [data-app-sidebar] {
   border-color: color-mix(in srgb, var(--sidebar-foreground) 8%, transparent);
 }
 
-/* T3 Chat's panel divider is deliberately pink, and its resize affordance
+/* SPEG Chat's panel divider is deliberately pink, and its resize affordance
    keeps that color while hovered. Do not neutralize this branded edge. */
-html.dark[data-theme-id="t3-chat"] [data-app-sidebar] {
+html.dark[data-theme-id="speg-chat"] [data-app-sidebar] {
   border-color: var(--sidebar-border);
 }
 
@@ -1460,10 +1460,10 @@ body {
   --surface-grain-size: 256px 256px;
 }
 
-/* The live T3 Chat texture is a 128px grayscale tile with a constant 7/255
+/* The live SPEG Chat texture is a 128px grayscale tile with a constant 7/255
    alpha. Keep our procedural texture cheap while matching that scale and
    strength for the branded preset. */
-html[data-theme-id="t3-chat"] {
+html[data-theme-id="speg-chat"] {
   --surface-grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 128 128' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.02745'/%3E%3C/svg%3E");
   --surface-grain-size: 128px 128px;
 }
@@ -1548,11 +1548,11 @@ code {
   }
 }
 
-.t3-ghostty-canvas {
+.speg-ghostty-canvas {
   cursor: text;
 }
 
-.t3-ghostty-scrollbar {
+.speg-ghostty-scrollbar {
   position: absolute;
   z-index: 1;
   top: 4px;
@@ -1563,7 +1563,7 @@ code {
   touch-action: none;
 }
 
-.t3-ghostty-scrollbar-thumb {
+.speg-ghostty-scrollbar-thumb {
   position: absolute;
   top: 0;
   right: 1px;
@@ -1573,8 +1573,8 @@ code {
   transition: background-color 120ms ease-out;
 }
 
-.t3-ghostty-scrollbar:hover .t3-ghostty-scrollbar-thumb,
-.t3-ghostty-scrollbar:focus-visible .t3-ghostty-scrollbar-thumb {
+.speg-ghostty-scrollbar:hover .speg-ghostty-scrollbar-thumb,
+.speg-ghostty-scrollbar:focus-visible .speg-ghostty-scrollbar-thumb {
   background: var(--app-scrollbar-thumb-hover);
 }
 

@@ -1,0 +1,10 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["SpegTerminalModule"],
+    "podspecPath": "SpegTerminalNative.podspec"
+  },
+  "android": {
+    "modules": ["expo.modules.spegterminal.SpegTerminalModule"]
+  }
+}

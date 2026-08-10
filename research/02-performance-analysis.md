@@ -1,4 +1,4 @@
-# T3 Code — Performance & Resource Analysis
+# SPEG — Performance & Resource Analysis
 
 > Generated: 2026-08-04 | Source: Full repository analysis
 > This document identifies performance bottlenecks, their root causes, and recommended fixes.
@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-T3 Code is architecturally sound but carries significant performance debt from its rapid evolution. The three most impactful bottlenecks are: (1) the serial orchestration command worker creating a single-point-of-contention, (2) synchronous 9-table projection pipeline inside every SQL transaction, and (3) the monolithic ChatView component causing cascading React re-renders. Fixes range from low-effort optimizations (code splitting, worker offloading) to architectural changes (parallel projection, streaming WebSocket batching).
+SPEG is architecturally sound but carries significant performance debt from its rapid evolution. The three most impactful bottlenecks are: (1) the serial orchestration command worker creating a single-point-of-contention, (2) synchronous 9-table projection pipeline inside every SQL transaction, and (3) the monolithic ChatView component causing cascading React re-renders. Fixes range from low-effort optimizations (code splitting, worker offloading) to architectural changes (parallel projection, streaming WebSocket batching).
 
 ---
 
@@ -280,7 +280,7 @@ The wire protocol relies on `ForwardCompatibleArray` and optional capability fla
 
 ## 6. For the New Agent System (Jcode-based)
 
-When building the custom agent system on top of Jcode, avoid these architectural decisions that created bottlenecks in T3 Code:
+When building the custom agent system on top of Jcode, avoid these architectural decisions that created bottlenecks in SPEG:
 
 1. **Don't serialize all commands through one worker.** Use per-session/per-agent command queues with aggregate-level isolation.
 

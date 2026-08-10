@@ -5,7 +5,7 @@ import {
   ThreadId,
   TurnId,
   type ProviderRuntimeEvent,
-} from "@t3tools/contracts";
+} from "@speg/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { runtimeEventToActivities } from "./ProviderRuntimeIngestion.ts";

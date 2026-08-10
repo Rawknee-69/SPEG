@@ -4,7 +4,7 @@
  * The CACM tab in the editor UI talks to a local `cacm-daemon` process over
  * WebSocket (default `ws://localhost:9786/ws`, see `@cacm/sdk`). The daemon
  * is a Rust binary (`cacm/cacm-daemon`) that does not start by itself, so it
- * must be launched alongside the app. This module spawns it whenever the T3
+ * must be launched alongside the app. This module spawns it whenever the SPEG
  * Code server runs — the editor's runtime in every mode: browser dev via
  * `bun run dev`, the desktop app, and local production.
  *
@@ -37,8 +37,8 @@ import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 
-import { DEFAULT_SPEG_CACM_PORT } from "@t3tools/contracts/settings";
-import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { DEFAULT_SPEG_CACM_PORT } from "@speg/contracts/settings";
+import { HostProcessEnvironment, HostProcessPlatform } from "@speg/shared/hostProcess";
 import * as ServerConfig from "../config.ts";
 
 /** The daemon's own default bind address (loopback; the client dials localhost). */
@@ -46,15 +46,15 @@ export const DEFAULT_CACM_DAEMON_BIND_HOST = "127.0.0.1";
 
 /**
  * Env override for the daemon executable path (e.g. a bundled release
- * binary). Mirrors `T3CODE_RESOURCE_MONITOR_PATH`.
+ * binary). Mirrors `SPEG_RESOURCE_MONITOR_PATH`.
  */
-export const CACM_DAEMON_PATH_ENV = "T3CODE_CACM_DAEMON_PATH";
+export const CACM_DAEMON_PATH_ENV = "SPEG_CACM_DAEMON_PATH";
 
 /**
  * Env kill-switch for auto-start. Any of `0`/`false` disables it; the
  * default is on, matching the client-local `speg.cacmAutoStart` default.
  */
-export const CACM_DAEMON_AUTOSTART_ENV = "T3CODE_CACM_DAEMON_AUTOSTART";
+export const CACM_DAEMON_AUTOSTART_ENV = "SPEG_CACM_DAEMON_AUTOSTART";
 
 const HEALTH_PROBE_TIMEOUT = Duration.millis(1500);
 const DAEMON_KILL_TIMEOUT = Duration.seconds(2);
@@ -108,7 +108,7 @@ export class CacmDaemonProcess extends Context.Service<
      */
     readonly restart: Effect.Effect<CacmDaemonStartStatus, never, Scope.Scope>;
   }
->()("t3/speg/CacmDaemonProcess") {}
+>()("speg/speg/CacmDaemonProcess") {}
 
 function binaryName(platform: NodeJS.Platform): string {
   return platform === "win32" ? "cacm-daemon.exe" : "cacm-daemon";

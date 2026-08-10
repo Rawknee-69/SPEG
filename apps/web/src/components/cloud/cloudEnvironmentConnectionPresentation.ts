@@ -1,7 +1,7 @@
 import {
   connectionStatusText,
   type EnvironmentConnectionPresentation,
-} from "@t3tools/client-runtime/connection";
+} from "@speg/client-runtime/connection";
 
 export interface SavedCloudEnvironmentConnectionPresentation {
   readonly buttonLabel: string;

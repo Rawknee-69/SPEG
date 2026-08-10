@@ -11,7 +11,7 @@ import {
   AuthEnvironmentScopes,
   AuthSessionId,
   ServerAuthSessionMethod,
-} from "@t3tools/contracts";
+} from "@speg/contracts";
 
 import {
   type AuthSessionRepositoryError,
@@ -104,7 +104,7 @@ export class AuthSessionRepository extends Context.Service<
       input: SetAuthSessionLastConnectedAtInput,
     ) => Effect.Effect<void, AuthSessionRepositoryError>;
   }
->()("t3/persistence/AuthSessions/AuthSessionRepository") {}
+>()("speg/persistence/AuthSessions/AuthSessionRepository") {}
 
 const AuthSessionDbRow = Schema.Struct({
   sessionId: AuthSessionId,

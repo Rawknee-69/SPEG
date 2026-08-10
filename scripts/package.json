@@ -1,5 +1,5 @@
 {
-  "name": "@t3tools/scripts",
+  "name": "@speg/scripts",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,9 +8,9 @@
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
-    "@t3tools/contracts": "workspace:*",
-    "@t3tools/shared": "workspace:*",
-    "@t3tools/tailscale": "workspace:*",
+    "@speg/contracts": "workspace:*",
+    "@speg/shared": "workspace:*",
+    "@speg/tailscale": "workspace:*",
     "effect": "catalog:",
     "pngjs": "7.0.0",
     "yaml": "catalog:"

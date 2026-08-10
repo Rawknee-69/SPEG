@@ -1,5 +1,5 @@
-import { isTransportConnectionErrorMessage } from "@t3tools/client-runtime/errors";
-import type { EnvironmentShellStatus } from "@t3tools/client-runtime/state/shell";
+import { isTransportConnectionErrorMessage } from "@speg/client-runtime/errors";
+import type { EnvironmentShellStatus } from "@speg/client-runtime/state/shell";
 import {
   CommandId,
   EnvironmentId,
@@ -14,7 +14,7 @@ import {
   type ProjectId as ProjectIdType,
   type ProviderInteractionMode as ProviderInteractionModeType,
   type RuntimeMode as RuntimeModeType,
-} from "@t3tools/contracts";
+} from "@speg/contracts";
 import * as Schema from "effect/Schema";
 
 import { DraftComposerImageAttachmentSchema } from "../lib/composer-image-schema";

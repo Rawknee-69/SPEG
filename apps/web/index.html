@@ -13,10 +13,10 @@
       (() => {
         const LIGHT_BACKGROUND = "#ffffff";
         const DARK_BACKGROUND = "#0a0a0a";
-        const CUSTOM_THEMES_STORAGE_KEY = "t3code:themes:v1";
-        const THEME_FOLLOW_SYSTEM_STORAGE_KEY = "t3code:theme-follow-system";
-        const THEME_APPEARANCE_MODE_STORAGE_KEY = "t3code:theme-appearance-mode";
-        const THEME_HALVES_STORAGE_KEY = "t3code:theme-halves:v1";
+        const CUSTOM_THEMES_STORAGE_KEY = "speg:themes:v1";
+        const THEME_FOLLOW_SYSTEM_STORAGE_KEY = "speg:theme-follow-system";
+        const THEME_APPEARANCE_MODE_STORAGE_KEY = "speg:theme-appearance-mode";
+        const THEME_HALVES_STORAGE_KEY = "speg:theme-halves:v1";
         const SPLASH_COLORS = {
           light: {
             background: "#ffffff",
@@ -50,7 +50,7 @@
         // Keep this small boot-time copy in sync with the built-in palettes so
         // the selected theme is visible before the app has mounted.
         const BUILT_IN_THEME_PALETTES = {
-          "t3-chat": {
+          "speg-chat": {
             light: {
               background: "#fdf7fd",
               foreground: "#501854",
@@ -122,7 +122,7 @@
           },
         };
         // Keep the built-in mode list in sync with the runtime so the selected
-        // T3 Chat palette is visible before React has mounted.
+        // SPEG Chat palette is visible before React has mounted.
         const BUILT_IN_THEME_MODES = Object.fromEntries(
           Object.entries(BUILT_IN_THEME_PALETTES).map(([id, palettes]) => [
             id,
@@ -133,16 +133,16 @@
           "system",
           "light",
           "dark",
-          "t3-chat",
+          "speg-chat",
           "grove",
           "ocean",
           "ember",
           "iris",
-          "t3-chat-dark",
-          "t3-grove",
-          "t3-ocean",
-          "t3-ember",
-          "t3-iris",
+          "speg-chat-dark",
+          "speg-grove",
+          "speg-ocean",
+          "speg-ember",
+          "speg-iris",
         ];
         // Update every theme-color meta so any element another layer added
         // carries the resolved color too.
@@ -199,22 +199,22 @@
         };
 
         try {
-          const storedTheme = window.localStorage.getItem("t3code:theme");
+          const storedTheme = window.localStorage.getItem("speg:theme");
           const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-          // Older builds stored the dark T3 Chat palette as its own theme id
-          // and every maintainer theme under a t3- prefix; keep those
+          // Older builds stored the dark SPEG Chat palette as its own theme id
+          // and every maintainer theme under a speg- prefix; keep those
           // preferences readable. Mirrors the runtime's legacy alias table.
           const LEGACY_THEME_IDS = {
-            "t3-chat-dark": "t3-chat",
-            "t3-grove": "grove",
-            "t3-ocean": "ocean",
-            "t3-ember": "ember",
-            "t3-iris": "iris",
+            "speg-chat-dark": "speg-chat",
+            "speg-grove": "grove",
+            "speg-ocean": "ocean",
+            "speg-ember": "ember",
+            "speg-iris": "iris",
           };
-          const isLegacyT3ChatDark = storedTheme === "t3-chat-dark";
+          const isLegacySpegChatDark = storedTheme === "speg-chat-dark";
           const themeId =
             storedTheme === null ? "" : (LEGACY_THEME_IDS[storedTheme] ?? storedTheme);
-          const legacyMode = isLegacyT3ChatDark ? "dark" : null;
+          const legacyMode = isLegacySpegChatDark ? "dark" : null;
           const builtInModes = BUILT_IN_THEME_MODES[themeId] ?? null;
           const customTheme = builtInModes ? null : findCustomTheme(themeId);
           const themeModes =
@@ -435,14 +435,14 @@
         object-fit: contain;
       }
     </style>
-    <title>T3 Code (Alpha)</title>
+    <title>SPEG (Alpha)</title>
   </head>
 
   <body>
     <div id="root">
       <div id="boot-shell">
-        <div id="boot-shell-card" aria-label="T3 Code splash screen">
-          <img id="boot-shell-logo" src="/apple-touch-icon.png" alt="T3 Code" />
+        <div id="boot-shell-card" aria-label="SPEG splash screen">
+          <img id="boot-shell-logo" src="/apple-touch-icon.png" alt="SPEG" />
         </div>
       </div>
     </div>

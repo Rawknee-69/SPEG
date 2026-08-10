@@ -16,7 +16,7 @@ import {
   resolveThemeAppearance,
   serializeThemeFile,
   subscribeToCustomThemes,
-  T3_CHAT_THEME,
+  SPEG_CHAT_THEME,
   EMBER_THEME,
   GROVE_THEME,
   IRIS_THEME,
@@ -65,7 +65,7 @@ describe("theme files", () => {
     expect(dark.secondaryLabel).toBe(dark.textMuted);
     expect(contrastRatio(light.accentForeground, light.accent)).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(dark.accentForeground, dark.accent)).toBeGreaterThanOrEqual(4.5);
-    // Status colors fall back to T3 Code's standard red and amber rather than
+    // Status colors fall back to SPEG's standard red and amber rather than
     // the flagship palette's, so no generated theme inherits a brand tint.
     const channels = (value: string) =>
       [1, 3, 5].map((index) => Number.parseInt(value.slice(index, index + 2), 16)) as [
@@ -191,11 +191,11 @@ describe("theme files", () => {
   });
 
   it("serializes a theme back into the importable file shape", () => {
-    const serialized = serializeThemeFile(T3_CHAT_THEME);
+    const serialized = serializeThemeFile(SPEG_CHAT_THEME);
     expect(JSON.parse(serialized)).toMatchObject({
       version: THEME_FILE_VERSION,
-      id: T3_CHAT_THEME.id,
-      name: T3_CHAT_THEME.label,
+      id: SPEG_CHAT_THEME.id,
+      name: SPEG_CHAT_THEME.label,
       appearance: "light",
     });
   });
@@ -217,19 +217,19 @@ describe("theme files", () => {
       canvas: "#101827",
       text: "#eef5ff",
     });
-    expect(getThemeModes(T3_CHAT_THEME)).toEqual(["light", "dark"]);
-    expect(resolveThemeAppearance(T3_CHAT_THEME.id, true, true)).toBe("dark");
-    expect(resolveDesktopTheme(T3_CHAT_THEME.id, true)).toBe("system");
-    expect(resolveThemeAppearance(T3_CHAT_THEME.id, false, false, "dark")).toBe("dark");
-    expect(resolveDesktopTheme(T3_CHAT_THEME.id, false, "dark")).toBe("dark");
+    expect(getThemeModes(SPEG_CHAT_THEME)).toEqual(["light", "dark"]);
+    expect(resolveThemeAppearance(SPEG_CHAT_THEME.id, true, true)).toBe("dark");
+    expect(resolveDesktopTheme(SPEG_CHAT_THEME.id, true)).toBe("system");
+    expect(resolveThemeAppearance(SPEG_CHAT_THEME.id, false, false, "dark")).toBe("dark");
+    expect(resolveDesktopTheme(SPEG_CHAT_THEME.id, false, "dark")).toBe("dark");
     expect(JSON.parse(serializeThemeFile(theme)).variants.dark).toMatchObject({
       canvas: "#101827",
       text: "#eef5ff",
     });
   });
 
-  it("keeps the T3 Chat palette faithful and readable", () => {
-    expect(T3_CHAT_THEME.colors).toMatchObject({
+  it("keeps the SPEG Chat palette faithful and readable", () => {
+    expect(SPEG_CHAT_THEME.colors).toMatchObject({
       canvas: "#fdf7fd",
       chrome: "#fdf7fd",
       toolbarBorder: "#efbdeb",
@@ -244,7 +244,7 @@ describe("theme files", () => {
       accentSurface: "#f3e6f5",
       sidebar: "#f2e1f4",
     });
-    expect(T3_CHAT_THEME.variants?.dark).toMatchObject({
+    expect(SPEG_CHAT_THEME.variants?.dark).toMatchObject({
       canvas: "#1f1a24",
       chrome: "#1f1a24",
       surface: "#29232d",
@@ -258,7 +258,7 @@ describe("theme files", () => {
     });
 
     for (const mode of ["light", "dark"] as const) {
-      const colors = getThemeColorsForMode(T3_CHAT_THEME, mode)!;
+      const colors = getThemeColorsForMode(SPEG_CHAT_THEME, mode)!;
       expect(contrastRatio(colors.text, colors.canvas)).toBeGreaterThanOrEqual(7);
       expect(contrastRatio(colors.textMuted, colors.canvas)).toBeGreaterThanOrEqual(4.5);
       expect(contrastRatio(colors.messageForeground, colors.messageSurface)).toBeGreaterThanOrEqual(
@@ -275,7 +275,7 @@ describe("theme files", () => {
   });
 
   it("includes the dual-mode maintainer themes", () => {
-    for (const theme of [T3_CHAT_THEME, GROVE_THEME, OCEAN_THEME, EMBER_THEME, IRIS_THEME]) {
+    for (const theme of [SPEG_CHAT_THEME, GROVE_THEME, OCEAN_THEME, EMBER_THEME, IRIS_THEME]) {
       expect(getThemeDefinition(theme.id)).toBe(theme);
       expect(getThemeModes(theme)).toEqual(["light", "dark"]);
       expect(theme.colors.accent).toMatch(/^#[0-9a-f]{6}$/i);
@@ -286,7 +286,7 @@ describe("theme files", () => {
         expect(colors).not.toBeNull();
         expect(contrastRatio(colors!.text, colors!.canvas)).toBeGreaterThanOrEqual(4.5);
         expect(contrastRatio(colors!.textMuted, colors!.canvas)).toBeGreaterThanOrEqual(4.5);
-        if (theme !== T3_CHAT_THEME) {
+        if (theme !== SPEG_CHAT_THEME) {
           expect(contrastRatio(colors!.textMuted, colors!.canvas)).toBeLessThan(5.5);
           expect(contrastRatio(colors!.textMuted, colors!.canvas)).toBeCloseTo(
             mode === "dark" ? 5.082 : 4.705,
@@ -294,7 +294,7 @@ describe("theme files", () => {
           );
         }
         expect(contrastRatio(colors!.accentForeground, colors!.accent)).toBeGreaterThanOrEqual(
-          theme === T3_CHAT_THEME ? 3 : 4.5,
+          theme === SPEG_CHAT_THEME ? 3 : 4.5,
         );
         expect(
           contrastRatio(colors!.toolbarControlForeground, colors!.toolbarControl),
@@ -304,7 +304,7 @@ describe("theme files", () => {
         ).toBeGreaterThanOrEqual(4.5);
         expect(
           contrastRatio(colors!.messageActionForeground, colors!.messageAction),
-        ).toBeGreaterThanOrEqual(theme === T3_CHAT_THEME ? 3 : 4.5);
+        ).toBeGreaterThanOrEqual(theme === SPEG_CHAT_THEME ? 3 : 4.5);
       }
     }
   });
@@ -436,36 +436,36 @@ describe("stored theme preferences", () => {
     }
   });
 
-  it("resolves the legacy t3-chat-dark preference to dark T3 Chat", () => {
-    expect(getThemeDefinition("t3-chat-dark")).toBe(T3_CHAT_THEME);
-    expect(getThemePreferenceMode("t3-chat-dark")).toBe("dark");
-    expect(resolveThemeAppearance("t3-chat-dark", true, false)).toBe("dark");
-    expect(resolveDesktopTheme("t3-chat-dark", false)).toBe("dark");
-    expect(isKnownThemePreference("t3-chat-dark")).toBe(true);
+  it("resolves the legacy speg-chat-dark preference to dark SPEG Chat", () => {
+    expect(getThemeDefinition("speg-chat-dark")).toBe(SPEG_CHAT_THEME);
+    expect(getThemePreferenceMode("speg-chat-dark")).toBe("dark");
+    expect(resolveThemeAppearance("speg-chat-dark", true, false)).toBe("dark");
+    expect(resolveDesktopTheme("speg-chat-dark", false)).toBe("dark");
+    expect(isKnownThemePreference("speg-chat-dark")).toBe(true);
   });
 
-  it("resolves legacy t3-prefixed ids onto the renamed themes", () => {
+  it("resolves legacy speg-prefixed ids onto the renamed themes", () => {
     for (const [legacy, theme] of [
-      ["t3-grove", GROVE_THEME],
-      ["t3-ocean", OCEAN_THEME],
-      ["t3-ember", EMBER_THEME],
-      ["t3-iris", IRIS_THEME],
+      ["speg-grove", GROVE_THEME],
+      ["speg-ocean", OCEAN_THEME],
+      ["speg-ember", EMBER_THEME],
+      ["speg-iris", IRIS_THEME],
     ] as const) {
       expect(getThemeDefinition(legacy)).toBe(theme);
       expect(isKnownThemePreference(legacy)).toBe(true);
       expect(canonicalThemePreference(legacy)).toBe(theme.id);
     }
     // The dark-variant alias keeps its raw form: it still carries a mode hint.
-    expect(canonicalThemePreference("t3-chat-dark")).toBe("t3-chat-dark");
+    expect(canonicalThemePreference("speg-chat-dark")).toBe("speg-chat-dark");
     // A stored mix that predates the rename resolves to the new ids.
-    expect(parseThemeHalves(JSON.stringify({ light: "t3-ocean", dark: "t3-grove" }))).toEqual({
+    expect(parseThemeHalves(JSON.stringify({ light: "speg-ocean", dark: "speg-grove" }))).toEqual({
       light: OCEAN_THEME.id,
       dark: GROVE_THEME.id,
     });
   });
 
   it("recognizes only preferences the runtime can render", () => {
-    for (const preference of ["light", "dark", "system", T3_CHAT_THEME.id, GROVE_THEME.id]) {
+    for (const preference of ["light", "dark", "system", SPEG_CHAT_THEME.id, GROVE_THEME.id]) {
       expect(isKnownThemePreference(preference)).toBe(true);
     }
     expect(isKnownThemePreference(`${GROVE_THEME.id}:dark`)).toBe(false);

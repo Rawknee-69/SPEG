@@ -25,7 +25,7 @@
  *   payload's credits/balance field (harness-dependent; Codex reports
  *   `rateLimits.credits.balance` as a "$4.04"-style string).
  */
-import type { OrchestrationThreadActivity } from "@t3tools/contracts";
+import type { OrchestrationThreadActivity } from "@speg/contracts";
 
 // ---------------------------------------------------------------------------
 // Item metadata

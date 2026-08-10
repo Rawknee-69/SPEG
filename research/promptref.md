@@ -2,7 +2,7 @@
 
 > **Copy-paste prompts** for every task. Each prompt is self-contained.
 > After completing: run all tests → git commit → mark checklist ✅ → write report
-> **Architecture**: Jcode as T3 Code provider. CACM as right panel tab + settings.
+> **Architecture**: Jcode as SPEG provider. CACM as right panel tab + settings.
 > **Jcode**: vanilla + thin `jcode-cacm-bridge` crate. Zero core modifications.
 
 ---
@@ -10,13 +10,13 @@
 ## [COMPLETED] Task 1.1: @speg/core TypeScript Package Scaffold
 
 ````
-TASK: Create the @speg/core package scaffold inside the T3 Code monorepo.
+TASK: Create the @speg/core package scaffold inside the SPEG monorepo.
 
 CONTEXT:
-- Working in the T3 Code monorepo at the current workspace root
+- Working in the SPEG monorepo at the current workspace root
 - pnpm workspaces with catalog versioning
-- Package naming: @speg/core (NOT @t3tools)
-- Subpath-only exports (no barrel index — follow @t3tools/shared pattern)
+- Package naming: @speg/core (NOT @speg)
+- Subpath-only exports (no barrel index — follow @speg/shared pattern)
 - jcode-sdk version: ^1.1.0 (npm latest GA; v0.67.0 does not exist on npm)
 - tsconfig extends: ../tsconfig.base.json (speg/ is ONE level from root, not two)
 
@@ -47,7 +47,7 @@ TASK: Define all SPEG wire types using Effect/Schema in packages/contracts/src/s
 CONTEXT:
 
 - Follow EXACT patterns from baseSchemas.ts (branded IDs) and rpc.ts (RPC definitions)
-- DO NOT modify any existing T3 Code contract file
+- DO NOT modify any existing SPEG contract file
 - Create SEPARATE SpegRpcGroup (cannot modify WsRpcGroup in existing rpc.ts)
 
 FILES:
@@ -64,8 +64,8 @@ FILES:
 VERIFICATION:
 
 ```bash
-vp run --filter @t3tools/contracts typecheck
-vp run --filter @t3tools/contracts test test/speg/contracts.test.ts
+vp run --filter @speg/contracts typecheck
+vp run --filter @speg/contracts test test/speg/contracts.test.ts
 ```
 
 STATUS: ✅ COMPLETE | Report: research/report/1.2-contracts.md
@@ -82,7 +82,7 @@ TASK: Create the cacm-core Rust crate — types, watcher infrastructure, parser 
 
 CONTEXT:
 
-- CACM is a STANDALONE package at t3code/cacm/ — not inside jcode/crates/
+- CACM is a STANDALONE package at speg/cacm/ — not inside jcode/crates/
 - This crate defines the core types and traits that cacm-daemon and parsers use
 - Reference: jcode/crates/jcode-memory-types/src/ for MemoryEntry patterns
 
@@ -130,7 +130,7 @@ TASK: Build the CACM daemon — a standalone Rust binary exposing CACM over WebS
 
 CONTEXT:
 
-- One daemon serves all clients (Jcode bridge, T3 Code web, any tool)
+- One daemon serves all clients (Jcode bridge, SPEG web, any tool)
 - JSON-RPC style API over WebSocket at ws://localhost:9786
 - Uses Jcode memory graph (primary) or local SQLite (fallback)
 
@@ -331,7 +331,7 @@ TASK: Build the TypeScript SDK for CACM — npm package @cacm/sdk.
 CONTEXT:
 
 - TypeScript client that talks to cacm-daemon via WebSocket
-- Used by T3 Code web components (CACM right panel, settings)
+- Used by SPEG web components (CACM right panel, settings)
 - Zero dependencies beyond the platform (use native WebSocket)
 
 FILES TO CREATE:
@@ -361,15 +361,15 @@ AFTER: Mark ✅, write report to research/report/1.9-cacm-sdk-ts.md
 
 ---
 
-## Task 1.10: Jcode Provider Adapter (T3 Code Server)
+## Task 1.10: Jcode Provider Adapter (SPEG Server)
 
 ```
 
-TASK: Add Jcode as a new provider adapter in T3 Code's server.
+TASK: Add Jcode as a new provider adapter in SPEG's server.
 
 CONTEXT:
 
-- T3 Code has provider adapters for Codex, Claude, Cursor, Grok, OpenCode
+- SPEG has provider adapters for Codex, Claude, Cursor, Grok, OpenCode
 - Each implements ProviderDriver interface in apps/server/src/provider/drivers/
 - Jcode adapter follows the EXACT same pattern
 - Talks to Jcode daemon via harness API (NDJSON over Unix socket)
@@ -403,7 +403,7 @@ RESEARCH:
 VERIFICATION:
 
 ```bash
-vp run --filter @t3tools/server typecheck
+vp run --filter @speg/server typecheck
 vp run test apps/server/test/provider/jcode/JcodeAdapter.test.ts
 # Integration: vp run dev → Jcode appears in provider list
 ```
@@ -412,7 +412,7 @@ GIT COMMIT:
 
 ```bash
 git add apps/server/src/provider/drivers/jcode/ apps/server/src/provider/builtInDrivers.ts
-git commit -m "feat(speg): add Jcode provider adapter to T3 Code server"
+git commit -m "feat(speg): add Jcode provider adapter to SPEG server"
 ```
 
 AFTER: Mark ✅, write report to research/report/1.10-jcode-adapter.md
@@ -421,15 +421,15 @@ AFTER: Mark ✅, write report to research/report/1.10-jcode-adapter.md
 
 ---
 
-## Task 1.11: CACM Right Panel Tab (T3 Code Web)
+## Task 1.11: CACM Right Panel Tab (SPEG Web)
 
 ```
 
-TASK: Add CACM tab to T3 Code's right panel — cross-agent context timeline.
+TASK: Add CACM tab to SPEG's right panel — cross-agent context timeline.
 
 CONTEXT:
 
-- T3 Code web right panel has tabs: Plan, Diff, Files, Preview, Terminal
+- SPEG web right panel has tabs: Plan, Diff, Files, Preview, Terminal
 - State managed by apps/web/src/rightPanelStore.ts (surface types)
 - Add new "cacm" surface type, import @cacm/sdk, query cacm-daemon
 - Like Cursor IDE's sidebar but for ALL agents
@@ -457,7 +457,7 @@ RESEARCH:
 VERIFICATION:
 
 ```bash
-vp run --filter @t3tools/web typecheck
+vp run --filter @speg/web typecheck
 vp run test apps/web/test/components/speg/CacmPanel.test.tsx
 # Integration: vp run dev → right panel shows CACM tab → populated with data
 ```
@@ -475,15 +475,15 @@ AFTER: Mark ✅, write report to research/report/1.11-cacm-panel.md
 
 ---
 
-## Task 1.12: SPEG Settings Panel (T3 Code Web)
+## Task 1.12: SPEG Settings Panel (SPEG Web)
 
 ```
 
-TASK: Add SPEG settings section to T3 Code's /settings route.
+TASK: Add SPEG settings section to SPEG's /settings route.
 
 CONTEXT:
 
-- T3 Code has settings panels at /settings, registered by category
+- SPEG has settings panels at /settings, registered by category
 - Add "SPEG" category for Jcode + CACM configuration
 
 FILES TO CREATE:
@@ -507,7 +507,7 @@ RESEARCH:
 VERIFICATION:
 
 ```bash
-vp run --filter @t3tools/web typecheck
+vp run --filter @speg/web typecheck
 vp run test apps/web/test/components/speg/SpegSettings.test.tsx
 # Integration: open /settings → SPEG section visible → save persists
 ```
@@ -516,7 +516,7 @@ GIT COMMIT:
 
 ```bash
 git add apps/web/src/components/speg/ apps/web/src/routes/
-git commit -m "feat(speg): add SPEG settings panel to T3 Code"
+git commit -m "feat(speg): add SPEG settings panel to SPEG"
 ```
 
 AFTER: Mark ✅, write report to research/report/1.12-speg-settings.md
@@ -583,7 +583,7 @@ CONTEXT:
 - CACM daemon (1.4) uses a simple JSON WebSocket protocol, NOT Effect RPC
 - These types are for cacm-sdk-ts to use when talking to cacm-daemon
 - Must mirror the Rust types in cacm-core/src/types.rs exactly
-- Separate from the Effect/Schema contracts in 1.2 (for SPEG ↔ T3 Code)
+- Separate from the Effect/Schema contracts in 1.2 (for SPEG ↔ SPEG)
 
 FILES TO CREATE:
 
@@ -616,7 +616,7 @@ AFTER: Mark ✅, write report to research/report/1.14-protocol-types.md
 
 ```
 
-TASK: Wire the SPEG contracts barrel into the @t3tools/contracts package entry.
+TASK: Wire the SPEG contracts barrel into the @speg/contracts package entry.
 
 CONTEXT:
 
@@ -632,8 +632,8 @@ FILES TO MODIFY:
 VERIFICATION:
 
 ```bash
-vp run --filter @t3tools/contracts typecheck
-vp run --filter @t3tools/contracts test
+vp run --filter @speg/contracts typecheck
+vp run --filter @speg/contracts test
 ```
 
 GIT COMMIT:
@@ -674,14 +674,14 @@ STEPS:
 4. TypeScript:
    cd cacm/cacm-sdk-ts && npm run typecheck && npm test
    vp run --filter @speg/core typecheck
-   vp run --filter @t3tools/contracts typecheck
-   vp run --filter @t3tools/server typecheck
-   vp run --filter @t3tools/web typecheck
+   vp run --filter @speg/contracts typecheck
+   vp run --filter @speg/server typecheck
+   vp run --filter @speg/web typecheck
 
 5. Integration:
    - Start cacm-daemon
    - Start Jcode daemon (jcode serve + jcode api-bridge)
-   - Start T3 Code dev server (vp run dev)
+   - Start SPEG dev server (vp run dev)
    - Verify: Jcode appears in provider list
    - Verify: CACM right panel tab populated
    - Verify: SPEG settings accessible and functional
@@ -698,7 +698,7 @@ EXIT CRITERIA:
 - [ ] All TypeScript typecheck + tests → PASS
 - [ ] cacm-daemon starts and responds to queries
 - [ ] Jcode builds with cacm-bridge, CACM tools visible
-- [ ] Jcode appears as provider in T3 Code
+- [ ] Jcode appears as provider in SPEG
 - [ ] CACM right panel tab populated
 - [ ] SPEG settings accessible
 - [ ] Git tag created

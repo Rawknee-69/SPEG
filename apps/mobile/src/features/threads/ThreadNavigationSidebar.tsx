@@ -2,15 +2,15 @@ import { isLiquidGlassSupported, LiquidGlassView } from "@callstack/liquid-glass
 import type {
   EnvironmentProject,
   EnvironmentThreadShell,
-} from "@t3tools/client-runtime/state/shell";
+} from "@speg/client-runtime/state/shell";
 import {
   threadSearchMatchKey,
   type EnvironmentThreadSearchMatch,
-} from "@t3tools/client-runtime/state/thread-search";
+} from "@speg/client-runtime/state/thread-search";
 import { LegendList } from "@legendapp/list/react-native";
 import type { MenuAction } from "@react-native-menu/menu";
 import { useAtomValue } from "@effect/atom-react";
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId } from "@speg/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { Platform, Pressable, StyleSheet, TextInput, View, useColorScheme } from "react-native";
@@ -970,7 +970,7 @@ function ThreadNavigationSidebarPane(
               className="mx-4 mt-2 items-center rounded-lg border border-dashed border-border py-2.5"
               style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
             >
-              <Text className="text-xs font-t3-medium text-foreground-muted">
+              <Text className="text-xs font-speg-medium text-foreground-muted">
                 Show more ({item.hiddenCount} settled hidden)
               </Text>
             </Pressable>
@@ -1305,7 +1305,7 @@ function ThreadNavigationSidebarPane(
           </Svg>
         </View>
         <View className="h-[50px] flex-row items-end gap-0.5 pr-2 pl-5">
-          <Text className="flex-1 text-[34px] font-t3-bold text-foreground" numberOfLines={1}>
+          <Text className="flex-1 text-[34px] font-speg-bold text-foreground" numberOfLines={1}>
             Threads
           </Text>
           <SidebarHeaderButtonGroup colorScheme={colorScheme}>

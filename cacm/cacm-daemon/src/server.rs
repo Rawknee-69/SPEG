@@ -252,7 +252,7 @@ pub fn build_router(state: AppState) -> Router {
     let cors = if state.allow_origins.is_empty() {
         // Loopback default: browsers are blocked at the WS handshake anyway;
         // /healthz leaks only status counters (plus the daemon's own pid, used
-        // by the T3 server to replace a stale instance), so permissive is
+        // by the SPEG server to replace a stale instance), so permissive is
         // acceptable; the WS handler enforces the origin allow-list.
         CorsLayer::permissive()
     } else {
@@ -311,7 +311,7 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
         "uptime_secs": (Utc::now() - state.started_at).num_seconds(),
         "version": env!("CARGO_PKG_VERSION"),
     });
-    // Add the process id so the T3 server can identify and replace a stale
+    // Add the process id so the SPEG server can identify and replace a stale
     // daemon instance (e.g. one left running with an outdated origin list).
     if let Some(object) = body.as_object_mut() {
         object.insert("pid".into(), json!(std::process::id()));

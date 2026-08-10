@@ -2,7 +2,7 @@
  * Pure helpers for the SPEG settings panel. Kept framework-free so the
  * parsing/formatting rules are unit-testable without a component harness.
  */
-import type { SpegSettings } from "@t3tools/contracts/settings";
+import type { SpegSettings } from "@speg/contracts/settings";
 
 export type WatchedAgent = keyof SpegSettings["watchedAgents"];
 

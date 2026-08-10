@@ -1,14 +1,14 @@
 included:
-  - ios/T3Code
-  - modules/t3-composer-editor/ios
-  - modules/t3-native-controls/ios
-  - modules/t3-terminal/ios
-  - modules/t3-review-diff/ios
+  - ios/Speg
+  - modules/speg-composer-editor/ios
+  - modules/speg-native-controls/ios
+  - modules/speg-terminal/ios
+  - modules/speg-review-diff/ios
 
 excluded:
   - ios/Pods
   - ios/build
-  - modules/t3-terminal/Vendor
+  - modules/speg-terminal/Vendor
 
 reporter: xcode
 

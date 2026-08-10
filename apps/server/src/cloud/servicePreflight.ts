@@ -17,7 +17,7 @@ export type ServicePreflightResult =
     };
 
 const localUpdateReason = (version: string) =>
-  `This version includes a database update and cannot be installed remotely. Run \`npx t3@${version} service update\` on the server machine.`;
+  `This version includes a database update and cannot be installed remotely. Run \`npx speg@${version} service update\` on the server machine.`;
 
 const isMigrationRow = (
   value: unknown,
@@ -40,7 +40,7 @@ export function runServicePreflight(input: {
       status: "blocked",
       version,
       reason:
-        "This release requires a newer T3 Code service launcher. Update it on the server machine.",
+        "This release requires a newer SPEG service launcher. Update it on the server machine.",
     };
   }
 

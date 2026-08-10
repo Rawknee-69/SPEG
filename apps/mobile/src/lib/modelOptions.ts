@@ -1,13 +1,13 @@
 import type {
   ModelCapabilities,
   ModelSelection,
-  ServerConfig as T3ServerConfig,
-} from "@t3tools/contracts";
+  ServerConfig as SpegServerConfig,
+} from "@speg/contracts";
 import type { MenuAction } from "@react-native-menu/menu";
 import {
   buildProviderOptionSelectionsFromDescriptors,
   getProviderOptionDescriptors,
-} from "@t3tools/shared/model";
+} from "@speg/shared/model";
 
 export type ModelOption = {
   readonly key: string;
@@ -68,7 +68,7 @@ function normalizeSelectionOptions(
  * validated, so stored selections pass through untouched.
  */
 export function resolveSelectableModelSelection(
-  config: T3ServerConfig | null | undefined,
+  config: SpegServerConfig | null | undefined,
   selection: ModelSelection | null,
 ): ModelSelection | null {
   if (!selection || !config) {
@@ -86,7 +86,7 @@ export function resolveSelectableModelSelection(
 }
 
 export function buildModelOptions(
-  config: T3ServerConfig | null | undefined,
+  config: SpegServerConfig | null | undefined,
   fallbackModelSelection: ModelSelection | null,
 ): ReadonlyArray<ModelOption> {
   const options = new Map<string, ModelOption>();

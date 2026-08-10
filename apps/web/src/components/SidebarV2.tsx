@@ -5,14 +5,14 @@ import {
   effectiveSettled,
   effectiveSnoozed,
   threadWokeAt,
-} from "@t3tools/client-runtime/state/thread-settled";
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
+} from "@speg/client-runtime/state/thread-settled";
+import type { EnvironmentThreadShell } from "@speg/client-runtime/state/models";
 import {
   scopeProjectRef,
   scopeThreadRef,
   scopedThreadKey,
-} from "@t3tools/client-runtime/environment";
-import type { ScopedThreadRef, SidebarProjectGroupingMode } from "@t3tools/contracts";
+} from "@speg/client-runtime/environment";
+import type { ScopedThreadRef, SidebarProjectGroupingMode } from "@speg/contracts";
 import {
   AlarmClockIcon,
   AlarmClockOffIcon,
@@ -38,7 +38,7 @@ import {
   Undo2Icon,
   XIcon,
 } from "lucide-react";
-import type { TimestampFormat } from "@t3tools/contracts/settings";
+import type { TimestampFormat } from "@speg/contracts/settings";
 import {
   memo,
   useCallback,
@@ -56,7 +56,7 @@ import {
   isAtomCommandInterrupted,
   settlePromise,
   squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+} from "@speg/client-runtime/state/runtime";
 import { isElectron } from "../env";
 import {
   resolveShortcutCommand,

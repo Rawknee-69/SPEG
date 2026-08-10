@@ -1,6 +1,6 @@
-export { ComposerEditor } from "../native/T3ComposerEditor";
+export { ComposerEditor } from "../native/SpegComposerEditor";
 export type {
   ComposerEditorHandle,
   ComposerEditorProps,
   ComposerEditorSelection,
-} from "../native/T3ComposerEditor";
+} from "../native/SpegComposerEditor";

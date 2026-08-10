@@ -2,8 +2,8 @@ import { useAtomValue } from "@effect/atom-react";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
-import { type TerminalSessionState } from "@t3tools/client-runtime/state/terminal";
+} from "@speg/client-runtime/state/runtime";
+import { type TerminalSessionState } from "@speg/client-runtime/state/terminal";
 import {
   Plus,
   SquareSplitHorizontal,
@@ -16,8 +16,8 @@ import {
   type ResolvedKeybindingsConfig,
   type ScopedThreadRef,
   type ThreadId,
-} from "@t3tools/contracts";
-import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
+} from "@speg/contracts";
+import { getTerminalLabel } from "@speg/shared/terminalLabels";
 import * as Schema from "effect/Schema";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { resolveTerminalFontPreference, TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "../appearanceFonts";

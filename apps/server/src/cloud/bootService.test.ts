@@ -4,7 +4,7 @@ import {
   HostProcessArguments,
   HostProcessExecutablePath,
   HostProcessPlatform,
-} from "@t3tools/shared/hostProcess";
+} from "@speg/shared/hostProcess";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -20,23 +20,23 @@ import { parseServiceState } from "./serviceProtocol.ts";
 it("keeps systemd pinned to the stable launcher rather than a versioned server", () => {
   const unit = BootService.renderBootServiceUnit({
     nodePath: "/usr/bin/node",
-    launcherPath: "/home/theo/.t3/runtime/service-launcher.mjs",
-    baseDir: "/home/theo/.t3",
-    logPath: "/home/theo/.t3/userdata/logs/boot-service.log",
-    unitPath: "/home/theo/.config/systemd/user/t3code.service",
+    launcherPath: "/home/theo/.speg/runtime/service-launcher.mjs",
+    baseDir: "/home/theo/.speg",
+    logPath: "/home/theo/.speg/userdata/logs/boot-service.log",
+    unitPath: "/home/theo/.config/systemd/user/speg.service",
   });
 
-  expect(unit).toContain("ExecStart=/usr/bin/node /home/theo/.t3/runtime/service-launcher.mjs");
+  expect(unit).toContain("ExecStart=/usr/bin/node /home/theo/.speg/runtime/service-launcher.mjs");
   expect(unit).toContain("KillMode=mixed");
   expect(unit).not.toContain("versions/1.2.3");
 });
 it("survives the kernel OOM-killing a greedy agent child", () => {
   const unit = BootService.renderBootServiceUnit({
     nodePath: "/usr/bin/node",
-    launcherPath: "/home/theo/.t3/runtime/service-launcher.mjs",
-    baseDir: "/home/theo/.t3",
-    logPath: "/home/theo/.t3/userdata/logs/boot-service.log",
-    unitPath: "/home/theo/.config/systemd/user/t3code.service",
+    launcherPath: "/home/theo/.speg/runtime/service-launcher.mjs",
+    baseDir: "/home/theo/.speg",
+    logPath: "/home/theo/.speg/userdata/logs/boot-service.log",
+    unitPath: "/home/theo/.config/systemd/user/speg.service",
   });
 
   expect(unit).toContain("OOMPolicy=continue");
@@ -48,8 +48,8 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const home = yield* fs.makeTempDirectoryScoped({ prefix: "t3-boot-service-test-" });
-  const baseDir = path.join(home, ".t3");
+  const home = yield* fs.makeTempDirectoryScoped({ prefix: "speg-boot-service-test-" });
+  const baseDir = path.join(home, ".speg");
   const sourceLauncher = path.join(home, "service-launcher.mjs");
   const statePath = path.join(baseDir, "runtime", "service-state.json");
   yield* fs.writeFileString(sourceLauncher, "export {};\n");
@@ -70,7 +70,7 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
         const command = `${input.command} ${input.args.join(" ")}`;
         commands.push(command);
         return {
-          stdout: input.args[1] === "--version" ? "t3 v1.2.3\n" : "",
+          stdout: input.args[1] === "--version" ? "speg v1.2.3\n" : "",
           stderr: "",
           code: ChildProcessSpawner.ExitCode(command === control.failCommand ? 1 : 0),
           timedOut: false,
@@ -145,9 +145,9 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
       const error = yield* service.install.pipe(Effect.flip);
       expect(error._tag).toBe("BootServiceCommandError");
       expect(commands.filter((command) => command.startsWith("systemctl "))).toEqual([
-        "systemctl --user stop t3code.service",
+        "systemctl --user stop speg.service",
         "systemctl --user daemon-reload",
-        "systemctl --user restart t3code.service",
+        "systemctl --user restart speg.service",
       ]);
     }),
   );

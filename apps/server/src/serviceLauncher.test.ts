@@ -64,7 +64,7 @@ it.layer(NodeServices.layer)("service state persistence", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-service-launcher-test-" });
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "speg-service-launcher-test-" });
       const statePath = path.join(root, "runtime", "service-state.json");
       const state = {
         protocol: 1,
@@ -80,10 +80,10 @@ it.layer(NodeServices.layer)("service state persistence", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-service-launcher-stop-" });
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "speg-service-launcher-stop-" });
       const statePath = path.join(root, "runtime", "service-state.json");
       const versionDir = path.join(root, "runtime", "versions", "1.0.0");
-      const entryPath = path.join(versionDir, "node_modules", "t3", "dist", "bin.mjs");
+      const entryPath = path.join(versionDir, "node_modules", "speg", "dist", "bin.mjs");
       yield* fs.makeDirectory(path.dirname(entryPath), { recursive: true });
       yield* fs.writeFileString(entryPath, "setInterval(() => {}, 1_000);\n");
       yield* fs.writeFileString(path.join(versionDir, ".install-complete"), "1.0.0\n");
@@ -110,10 +110,10 @@ it.layer(NodeServices.layer)("service state persistence", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-service-launcher-flow-" });
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "speg-service-launcher-flow-" });
       const statePath = path.join(root, "runtime", "service-state.json");
       const childSource = `
-const context = JSON.parse(process.env.T3_SERVICE_LAUNCHER_CONTEXT);
+const context = JSON.parse(process.env.SPEG_SERVICE_LAUNCHER_CONTEXT);
 if (context.update?.status === "pending") {
   process.send({ type: "prepared", updateId: context.update.id });
   process.on("message", (message) => {
@@ -128,7 +128,7 @@ if (context.update?.status === "pending") {
 `;
       for (const version of ["1.0.0", "1.1.0"]) {
         const versionDir = path.join(root, "runtime", "versions", version);
-        const entryPath = path.join(versionDir, "node_modules", "t3", "dist", "bin.mjs");
+        const entryPath = path.join(versionDir, "node_modules", "speg", "dist", "bin.mjs");
         yield* fs.makeDirectory(path.dirname(entryPath), { recursive: true });
         yield* fs.writeFileString(entryPath, childSource);
         yield* fs.writeFileString(path.join(versionDir, ".install-complete"), `${version}\n`);
@@ -158,10 +158,10 @@ if (context.update?.status === "pending") {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-service-launcher-rollback-" });
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "speg-service-launcher-rollback-" });
       const statePath = path.join(root, "runtime", "service-state.json");
       const childSource = `
-const context = JSON.parse(process.env.T3_SERVICE_LAUNCHER_CONTEXT);
+const context = JSON.parse(process.env.SPEG_SERVICE_LAUNCHER_CONTEXT);
 if (context.update?.status === "pending") {
   process.send({ type: "prepared", updateId: "wrong-update" });
 } else if (context.update === undefined) {
@@ -173,7 +173,7 @@ if (context.update?.status === "pending") {
 `;
       for (const version of ["1.0.0", "1.1.0"]) {
         const versionDir = path.join(root, "runtime", "versions", version);
-        const entryPath = path.join(versionDir, "node_modules", "t3", "dist", "bin.mjs");
+        const entryPath = path.join(versionDir, "node_modules", "speg", "dist", "bin.mjs");
         yield* fs.makeDirectory(path.dirname(entryPath), { recursive: true });
         yield* fs.writeFileString(entryPath, childSource);
         yield* fs.writeFileString(path.join(versionDir, ".install-complete"), `${version}\n`);

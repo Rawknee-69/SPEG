@@ -1,7 +1,7 @@
 //! cacm-core — core types, watcher infrastructure, and parser trait for the
 //! Cross-Agent Context Manager (CACM).
 //!
-//! CACM is a standalone package under `t3code/cacm/` (its own Cargo workspace).
+//! CACM is a standalone package under `speg/cacm/` (its own Cargo workspace).
 //! This crate defines the shared vocabulary
 //! (`types`), the filesystem watcher that feeds the daemon (`watcher`), the
 //! parser interface + registry that per-agent parsers plug into (`parsers`),

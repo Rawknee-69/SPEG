@@ -1,8 +1,8 @@
 # SPEG — Custom AI Agent System: Implementation Plan
 
-> Generated: 2026-08-04 | Based on: Full T3 Code analysis + Jcode feature specification
+> Generated: 2026-08-04 | Based on: Full SPEG analysis + Jcode feature specification
 > This is the master implementation plan for building a custom AI agent system
-> using Jcode (Rust harness) with a T3 Code-inspired architecture.
+> using Jcode (Rust harness) with a SPEG-inspired architecture.
 
 ---
 
@@ -10,17 +10,17 @@
 
 Build a new AI coding agent platform ("SPEG") that combines:
 - **Jcode** (Rust harness) for memory-safe, high-performance agent execution
-- **T3 Code-inspired architecture** for multi-surface UI (web, desktop, mobile)
+- **SPEG-inspired architecture** for multi-surface UI (web, desktop, mobile)
 - **Custom agent capabilities** with preconfigured skills and multi-agent orchestration
 - **Provider flexibility** — use our own agents AND external providers (Claude, OpenAI, etc.)
 
-This is a **new project**, separate from T3 Code, leveraging its architectural patterns but avoiding its performance bottlenecks.
+This is a **new project**, separate from SPEG, leveraging its architectural patterns but avoiding its performance bottlenecks.
 
 ---
 
 ## Architectural Foundation
 
-### Core Architecture (Inspired by T3 Code, optimized for Jcode)
+### Core Architecture (Inspired by SPEG, optimized for Jcode)
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -54,9 +54,9 @@ This is a **new project**, separate from T3 Code, leveraging its architectural p
 └─────────────────────────────────────────────────────┘
 ```
 
-### Key Architectural Differences from T3 Code
+### Key Architectural Differences from SPEG
 
-| T3 Code Pattern | SPEG Pattern | Why |
+| SPEG Pattern | SPEG Pattern | Why |
 |---|---|---|
 | Serial command worker (bottleneck) | Per-session parallel workers | Jcode handles agent concurrency natively |
 | In-memory read model | SQLite-only read model + targeted caches | Avoids memory growth + rebuild latency |
@@ -118,7 +118,7 @@ This is a **new project**, separate from T3 Code, leveraging its architectural p
 - Define `SkillDefinition` and `SkillCatalog` contracts
 - Define `SwarmDefinition` and `SwarmEvent` contracts
 - Define `MemoryEntry` and `MemorySearchResult` contracts
-- Include `protocolVersion` field from day one (learn from T3 Code's omission)
+- Include `protocolVersion` field from day one (learn from SPEG's omission)
 - **Unit test**: Schema encode/decode roundtrip for all contracts
 
 #### 1.3 Jcode JSON-RPC Protocol
@@ -130,7 +130,7 @@ This is a **new project**, separate from T3 Code, leveraging its architectural p
 - **Unit test**: Mock Jcode server, end-to-end message exchange
 
 #### 1.4 Shared Package (`@speg/shared`)
-- Port essential utilities from T3 Code's shared package (simplified):
+- Port essential utilities from SPEG's shared package (simplified):
   - `DrainableWorker` and `KeyedCoalescingWorker`
   - `Net` (port availability, ephemeral reservation)
   - `observability` and `logging` (simplified rotating file sink)
@@ -223,7 +223,7 @@ Every integration point must have a test:
 **Goal**: Support using external AI providers alongside SPEG's own agents.
 
 #### 3.1 Provider Adapter System
-- Implement `ProviderAdapter` interface (adapting T3 Code's pattern):
+- Implement `ProviderAdapter` interface (adapting SPEG's pattern):
   - `startSession`, `sendTurn`, `interruptTurn`
   - `streamEvents` — canonical event PubSub
   - `getCapabilities` — provider-specific features
@@ -610,11 +610,11 @@ Every integration point must have a test:
 
 ---
 
-## Performance Design (Avoiding T3 Code Bottlenecks)
+## Performance Design (Avoiding SPEG Bottlenecks)
 
 ### What We Do Differently
 
-| Concern | T3 Code Approach | SPEG Approach |
+| Concern | SPEG Approach | SPEG Approach |
 |---|---|---|
 | Command processing | Serial worker (bottleneck) | Per-agent parallel workers |
 | Read model | In-memory mirror + projections | SQLite projections only + targeted caches |
@@ -694,11 +694,11 @@ apps/server/test/
 
 ## Research Documents Index
 
-All research findings are stored in `t3code/research/`:
+All research findings are stored in `speg/research/`:
 
 | Document | Content |
 |---|---|
-| `01-architecture.md` | Complete T3 Code architecture reference |
+| `01-architecture.md` | Complete SPEG architecture reference |
 | `02-performance-analysis.md` | Bottleneck identification and fix recommendations |
 | `03-implementation-plan.md` | This document — SPEG implementation plan |
 
@@ -716,8 +716,8 @@ The following decisions should be made before Phase 1 implementation begins:
 
 3. **Jcode binary distribution**: How to bundle Jcode with the app? Download on first launch? Bundle per-platform binaries?
 
-4. **Authentication model**: T3 Code's model is comprehensive but complex. MVP could use simpler API-key based auth.
+4. **Authentication model**: SPEG's model is comprehensive but complex. MVP could use simpler API-key based auth.
 
-5. **Open source license**: MIT (matching T3 Code) or something else?
+5. **Open source license**: MIT (matching SPEG) or something else?
 
 6. **Repository location**: New GitHub org? Monorepo or separate repos for Jcode and SPEG?

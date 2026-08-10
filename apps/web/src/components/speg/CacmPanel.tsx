@@ -329,7 +329,7 @@ export function CacmPanel(props: CacmPanelProps) {
 
   /**
    * Restart the local cacm-daemon sidecar. The daemon cannot restart itself,
-   * so this asks the T3 server (which owns the daemon lifecycle) to stop the
+   * so this asks the SPEG server (which owns the daemon lifecycle) to stop the
    * current instance — including a stale one from an earlier run — and spawn
    * a fresh one with the current origins. Then reload the timeline.
    */

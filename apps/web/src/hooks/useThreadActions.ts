@@ -3,11 +3,11 @@ import {
   scopeProjectRef,
   scopeThreadRef,
   scopedThreadKey,
-} from "@t3tools/client-runtime/environment";
-import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { canSettle, canSnooze, threadWokeAt } from "@t3tools/client-runtime/state/thread-settled";
+} from "@speg/client-runtime/environment";
+import { settlePromise, squashAtomCommandFailure } from "@speg/client-runtime/state/runtime";
+import { canSettle, canSnooze, threadWokeAt } from "@speg/client-runtime/state/thread-settled";
 import { useUiStateStore } from "../uiStateStore";
-import { EnvironmentId, type ScopedThreadRef, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, type ScopedThreadRef, ThreadId } from "@speg/contracts";
 import * as Cause from "effect/Cause";
 import * as Schema from "effect/Schema";
 import { AsyncResult } from "effect/unstable/reactivity";

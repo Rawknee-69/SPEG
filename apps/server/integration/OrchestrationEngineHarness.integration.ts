@@ -8,7 +8,7 @@ import {
   ProviderDriverKind,
   type OrchestrationEvent,
   type OrchestrationThread,
-} from "@t3tools/contracts";
+} from "@speg/contracts";
 import * as Effect from "effect/Effect";
 import * as ThreadPlanProgress from "../src/orchestration/ThreadPlanProgress.ts";
 import * as Exit from "effect/Exit";
@@ -247,7 +247,7 @@ export const makeOrchestrationIntegrationHarness = (
         )
       : null;
     const rootDir = yield* fileSystem.makeTempDirectoryScoped({
-      prefix: "t3-orchestration-integration-",
+      prefix: "speg-orchestration-integration-",
     });
     const workspaceDir = path.join(rootDir, "workspace");
     const { stateDir, dbPath } = yield* deriveServerPaths(rootDir, undefined).pipe(

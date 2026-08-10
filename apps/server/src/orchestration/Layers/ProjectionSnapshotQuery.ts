@@ -25,7 +25,7 @@ import {
   ModelSelection,
   ProjectId,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@speg/contracts";
 import { ThreadBackgroundLivenessService } from "../ThreadBackgroundLiveness.ts";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";

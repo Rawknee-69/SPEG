@@ -1,0 +1,17 @@
+{
+  "name": "@speg/mobile-review-diff-native",
+  "version": "0.0.0",
+  "private": true,
+  "expo-module": {
+    "ios": {
+      "modules": [
+        "SpegReviewDiffModule"
+      ]
+    },
+    "android": {
+      "modules": [
+        "expo.modules.spegreviewdiff.SpegReviewDiffModule"
+      ]
+    }
+  }
+}

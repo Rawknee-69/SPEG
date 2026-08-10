@@ -1,9 +1,9 @@
-import type { EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
+import type { EnvironmentConnectionPhase } from "@speg/client-runtime/connection";
 import {
   AuthOrchestrationOperateScope,
   type AuthSessionState,
   type EnvironmentId,
-} from "@t3tools/contracts";
+} from "@speg/contracts";
 
 export interface ProviderEnvironmentOptionLike {
   readonly environmentId: EnvironmentId;

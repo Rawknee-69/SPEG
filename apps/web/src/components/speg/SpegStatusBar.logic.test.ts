@@ -1,5 +1,5 @@
-import type { OrchestrationThreadActivity } from "@t3tools/contracts";
-import { EventId, TurnId } from "@t3tools/contracts";
+import type { OrchestrationThreadActivity } from "@speg/contracts";
+import { EventId, TurnId } from "@speg/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
