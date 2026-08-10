@@ -889,12 +889,11 @@ export function EnvironmentProviderSettings({
         </div>
       </SettingsSection>
       <AddProviderInstanceDialog
-        open
+        open={isAddInstanceDialogOpen}
         environmentId={environmentId}
         environmentLabel={environmentLabel}
         onOpenChange={setIsAddInstanceDialogOpen}
       />
-      ) : null
     </>
   );
 }
