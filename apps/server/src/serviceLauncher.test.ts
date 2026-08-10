@@ -35,7 +35,7 @@ it("rejects contradictory service state", () => {
   assert.isUndefined(
     decodeServiceState({
       protocol: 1,
-      activeVersion: "0.0.31",
+      activeVersion: "0.0.32",
       update: {
         id: "update-1",
         fromVersion: "0.0.30",
@@ -68,7 +68,7 @@ it.layer(NodeServices.layer)("service state persistence", (it) => {
       const statePath = path.join(root, "runtime", "service-state.json");
       const state = {
         protocol: 1,
-        activeVersion: "0.0.31",
+        activeVersion: "0.0.32",
       } as const;
 
       yield* Effect.promise(() => writeServiceState(statePath, state));

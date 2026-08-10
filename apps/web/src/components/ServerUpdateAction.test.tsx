@@ -34,7 +34,7 @@ function renderAction(): ActionElement {
     environmentId: "env-test" as EnvironmentId,
     serverLabel: "Test server",
     selfUpdate: "boot-service",
-    targetVersion: "0.0.31",
+    targetVersion: "0.0.32",
   }) as ActionElement;
 }
 
@@ -51,7 +51,7 @@ describe("ServerUpdateAction", () => {
 
   it("reports success only after the shared update flow reconnects", async () => {
     testState.updateServer.mockResolvedValue(
-      AsyncResult.success({ targetVersion: "0.0.31", method: "boot-service" as const }),
+      AsyncResult.success({ targetVersion: "0.0.32", method: "boot-service" as const }),
     );
 
     renderAction().props.onClick?.();
@@ -59,12 +59,12 @@ describe("ServerUpdateAction", () => {
 
     expect(testState.updateServer).toHaveBeenCalledWith({
       environmentId: "env-test",
-      input: { targetVersion: "0.0.31" },
+      input: { targetVersion: "0.0.32" },
     });
     expect(testState.toast).toHaveBeenCalledWith({
       type: "success",
       title: "Test server updated",
-      description: "Reconnected on t3@0.0.31.",
+      description: "Reconnected on t3@0.0.32.",
     });
   });
 
@@ -75,7 +75,7 @@ describe("ServerUpdateAction", () => {
         new Promise((resolve) => {
           finishUpdate = () =>
             resolve(
-              AsyncResult.success({ targetVersion: "0.0.31", method: "boot-service" as const }),
+              AsyncResult.success({ targetVersion: "0.0.32", method: "boot-service" as const }),
             );
         }),
     );
@@ -108,7 +108,7 @@ describe("ServerUpdateProgress", () => {
           status: "running",
           stage: "resuming",
           fromVersion: "0.0.30",
-          targetVersion: "0.0.31",
+          targetVersion: "0.0.32",
         }}
       />,
     );
@@ -131,7 +131,7 @@ describe("ServerUpdateProgress", () => {
           status: "running",
           stage: "installing",
           fromVersion: "0.0.30",
-          targetVersion: "0.0.31",
+          targetVersion: "0.0.32",
         }}
       />,
     );
@@ -147,7 +147,7 @@ describe("ServerUpdateProgress", () => {
           status: "failed",
           stage: "installing",
           fromVersion: "0.0.30",
-          targetVersion: "0.0.31",
+          targetVersion: "0.0.32",
           message: "The package could not be verified.",
         }}
       />,

@@ -435,7 +435,7 @@ describe("releaseManagedTunnelOnShutdown", () => {
       yield* writeLauncherState({
         id: "update-1",
         fromVersion: "0.0.30",
-        targetVersion: "0.0.31",
+        targetVersion: "0.0.32",
         dbPath: "/tmp/state.sqlite",
         status: "pending",
       });
@@ -465,7 +465,7 @@ describe("releaseManagedTunnelOnShutdown", () => {
       yield* writeLauncherState({
         id: "update-1",
         fromVersion: "0.0.30",
-        targetVersion: "0.0.31",
+        targetVersion: "0.0.32",
         dbPath: "/tmp/state.sqlite",
         status: "pending",
       });
@@ -492,7 +492,7 @@ describe("releaseManagedTunnelOnShutdown", () => {
       yield* writeLauncherState({
         id: "update-1",
         fromVersion: "0.0.30",
-        targetVersion: "0.0.31",
+        targetVersion: "0.0.32",
         status: "committed",
       });
 

@@ -166,7 +166,7 @@ describe("server state projection", () => {
 
   it.effect("resumes after the progress stream disconnects following completion", () => {
     const result = {
-      targetVersion: "0.0.31",
+      targetVersion: "0.0.32",
       method: "respawn" as const,
     };
     const disconnect = new RpcClientError.RpcClientError({
@@ -185,7 +185,7 @@ describe("server state projection", () => {
 
   it("projects streamed update milestones into the shared operation state", () => {
     expect(
-      serverUpdateStateForProgressEvent("0.0.30", "0.0.31", {
+      serverUpdateStateForProgressEvent("0.0.30", "0.0.32", {
         type: "progress",
         stage: "installing",
       }),
@@ -193,18 +193,18 @@ describe("server state projection", () => {
       status: "running",
       stage: "installing",
       fromVersion: "0.0.30",
-      targetVersion: "0.0.31",
+      targetVersion: "0.0.32",
     });
     expect(
-      serverUpdateStateForProgressEvent("0.0.30", "0.0.31", {
+      serverUpdateStateForProgressEvent("0.0.30", "0.0.32", {
         type: "complete",
-        result: { targetVersion: "0.0.31", method: "respawn" },
+        result: { targetVersion: "0.0.32", method: "respawn" },
       }),
     ).toEqual({
       status: "running",
       stage: "resuming",
       fromVersion: "0.0.30",
-      targetVersion: "0.0.31",
+      targetVersion: "0.0.32",
     });
   });
 
@@ -213,26 +213,26 @@ describe("server state projection", () => {
       status: "running" as const,
       stage: "resuming" as const,
       fromVersion: "0.0.30",
-      targetVersion: "0.0.31",
+      targetVersion: "0.0.32",
     };
     const failed = {
       status: "failed" as const,
       stage: "installing" as const,
       fromVersion: "0.0.30",
-      targetVersion: "0.0.31",
+      targetVersion: "0.0.32",
       message: "Install failed.",
     };
 
-    expect(serverUpdateStateForServerVersion(running, "0.0.31")).toBe(running);
+    expect(serverUpdateStateForServerVersion(running, "0.0.32")).toBe(running);
     expect(serverUpdateStateForServerVersion(failed, "0.0.30")).toBe(failed);
     expect(serverUpdateStateForServerVersion(failed, null)).toBe(failed);
-    expect(serverUpdateStateForServerVersion(failed, "0.0.31")).toEqual({ status: "idle" });
+    expect(serverUpdateStateForServerVersion(failed, "0.0.32")).toEqual({ status: "idle" });
   });
 
   it.effect("correlates launcher outcomes and fails immediately after rollback", () =>
     Effect.gen(function* () {
       const result = {
-        targetVersion: "0.0.31",
+        targetVersion: "0.0.32",
         method: "boot-service" as const,
         updateId: "update-1",
       };
@@ -243,11 +243,11 @@ describe("server state projection", () => {
           type: "ready" as const,
           payload: {
             at: "2026-08-01T00:00:00.000Z",
-            environment: { serverVersion: status === "committed" ? "0.0.31" : "0.0.30" },
+            environment: { serverVersion: status === "committed" ? "0.0.32" : "0.0.30" },
             updateOutcome: {
               id: "update-1",
               fromVersion: "0.0.30",
-              targetVersion: "0.0.31",
+              targetVersion: "0.0.32",
               status,
               ...(status === "rolled-back" ? { reason: "prepared-timeout" } : {}),
             },
