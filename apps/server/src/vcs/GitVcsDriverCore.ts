@@ -97,6 +97,18 @@ const NON_REPOSITORY_REMOTE_STATUS_DETAILS = Object.freeze<GitVcsDriver.GitRemot
   behindCount: 0,
   aheadOfDefaultCount: 0,
 });
+// A repository whose HEAD is unborn (no commits yet) has no upstream or
+// divergence to report, but is still a repository.
+const UNBORN_HEAD_REMOTE_STATUS_DETAILS = Object.freeze<GitVcsDriver.GitRemoteStatusDetails>({
+  isRepo: true,
+  isDefaultBranch: false,
+  branch: null,
+  upstreamRef: null,
+  hasUpstream: false,
+  aheadCount: 0,
+  behindCount: 0,
+  aheadOfDefaultCount: 0,
+});
 
 type TraceTailState = {
   processedChars: number;
@@ -1479,6 +1491,9 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     if (branchResult.exitCode !== 0) {
       if (isNonRepositoryGitStderr(branchResult.stderr)) {
         return NON_REPOSITORY_REMOTE_STATUS_DETAILS;
+      }
+      if (isUnbornHeadStderr(branchResult.stderr)) {
+        return UNBORN_HEAD_REMOTE_STATUS_DETAILS;
       }
       return yield* new GitCommandError({
         ...gitCommandContext({

@@ -1203,6 +1203,23 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         }
       }),
     );
+
+    it.effect("reports remote status on unborn HEAD without failing", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        yield* driver.initRepo({ cwd });
+
+        const status = yield* driver.statusDetailsRemote(cwd);
+
+        assert.equal(status.isRepo, true);
+        assert.equal(status.branch, null);
+        assert.equal(status.hasUpstream, false);
+        assert.equal(status.aheadCount, 0);
+        assert.equal(status.behindCount, 0);
+        assert.equal(status.aheadOfDefaultCount, 0);
+      }),
+    );
   });
 
   describe("refName operations", () => {
