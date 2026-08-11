@@ -653,18 +653,15 @@ interface SuspenseShikiCodeBlockProps {
   className: string | undefined;
   code: string;
   themeName: DiffThemeName;
-  isStreaming: boolean;
 }
 
-function SuspenseShikiCodeBlock({
-  className,
-  code,
-  themeName,
-  isStreaming,
-}: SuspenseShikiCodeBlockProps) {
+function SuspenseShikiCodeBlock({ className, code, themeName }: SuspenseShikiCodeBlockProps) {
   const language = extractFenceLanguage(className);
   const cacheKey = createHighlightCacheKey(code, language, themeName);
-  const cachedHighlightedHtml = !isStreaming ? highlightedCodeCache.get(cacheKey) : null;
+  // The cache is safe to read while streaming: a block's code only changes
+  // while its fence is open, and each new string gets its own key. Once a
+  // block closes, its highlight is stable and reused instead of re-highlighted.
+  const cachedHighlightedHtml = highlightedCodeCache.get(cacheKey);
 
   if (cachedHighlightedHtml != null) {
     return (
@@ -681,7 +678,6 @@ function SuspenseShikiCodeBlock({
       language={language}
       themeName={themeName}
       cacheKey={cacheKey}
-      isStreaming={isStreaming}
     />
   );
 }
@@ -691,7 +687,6 @@ interface UncachedShikiCodeBlockProps {
   language: string;
   themeName: DiffThemeName;
   cacheKey: string;
-  isStreaming: boolean;
 }
 
 function UncachedShikiCodeBlock({
@@ -699,7 +694,6 @@ function UncachedShikiCodeBlock({
   language,
   themeName,
   cacheKey,
-  isStreaming,
 }: UncachedShikiCodeBlockProps) {
   const highlighter = use(getSyntaxHighlighterPromise(language));
   const highlightedHtml = useMemo(() => {
@@ -707,24 +701,24 @@ function UncachedShikiCodeBlock({
       return highlighter.codeToHtml(code, { lang: language, theme: themeName });
     } catch (error) {
       // Log highlighting failures for debugging while falling back to plain text
-      console.warn(
-        `Code highlighting failed for language "${language}", falling back to plain text.`,
-        error instanceof Error ? error.message : error,
-      );
+      if (import.meta.env.DEV) {
+        console.warn(
+          `Code highlighting failed for language "${language}", falling back to plain text.`,
+          error instanceof Error ? error.message : error,
+        );
+      }
       // If highlighting fails for this language, render as plain text
       return highlighter.codeToHtml(code, { lang: "text", theme: themeName });
     }
   }, [code, highlighter, language, themeName]);
 
   useEffect(() => {
-    if (!isStreaming) {
-      highlightedCodeCache.set(
-        cacheKey,
-        highlightedHtml,
-        estimateHighlightedSize(highlightedHtml, code),
-      );
-    }
-  }, [cacheKey, code, highlightedHtml, isStreaming]);
+    highlightedCodeCache.set(
+      cacheKey,
+      highlightedHtml,
+      estimateHighlightedSize(highlightedHtml, code),
+    );
+  }, [cacheKey, code, highlightedHtml]);
 
   return (
     <div className="chat-markdown-shiki" dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
@@ -1573,7 +1567,6 @@ function ChatMarkdown({
                   className={codeBlock.className}
                   code={codeBlock.code}
                   themeName={diffThemeName}
-                  isStreaming={isStreaming}
                 />
               </Suspense>
             </RenderErrorBoundary>
@@ -1586,7 +1579,6 @@ function ChatMarkdown({
     diffThemeName,
     fileLinkParentSuffixByPath,
     inlineCodeFileLinkMetaByText,
-    isStreaming,
     markdownFileLinkMetaByHref,
     onTaskListChange,
     openInPreferredEditor,

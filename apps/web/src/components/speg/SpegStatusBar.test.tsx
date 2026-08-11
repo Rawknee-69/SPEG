@@ -3,7 +3,7 @@ import type { SpegSettings } from "@speg/contracts/settings";
 import { DEFAULT_SPEG_SETTINGS } from "@speg/contracts/settings";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { SpegStatusBar, type SpegStatusBarProps } from "./SpegStatusBar";
+import { SpegStatusBarComponent, type SpegStatusBarProps } from "./SpegStatusBar";
 import { STATUS_BAR_ITEM_ORDER } from "./SpegStatusBar.logic";
 
 // Slot-based react hooks harness (repo pattern for compiled components; see
@@ -136,7 +136,7 @@ describe("SpegStatusBar", () => {
 
   it("renders the enabled chips from live activities", () => {
     hooks.beginRender();
-    const tree = SpegStatusBar(BASE_PROPS) as ReactNode;
+    const tree = SpegStatusBarComponent(BASE_PROPS) as ReactNode;
     const items = collectItems(tree);
     expect(items).toContain("model");
     expect(items).toContain("workspace");
@@ -155,7 +155,7 @@ describe("SpegStatusBar", () => {
       statusBar: { ...testState.speg!.statusBar, enabled: false },
     };
     hooks.beginRender();
-    const tree = SpegStatusBar(BASE_PROPS) as ReactNode;
+    const tree = SpegStatusBarComponent(BASE_PROPS) as ReactNode;
     expect(tree).toBeNull();
   });
 
@@ -168,7 +168,7 @@ describe("SpegStatusBar", () => {
       },
     };
     hooks.beginRender();
-    const tree = SpegStatusBar(BASE_PROPS) as ReactNode;
+    const tree = SpegStatusBarComponent(BASE_PROPS) as ReactNode;
     const items = collectItems(tree);
     expect(items).not.toContain("balance");
     expect(items).not.toContain("ctx");
@@ -177,21 +177,28 @@ describe("SpegStatusBar", () => {
 
   it("omits chips the harness does not report", () => {
     hooks.beginRender();
-    const tree = SpegStatusBar({ ...BASE_PROPS, model: null, gitBranch: null }) as ReactNode;
+    const tree = SpegStatusBarComponent({
+      ...BASE_PROPS,
+      model: null,
+      gitBranch: null,
+    }) as ReactNode;
     const items = collectItems(tree);
     expect(items).not.toContain("model");
     expect(items).not.toContain("gitBranch");
   });
 
-  it("renders nothing with no activities and no model", () => {
+  it("always renders the footer bar, even with no telemetry data", () => {
     hooks.beginRender();
-    const tree = SpegStatusBar({
+    const tree = SpegStatusBarComponent({
       activities: [],
       model: null,
       workspaceRoot: null,
       gitBranch: null,
     }) as ReactNode;
-    expect(tree).toBeNull();
+    // The status bar is a persistent footer: it renders (empty) as long as the
+    // master switch is on, so it never blinks out on fresh drafts.
+    expect(tree).not.toBeNull();
+    expect(collectItems(tree)).toHaveLength(0);
   });
 
   it("covers every status bar item id in the settings schema", () => {

@@ -105,12 +105,25 @@ export function PolicyTooltip({ children }: { readonly children: string }) {
   );
 }
 
-/** Re-render every `intervalMs`; return a stable timestamp snapshot for render-time relative labels. */
+/** Re-render every `intervalMs`; return a stable timestamp snapshot for render-time relative labels.
+    Pauses while the tab is hidden so backgrounded settings pages don't tick. */
 export function useRelativeTimeTick(intervalMs = 1_000) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), intervalMs);
-    return () => clearInterval(id);
+    let id = window.setInterval(() => setNowMs(Date.now()), intervalMs);
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        window.clearInterval(id);
+      } else {
+        setNowMs(Date.now());
+        id = window.setInterval(() => setNowMs(Date.now()), intervalMs);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [intervalMs]);
   return nowMs;
 }

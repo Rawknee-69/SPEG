@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { XIcon } from "lucide-react";
 
 import { cn } from "~/lib/utils";
@@ -53,7 +53,10 @@ interface ComposerBannerStackProps {
   readonly items: ReadonlyArray<ComposerBannerStackItem>;
 }
 
-export function ComposerBannerStack({ className, items }: ComposerBannerStackProps) {
+export const ComposerBannerStack = memo(function ComposerBannerStack({
+  className,
+  items,
+}: ComposerBannerStackProps) {
   const [requestedExitingItemId, setExitingItemId] = useState<string | null>(null);
   const dismissTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exitingItemId =
@@ -173,7 +176,7 @@ export function ComposerBannerStack({ className, items }: ComposerBannerStackPro
       </div>
     </div>
   );
-}
+});
 
 function ComposerBannerStackAlert({
   item,

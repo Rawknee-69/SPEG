@@ -180,6 +180,11 @@ function GlassPointerLight() {
     let pointerX = 0;
     let pointerY = 0;
     let disabled = reducedMotion.matches;
+    // Style writes are throttled to ~30Hz: each write invalidates the light
+    // layer's paint, so writing at the display rate (60-144Hz) wastes paint
+    // work the eye cannot resolve. The interpolation still converges smoothly.
+    const WRITE_INTERVAL_MS = 33;
+    let lastWriteMs = 0;
 
     const ensureState = (el: HTMLElement): LightState => {
       let state = states.get(el);
@@ -190,7 +195,7 @@ function GlassPointerLight() {
       return state;
     };
 
-    const tick = () => {
+    const tick = (now: number) => {
       // Resolve per-surface targets once per frame: a pointermove handler runs
       // far more often and would force layout on every event.
       for (const el of document.querySelectorAll<HTMLElement>("[data-glass-light]")) {
@@ -213,6 +218,7 @@ function GlassPointerLight() {
         }
       }
 
+      const shouldWrite = now - lastWriteMs >= WRITE_INTERVAL_MS;
       let dirty = false;
       for (const [el, state] of states) {
         if (!el.isConnected) {
@@ -222,10 +228,17 @@ function GlassPointerLight() {
         state.x += (state.tx - state.x) * 0.18;
         state.y += (state.ty - state.y) * 0.18;
         state.opacity += (state.target - state.opacity) * 0.2;
-        el.style.setProperty("--glass-light-x", `${(state.x * 100).toFixed(2)}%`);
-        el.style.setProperty("--glass-light-y", `${(state.y * 100).toFixed(2)}%`);
-        el.style.setProperty("--glass-light-opacity", state.opacity.toFixed(3));
-        if (Math.abs(state.tx - state.x) > 0.002 || Math.abs(state.target - state.opacity) > 0.01) {
+        if (shouldWrite) {
+          el.style.setProperty("--glass-light-x", `${(state.x * 100).toFixed(2)}%`);
+          el.style.setProperty("--glass-light-y", `${(state.y * 100).toFixed(2)}%`);
+          el.style.setProperty("--glass-light-opacity", state.opacity.toFixed(3));
+          lastWriteMs = now;
+        }
+        if (
+          Math.abs(state.tx - state.x) > 0.002 ||
+          Math.abs(state.ty - state.y) > 0.002 ||
+          Math.abs(state.target - state.opacity) > 0.01
+        ) {
           dirty = true;
         }
       }

@@ -1,15 +1,12 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { ClerkProvider } from "@clerk/react";
-import { passkeys } from "@clerk/electron/passkeys";
-import { ClerkProvider as ElectronClerkProvider } from "@clerk/electron/react";
 import { createHashHistory, createBrowserHistory } from "@tanstack/react-router";
 
 import "./index.css";
 
 import { isElectron } from "./env";
-import { ManagedRelayAuthProvider } from "./cloud/managedAuth";
 import { hasCloudPublicConfig } from "./cloud/publicConfig";
+import { ManagedRelayAuthProvider } from "./cloud/managedAuth";
 import { getRouter } from "./router";
 import {
   syncDocumentElectronPlatformClasses,
@@ -31,20 +28,47 @@ const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string
 
 const app = <AppRoot router={router} />;
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    {clerkPublishableKey && hasCloudPublicConfig() ? (
-      isElectron ? (
-        <ElectronClerkProvider publishableKey={clerkPublishableKey} passkeys={passkeys}>
-          <ManagedRelayAuthProvider>{app}</ManagedRelayAuthProvider>
-        </ElectronClerkProvider>
-      ) : (
-        <ClerkProvider publishableKey={clerkPublishableKey}>
-          <ManagedRelayAuthProvider>{app}</ManagedRelayAuthProvider>
-        </ClerkProvider>
-      )
-    ) : (
-      app
-    )}
-  </React.StrictMode>,
-);
+/**
+ * Clerk's runtime is ~9.6 MB unpacked; it is only mounted when a cloud public
+ * config is baked into the build, so it is imported lazily instead of being
+ * parsed on every boot. The auth gate still blocks first paint the same way.
+ */
+async function renderApp(): Promise<void> {
+  const container = document.getElementById("root") as HTMLElement;
+  const root = ReactDOM.createRoot(container);
+
+  if (clerkPublishableKey && hasCloudPublicConfig()) {
+    try {
+      if (isElectron) {
+        const [{ ClerkProvider: ElectronClerkProvider }, { passkeys }] = await Promise.all([
+          import("@clerk/electron/react"),
+          import("@clerk/electron/passkeys"),
+        ]);
+        root.render(
+          <React.StrictMode>
+            <ElectronClerkProvider publishableKey={clerkPublishableKey} passkeys={passkeys}>
+              <ManagedRelayAuthProvider>{app}</ManagedRelayAuthProvider>
+            </ElectronClerkProvider>
+          </React.StrictMode>,
+        );
+        return;
+      }
+      const [{ ClerkProvider }] = await Promise.all([import("@clerk/react")]);
+      root.render(
+        <React.StrictMode>
+          <ClerkProvider publishableKey={clerkPublishableKey}>
+            <ManagedRelayAuthProvider>{app}</ManagedRelayAuthProvider>
+          </ClerkProvider>
+        </React.StrictMode>,
+      );
+      return;
+    } catch {
+      // A chunk-load failure must not leave a blank screen: fall back to the
+      // unauthenticated app (the auth gate will surface the missing session).
+    }
+  }
+
+  root.render(<React.StrictMode>{app}</React.StrictMode>);
+}
+
+void renderApp();

@@ -186,14 +186,25 @@ function getDesktopBootstrapCredential(): string | null {
     : null;
 }
 
+const AUTH_SESSION_FETCH_TIMEOUT_MS = 5_000;
+
 export async function fetchSessionState(): Promise<AuthSessionState> {
   return retryTransientBootstrap(async () => {
     try {
-      return await runPrimaryHttp(
+      const session = await runPrimaryHttp(
         PrimaryEnvironmentHttpClient.pipe(
           Effect.flatMap((client) => client.auth.session({ headers: {} })),
+          // A hanging connection must not stall first paint indefinitely:
+          // HTTP/network failures are handled by the retry loop, but an
+          // unresponsive server otherwise never resolves the gate. Bounds the
+          // wait and fails fast (surfaced as a non-transient error).
+          Effect.timeout(`${AUTH_SESSION_FETCH_TIMEOUT_MS} millis`),
         ),
       );
+      if (session === undefined) {
+        throw new Error(`Session check timed out after ${AUTH_SESSION_FETCH_TIMEOUT_MS} ms.`);
+      }
+      return session;
     } catch (error) {
       throw PrimaryEnvironmentRequestError.fromCause({
         operation: "fetch-session-state",

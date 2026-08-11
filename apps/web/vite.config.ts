@@ -154,7 +154,19 @@ export default defineConfig(() => {
     assetsInclude: ["**/*.wasm"],
     plugins: [
       devCompressionPlugin(),
-      tanstackRouter(),
+      tanstackRouter({
+        autoCodeSplitting: true,
+        // Keep the app shell (root + chat layout) eager so first paint isn't
+        // gated on an async chunk; every other route's component loads lazily.
+        codeSplittingOptions: {
+          splitBehavior: ({ routeId }) => {
+            if (routeId === "__root__" || routeId === "/_chat") {
+              return [];
+            }
+            return undefined;
+          },
+        },
+      }),
       react(),
       babel({
         // We need to be explicit about the parser options after moving to @vitejs/plugin-react v6.0.0

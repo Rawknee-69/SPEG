@@ -13,7 +13,11 @@ import { primaryEnvironmentHttpLayer } from "../environments/primary/httpLayer";
 import { isElectron } from "../env";
 import { APP_VERSION } from "~/branding";
 
-const DEFAULT_EXPORT_INTERVAL_MS = 1_000;
+const DEFAULT_EXPORT_INTERVAL_MS = 10_000;
+// Flush promptly once a small batch accumulates (active sessions export
+// immediately); the long interval only paces the idle wake-ups, which are
+// no-ops when no spans are buffered.
+const DEFAULT_EXPORT_MAX_BATCH_SIZE = 50;
 const CLIENT_TRACING_RESOURCE = {
   serviceName: "speg-web",
   attributes: {
@@ -88,6 +92,7 @@ async function applyClientTracingConfig(config: ClientTracingConfig): Promise<vo
         OtlpTracer.make({
           url: otlpTracesUrl,
           exportInterval: `${exportIntervalMs} millis`,
+          maxBatchSize: DEFAULT_EXPORT_MAX_BATCH_SIZE,
           resource: CLIENT_TRACING_RESOURCE,
         }),
       ),
@@ -99,13 +104,15 @@ async function applyClientTracingConfig(config: ClientTracingConfig): Promise<vo
     if (generation === configurationGeneration) {
       const error = squashAtomCommandFailure(delegateResult);
       const tracesUrl = new URL(otlpTracesUrl);
-      console.warn("Failed to configure client tracing exporter", {
-        scheme: tracesUrl.protocol.replace(/:$/, ""),
-        host: tracesUrl.hostname,
-        port: tracesUrl.port || undefined,
-        exportIntervalMs,
-        ...safeErrorLogAttributes(error),
-      });
+      if (import.meta.env.DEV) {
+        console.warn("Failed to configure client tracing exporter", {
+          scheme: tracesUrl.protocol.replace(/:$/, ""),
+          host: tracesUrl.hostname,
+          port: tracesUrl.port || undefined,
+          exportIntervalMs,
+          ...safeErrorLogAttributes(error),
+        });
+      }
     }
     return;
   }

@@ -360,7 +360,7 @@ const loadSecondaryConnectionRegistration = Effect.fn(
 // Poll cadence for the desktop bootstrap topology. There is no change event on
 // the bridge, so the renderer polls; successful registrations are cached by a
 // signature of their endpoint + token until bearer credentials approach expiry.
-const PLATFORM_POLL_INTERVAL = "3 seconds";
+const PLATFORM_POLL_INTERVAL = "15 seconds";
 const SECONDARY_BEARER_REFRESH_SKEW_MS = 5_000;
 
 export function secondaryBearerExpiresAtEpochMs(

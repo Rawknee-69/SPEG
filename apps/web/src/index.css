@@ -482,8 +482,9 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(speg-mob
 
   .chat-composer-glass {
     background: color-mix(in srgb, var(--background) var(--glass-opacity), transparent);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+    /* No backdrop-filter here: this pill renders inside the composer shell,
+       whose ::before already blurs the backdrop. A second blur pass here only
+       re-samples a nearly-static region whenever the composer repaints. */
   }
 
   .chat-composer-glass-shell {
@@ -1286,7 +1287,8 @@ html.dark[data-wallpaper] {
 }
 
 #wallpaper-layer img,
-#wallpaper-layer video {
+#wallpaper-layer video,
+#wallpaper-layer canvas {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -1297,10 +1299,33 @@ html.dark[data-wallpaper] {
   user-select: none;
 }
 
+/* FPS-limited rendering: the video element only decodes for the canvas
+   sampler and is never painted, so it costs no compositing budget. */
+#wallpaper-layer .wallpaper-video-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 #wallpaper-layer .wallpaper-dim {
   position: absolute;
   inset: 0;
   background: rgb(0 0 0 / var(--app-wallpaper-dim, 0.3));
+}
+
+/* While an animated video wallpaper plays, trim the glass blur radii: the
+   compositor would otherwise re-blur a moving backdrop at full radius on
+   every frame (the single biggest steady GPU cost in the app). The frosted
+   look is kept via tint + sheen + edge; still-image wallpapers and no
+   wallpaper keep the full material. */
+html[data-wallpaper="video"] {
+  --glass-blur: 8px;
+  --glass-blur-thin: 8px;
+  --glass-blur-regular: 10px;
+  --glass-blur-thick: 12px;
+  --glass-blur-floating: 14px;
 }
 
 /* Theme-token dependency probes are restored synchronously, before paint. Keep
@@ -2364,6 +2389,10 @@ label:has(> select#reasoning-effort) select {
     var(--glass-light-color) 0%,
     transparent 38%
   );
+  /* Promote the light to its own compositor layer so repainting it (the
+     GlassPointerLight runtime rewrites the gradient vars at ~30Hz) never
+     touches the surface's own paint. */
+  will-change: opacity;
   /* No transition here: the rAF loop in GlassPointerLight is the only
      animator — a CSS transition would fight the per-frame var writes. */
   opacity: var(--glass-light-opacity, 0);
@@ -2564,6 +2593,14 @@ html[data-theme-id] [data-chat-header].glass-topbar {
 
   .chat-composer-glass-host::after {
     transition: none;
+  }
+
+  /* Kill the duty-cycled indicator animations under reduced motion, matching
+     the glass-light handling above. */
+  .animate-status-pulse,
+  .animate-status-ping,
+  .animate-skeleton {
+    animation: none !important;
   }
 }
 

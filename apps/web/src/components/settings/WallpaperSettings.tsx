@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { FilmIcon, ImageIcon, Trash2Icon, UploadIcon } from "lucide-react";
+import { AlertTriangleIcon, FilmIcon, ImageIcon, Trash2Icon, UploadIcon } from "lucide-react";
 
 import {
+  clampWallpaperFps,
   deleteWallpaperMedia,
+  estimateMonitorRefreshRate,
   getWallpaperMedia,
+  normalizeWallpaperVideo,
   putWallpaperMedia,
   readWallpaper,
   WALLPAPER_DEFAULTS,
@@ -13,6 +16,7 @@ import {
   WALLPAPER_MAX_VIDEO_BYTES,
   WALLPAPER_MIN_BLUR,
   WALLPAPER_MIN_DIM,
+  WALLPAPER_MIN_FPS,
   writeWallpaper,
   type WallpaperKind,
   type WallpaperSettings,
@@ -117,11 +121,26 @@ export function WallpaperSettings() {
   const wallpaper = useWallpaper();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isReading, setIsReading] = useState(false);
+  const [monitorHz, setMonitorHz] = useState(60);
+
+  // The playback-rate slider caps at the monitor's refresh rate; measure it
+  // once per session (the layer re-renders when it resolves).
+  useEffect(() => {
+    let alive = true;
+    void estimateMonitorRefreshRate().then((hz) => {
+      if (alive) setMonitorHz(hz);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const applyPatch = (patch: Partial<WallpaperSettings>) => {
     if (!wallpaper) return;
     writeWallpaper({ ...wallpaper, ...patch });
   };
+
+  const maxFps = Math.max(WALLPAPER_MIN_FPS, monitorHz);
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
@@ -150,14 +169,26 @@ export function WallpaperSettings() {
     }
     setIsReading(true);
     try {
-      // Still images are compressed first, then size-checked against the
-      // result so a big-but-compressible photo is not rejected up front.
-      const blob = kind === "image" ? await compressWallpaperImage(file) : file;
+      // Still images are compressed first; videos are normalized to the
+      // resolution/FPS/bitrate caps (a no-op for videos already within caps).
+      // Videos over the 80 MB cap are rejected up front — a real-time
+      // transcode of such a file would take minutes for no benefit.
+      const blob =
+        kind === "image"
+          ? await compressWallpaperImage(file)
+          : kind === "video"
+            ? (await normalizeWallpaperVideo(file)).blob
+            : file;
       if (blob.size > sizeLimit) {
         stackedThreadToast({
           type: "error",
           title: "File too large",
-          description: "Images must be under 6 MB after compression.",
+          description:
+            kind === "image"
+              ? "Images must be under 6 MB after compression."
+              : kind === "video"
+                ? "Videos must be under 80 MB."
+                : "GIFs must be under 40 MB.",
         });
         return;
       }
@@ -287,6 +318,44 @@ export function WallpaperSettings() {
               </div>
             }
           />
+          {wallpaper.kind === "video" ? (
+            <SettingsRow
+              {...searchableSetting("wallpaper-fps")}
+              title="Playback rate"
+              description="Frames per second for the background video. Lower values use less GPU; the maximum is your monitor's refresh rate."
+              control={
+                <div className="flex w-full items-center gap-3 sm:w-52">
+                  {/* Clamp the displayed value to the current monitor cap so a
+                      stored rate from a higher-refresh monitor never shows a
+                      value the slider cannot reach. */}
+                  <output className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground">
+                    {Math.min(wallpaper.fps, maxFps)} FPS
+                  </output>
+                  <input
+                    aria-label="Wallpaper playback rate"
+                    className="settings-slider min-w-0 flex-1"
+                    max={maxFps}
+                    min={WALLPAPER_MIN_FPS}
+                    onChange={(event) =>
+                      applyPatch({
+                        fps: clampWallpaperFps(Number(event.currentTarget.value), monitorHz),
+                      })
+                    }
+                    style={sliderStyle(Math.min(wallpaper.fps, maxFps), WALLPAPER_MIN_FPS, maxFps)}
+                    type="range"
+                    value={Math.min(wallpaper.fps, maxFps)}
+                  />
+                </div>
+              }
+            >
+              {wallpaper.fps > 60 ? (
+                <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+                  <AlertTriangleIcon className="size-3.5 shrink-0" />
+                  High GPU usage: values above 60 FPS increase GPU load while the video plays.
+                </p>
+              ) : null}
+            </SettingsRow>
+          ) : null}
           <SettingsRow
             {...searchableSetting("wallpaper-accent")}
             title="Match accent to background"

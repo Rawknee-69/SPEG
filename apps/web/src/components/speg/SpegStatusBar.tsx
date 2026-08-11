@@ -14,7 +14,7 @@
  */
 import type { OrchestrationThreadActivity } from "@speg/contracts";
 import { DEFAULT_SPEG_STATUS_BAR_SETTINGS } from "@speg/contracts/settings";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 
 import { useClientSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
@@ -33,7 +33,7 @@ export interface SpegStatusBarProps {
   readonly compactAtPercent?: number;
 }
 
-export function SpegStatusBar(props: SpegStatusBarProps) {
+export function SpegStatusBarComponent(props: SpegStatusBarProps) {
   const statusBar = useClientSettings((settings) => settings.speg?.statusBar);
   const { activities, model, workspaceRoot, gitBranch } = props;
 
@@ -64,7 +64,10 @@ export function SpegStatusBar(props: SpegStatusBarProps) {
       .filter((chip) => chip.value !== null);
   }, [visibleItems, activities, model, workspaceRoot, gitBranch, compactAtPercent]);
 
-  if (!enabled || chips.length === 0) {
+  // The footer always renders when enabled — even with no telemetry data yet —
+  // so the status bar stays a persistent bottom footer instead of blinking out
+  // on fresh drafts. Only the master `enabled` toggle (SPEG settings) hides it.
+  if (!enabled) {
     return null;
   }
 
@@ -90,3 +93,6 @@ export function SpegStatusBar(props: SpegStatusBarProps) {
     </div>
   );
 }
+
+/** Memoized export for app use (skips re-render when props are unchanged). */
+export const SpegStatusBar = memo(SpegStatusBarComponent);

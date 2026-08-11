@@ -73,6 +73,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     targetId: "background",
   },
   {
+    id: "wallpaper-fps",
+    title: "Background video playback rate",
+    to: "/settings/appearance",
+    targetId: "background",
+  },
+  {
     id: "wallpaper-accent",
     title: "Match accent to background",
     to: "/settings/appearance",

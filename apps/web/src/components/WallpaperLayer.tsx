@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { useTheme } from "../hooks/useTheme";
+import { isElectron } from "../env";
 import {
   applyWallpaper,
   clearWallpaper,
+  estimateMonitorRefreshRate,
   extractWallpaperAccent,
   getWallpaperMedia,
   readWallpaper,
   subscribeWallpaper,
+  WALLPAPER_DEFAULTS,
   type WallpaperSettings,
 } from "../wallpaper";
 
@@ -36,7 +39,26 @@ export function WallpaperLayer() {
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [accent, setAccent] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [monitorHz, setMonitorHz] = useState(60);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // The slider lets users cap the background-video playback rate at or below
+  // the monitor's refresh rate. Below the monitor rate we sample the video
+  // into a resolution-capped canvas at the chosen FPS; at (or above) the
+  // monitor rate we let the video element play natively with no extra pass.
+  const wallpaperFps = wallpaper?.fps ?? WALLPAPER_DEFAULTS.fps;
+  const useCanvas = wallpaper?.kind === "video" && wallpaperFps < monitorHz;
+
+  useEffect(() => {
+    let alive = true;
+    void estimateMonitorRefreshRate().then((hz) => {
+      if (alive) setMonitorHz(hz);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Reset the fade-in when the media identity changes.
   useEffect(() => {
@@ -108,11 +130,15 @@ export function WallpaperLayer() {
     };
   }, [wallpaper?.extractAccent, wallpaper?.kind, mediaUrl, extractVideoAccent]);
 
-  // Keep background video cheap: play only while visible and motion allowed.
+  // Keep background video cheap: play only while visible, motion allowed, and
+  // (in the desktop shell, which keeps running while occluded) the window is
+  // focused — an occluded/minimized desktop window must not burn GPU decoding.
   const syncVideoPlayback = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (document.visibilityState === "visible" && !prefersReducedMotion()) {
+    const visible = document.visibilityState === "visible" && !prefersReducedMotion();
+    const focused = !isElectron || document.hasFocus();
+    if (visible && focused) {
       void video.play().catch(() => {});
     } else {
       video.pause();
@@ -123,31 +149,106 @@ export function WallpaperLayer() {
     if (wallpaper?.kind !== "video" || !mediaUrl) return;
     syncVideoPlayback();
     document.addEventListener("visibilitychange", syncVideoPlayback);
+    if (isElectron) {
+      window.addEventListener("blur", syncVideoPlayback);
+      window.addEventListener("focus", syncVideoPlayback);
+    }
     return () => {
       document.removeEventListener("visibilitychange", syncVideoPlayback);
+      if (isElectron) {
+        window.removeEventListener("blur", syncVideoPlayback);
+        window.removeEventListener("focus", syncVideoPlayback);
+      }
       videoRef.current?.pause();
     };
   }, [wallpaper?.kind, mediaUrl, syncVideoPlayback]);
+
+  // FPS-limited wallpaper rendering: when the chosen fps is below the monitor
+  // refresh rate, sample the video into a resolution-capped canvas at most
+  // once per 1000/fps ms instead of compositing every native video frame.
+  useEffect(() => {
+    if (!useCanvas || wallpaper?.kind !== "video" || !mediaUrl) return;
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    if (!canvas || !video) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const fps = wallpaperFps;
+    const intervalMs = 1000 / Math.max(1, fps);
+    const MAX_CANVAS_WIDTH = 1920;
+
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const viewportWidth = Math.max(1, window.innerWidth);
+      const viewportHeight = Math.max(1, window.innerHeight);
+      const canvasWidth = Math.min(viewportWidth, MAX_CANVAS_WIDTH);
+      const canvasHeight = Math.round((canvasWidth * viewportHeight) / viewportWidth);
+      canvas.width = Math.max(1, Math.round(canvasWidth * dpr));
+      canvas.height = Math.max(1, Math.round(canvasHeight * dpr));
+    };
+    resize();
+    window.addEventListener("resize", resize);
+
+    let raf = 0;
+    let lastDraw = 0;
+    let lastVideoTime = -1;
+    const tick = (now: number) => {
+      if (now - lastDraw >= intervalMs) {
+        if (
+          video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+          video.currentTime !== lastVideoTime
+        ) {
+          const cw = canvas.width;
+          const ch = canvas.height;
+          const vw = video.videoWidth || cw;
+          const vh = video.videoHeight || ch;
+          // Cover-fit draw (same geometry as the CSS object-fit: cover rule).
+          const scale = Math.max(cw / vw, ch / vh);
+          const dw = vw * scale;
+          const dh = vh * scale;
+          ctx.drawImage(video, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+          lastVideoTime = video.currentTime;
+        }
+        lastDraw = now;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", resize);
+    };
+  }, [useCanvas, wallpaper?.kind, wallpaperFps, mediaUrl]);
 
   if (!wallpaper || !mediaUrl) return null;
 
   return (
     <div id="wallpaper-layer" aria-hidden="true" data-ready={isReady || undefined}>
       {wallpaper.kind === "video" ? (
-        <video
-          ref={videoRef}
-          src={mediaUrl}
-          muted
-          loop
-          playsInline
-          autoPlay
-          disablePictureInPicture
-          onLoadedData={() => {
-            setIsReady(true);
-            syncVideoPlayback();
-            extractVideoAccent();
-          }}
-        />
+        <>
+          {/* The video element stays at the same tree position whether or not
+              the FPS-limited canvas is active, so resolving the monitor rate
+              mid-session never remounts/restarts playback. In canvas mode it
+              is visually hidden but keeps decoding for the sampler. */}
+          <video
+            ref={videoRef}
+            className={useCanvas ? "wallpaper-video-hidden" : undefined}
+            src={mediaUrl}
+            muted
+            loop
+            playsInline
+            autoPlay
+            disablePictureInPicture
+            onLoadedData={() => {
+              setIsReady(true);
+              syncVideoPlayback();
+              extractVideoAccent();
+            }}
+          />
+          {useCanvas ? (
+            <canvas ref={canvasRef} className="wallpaper-canvas" aria-hidden="true" />
+          ) : null}
+        </>
       ) : (
         <img
           src={mediaUrl}

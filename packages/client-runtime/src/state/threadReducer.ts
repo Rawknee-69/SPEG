@@ -54,6 +54,36 @@ function isResolvableContextWindowActivity(activity: OrchestrationThreadActivity
 }
 
 /**
+ * Insert an activity into a list that is already sorted by `activityOrder`,
+ * keeping it sorted. Lower bound is found with a binary search (O(log n)); a
+ * duplicate id — which always carries the same sort key and therefore lands at
+ * the same position — is replaced in place, matching the previous filter-based
+ * dedupe exactly.
+ */
+function insertActivitySorted(
+  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  activity: OrchestrationThreadActivity,
+): Array<OrchestrationThreadActivity> {
+  let low = 0;
+  let high = activities.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (activityOrder(activity, activities[mid]!) <= 0) {
+      high = mid;
+    } else {
+      low = mid + 1;
+    }
+  }
+  const next = [...activities];
+  if (low < next.length && activityOrder(activity, next[low]!) === 0) {
+    next[low] = activity;
+    return next;
+  }
+  next.splice(low, 0, activity);
+  return next;
+}
+
+/**
  * Apply a single orchestration event to an `OrchestrationThread`, returning
  * the updated thread, a deletion signal, or an "unchanged" marker when the
  * event doesn't affect this thread.
@@ -557,20 +587,24 @@ export function applyThreadDetailEvent(
       // thread.reverted that discards turns can still resolve a value from
       // the turns that survive.
       const supersedesContextWindow = isResolvableContextWindowActivity(activity);
-      const activities = pipe(
-        thread.activities,
-        Arr.filter(
-          (entry) =>
-            entry.id !== activity.id &&
-            !(
-              supersedesContextWindow &&
-              entry.turnId === activity.turnId &&
-              isResolvableContextWindowActivity(entry)
+      // Fast path: the array is kept sorted, so a plain new activity is a
+      // binary-search insert (O(log n)) instead of a full-array filter + sort
+      // (O(n log n)) on every streamed event. The rare context-window
+      // supersede keeps the scan (it replaces an earlier row whose sort key
+      // differs). A duplicate id re-lands at the same sort position and is
+      // replaced in place, matching the old filter's dedupe.
+      const activities = supersedesContextWindow
+        ? pipe(
+            thread.activities,
+            Arr.filter(
+              (entry) =>
+                entry.id !== activity.id &&
+                !(entry.turnId === activity.turnId && isResolvableContextWindowActivity(entry)),
             ),
-        ),
-        Arr.append(activity),
-        Arr.sort(activityOrder),
-      );
+            Arr.append(activity),
+            Arr.sort(activityOrder),
+          )
+        : insertActivitySorted(thread.activities, activity);
 
       return {
         kind: "updated",

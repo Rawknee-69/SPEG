@@ -6404,15 +6404,8 @@ function ChatViewContent(props: ChatViewProps) {
             ) : null}
           </div>
           {/* end chat column */}
-
-          <SpegStatusBar
-            activities={threadActivities}
-            model={statusBarModelName}
-            workspaceRoot={activeWorkspaceRoot ?? null}
-            gitBranch={statusBarGitBranch}
-          />
         </div>
-        {/* end horizontal flex container */}
+        {/* end main content area */}
 
         {mountedTerminalThreadRefs.map(({ key: mountedThreadKey, threadRef: mountedThreadRef }) => (
           <PersistentThreadTerminalDrawer
@@ -6432,6 +6425,14 @@ function ChatViewContent(props: ChatViewProps) {
             onAddTerminalContext={addTerminalContextToDraft}
           />
         ))}
+
+        {/* Always-present bottom footer (chat column's last flex child). */}
+        <SpegStatusBar
+          activities={threadActivities}
+          model={statusBarModelName}
+          workspaceRoot={activeWorkspaceRoot ?? null}
+          gitBranch={statusBarGitBranch}
+        />
       </div>
 
       {!shouldUseRightPanelSheet && rightPanelOpen && activeThreadRef ? (

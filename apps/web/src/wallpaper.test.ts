@@ -11,6 +11,7 @@ import {
   samplesToAccent,
   WALLPAPER_MAX_BLUR,
   WALLPAPER_MAX_DIM,
+  WALLPAPER_MIN_FPS,
 } from "./wallpaper";
 
 type FakeStyle = {
@@ -49,22 +50,34 @@ afterEach(() => {
 describe("parseWallpaperSettings", () => {
   it("parses a full settings object", () => {
     const settings = parseWallpaperSettings(
-      JSON.stringify({ id: "abc", kind: "video", dim: 40, blur: 8, extractAccent: false }),
+      JSON.stringify({ id: "abc", kind: "video", dim: 40, blur: 8, fps: 30, extractAccent: false }),
     );
-    expect(settings).toEqual({ id: "abc", kind: "video", dim: 40, blur: 8, extractAccent: false });
+    expect(settings).toEqual({
+      id: "abc",
+      kind: "video",
+      dim: 40,
+      blur: 8,
+      fps: 30,
+      extractAccent: false,
+    });
   });
 
-  it("defaults extractAccent to true and clamps dim/blur", () => {
+  it("defaults extractAccent to true and clamps dim/blur/fps", () => {
     const settings = parseWallpaperSettings(
-      JSON.stringify({ id: "abc", kind: "image", dim: 500, blur: -4 }),
+      JSON.stringify({ id: "abc", kind: "image", dim: 500, blur: -4, fps: 5 }),
     );
     expect(settings).toEqual({
       id: "abc",
       kind: "image",
       dim: WALLPAPER_MAX_DIM,
       blur: 0,
+      fps: WALLPAPER_MIN_FPS,
       extractAccent: true,
     });
+    // Old stored settings without an fps field fall back to the default.
+    expect(
+      parseWallpaperSettings(JSON.stringify({ id: "abc", kind: "image", dim: 10, blur: 0 }))?.fps,
+    ).toBe(60);
   });
 
   it("rejects malformed values", () => {
@@ -108,7 +121,14 @@ describe("samplesToAccent", () => {
 });
 
 describe("applyWallpaper / clearWallpaper", () => {
-  const settings = { id: "media-1", kind: "image" as const, dim: 40, blur: 8, extractAccent: true };
+  const settings = {
+    id: "media-1",
+    kind: "image" as const,
+    dim: 40,
+    blur: 8,
+    fps: 60,
+    extractAccent: true,
+  };
 
   it("marks the document and restores the theme accent family when accent matching is off", () => {
     const { root } = createFakeDocument();

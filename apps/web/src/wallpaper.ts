@@ -29,6 +29,11 @@ export const WALLPAPER_MIN_DIM = 0;
 export const WALLPAPER_MAX_DIM = 80;
 export const WALLPAPER_MIN_BLUR = 0;
 export const WALLPAPER_MAX_BLUR = 24;
+/** Lowest allowed background-video playback rate (FPS). */
+export const WALLPAPER_MIN_FPS = 24;
+/** Absolute hard cap for the stored fps value; the UI clamps to the monitor's
+    refresh rate, which can be lower (60/90/120/144/165/240). */
+export const WALLPAPER_MAX_FPS = 240;
 
 export type WallpaperKind = "image" | "gif" | "video";
 
@@ -40,6 +45,10 @@ export type WallpaperSettings = Readonly<{
   dim: number;
   /** 0-24: gaussian blur (px) applied to the media itself. */
   blur: number;
+  /** 24-240: background-video playback rate in frames per second. The layer
+      throttles canvas sampling to this rate; the UI clamps it to the monitor's
+      refresh rate. Ignored for image/GIF wallpapers. */
+  fps: number;
   /** Regenerate the theme accent family from the media's dominant color. */
   extractAccent: boolean;
 }>;
@@ -47,6 +56,7 @@ export type WallpaperSettings = Readonly<{
 export const WALLPAPER_DEFAULTS: Readonly<Omit<WallpaperSettings, "id" | "kind">> = {
   dim: 30,
   blur: 0,
+  fps: 60,
   extractAccent: true,
 };
 
@@ -74,6 +84,7 @@ export function parseWallpaperSettings(value: unknown): WallpaperSettings | null
         WALLPAPER_MIN_BLUR,
         WALLPAPER_MAX_BLUR,
       ),
+      fps: clampInteger(record.fps, WALLPAPER_DEFAULTS.fps, WALLPAPER_MIN_FPS, WALLPAPER_MAX_FPS),
       extractAccent: record.extractAccent !== false,
     };
   } catch {
@@ -431,4 +442,330 @@ export function clearWallpaper(): void {
   root.style.removeProperty("--app-wallpaper-blur");
   const appearance: ThemeAppearance = root.classList.contains("dark") ? "dark" : "light";
   restoreThemeAccentRoles(appearance);
+}
+
+/* ------------------------------------------------------------------ */
+/* Background-video playback rate (FPS)                                */
+/* ------------------------------------------------------------------ */
+
+const COMMON_REFRESH_RATES: ReadonlyArray<number> = [60, 90, 120, 144, 165, 240, 360];
+
+let cachedMonitorRefreshRate: number | null = null;
+
+/**
+ * Estimate the monitor's refresh rate by sampling `requestAnimationFrame`
+ * cadence for ~1.5s, rounded to a common rate (60/90/120/144/165/240/360).
+ * Works in the browser and inside Electron's renderer. Resolves to 60 on any
+ * failure or when the tab is throttled. The result is cached for the session.
+ */
+export function estimateMonitorRefreshRate(): Promise<number> {
+  if (cachedMonitorRefreshRate !== null) {
+    return Promise.resolve(cachedMonitorRefreshRate);
+  }
+  if (typeof window === "undefined" || typeof requestAnimationFrame !== "function") {
+    cachedMonitorRefreshRate = 60;
+    return Promise.resolve(60);
+  }
+  return new Promise((resolve) => {
+    const samples: number[] = [];
+    const started = performance.now();
+    let last = started;
+    const MAX_SAMPLE_MS = 1500;
+    const onFrame = (now: number) => {
+      const delta = now - last;
+      last = now;
+      // Ignore throttled frames (hidden tab, background) so the median stays true.
+      if (delta > 5 && delta < 100) {
+        samples.push(delta);
+      }
+      if (performance.now() - started < MAX_SAMPLE_MS) {
+        requestAnimationFrame(onFrame);
+      } else {
+        let measured = 60;
+        if (samples.length >= 10) {
+          const sorted = [...samples].sort((a, b) => a - b);
+          const median = sorted[Math.floor(sorted.length / 2)]!;
+          measured = Math.round(1000 / Math.max(1, median));
+        }
+        cachedMonitorRefreshRate = COMMON_REFRESH_RATES.reduce(
+          (best, rate) => (Math.abs(rate - measured) < Math.abs(best - measured) ? rate : best),
+          60,
+        );
+        resolve(cachedMonitorRefreshRate);
+      }
+    };
+    requestAnimationFrame(onFrame);
+  });
+}
+
+/** Clamp a user-chosen fps into the valid stored range. */
+export function clampWallpaperFps(fps: number, monitorRefreshRate: number): number {
+  const monitorCap = Math.max(WALLPAPER_MIN_FPS, Math.round(monitorRefreshRate));
+  return Math.min(WALLPAPER_MAX_FPS, Math.max(WALLPAPER_MIN_FPS, Math.round(fps)), monitorCap);
+}
+
+/* ------------------------------------------------------------------ */
+/* Upload-time video normalization                                     */
+/* ------------------------------------------------------------------ */
+
+/** Videos at or below these caps are stored as-is (zero processing time). */
+export const WALLPAPER_VIDEO_MAX_WIDTH = 1920;
+export const WALLPAPER_VIDEO_MAX_FPS = 60;
+export const WALLPAPER_VIDEO_FAST_PATH_BYTES = 20 * 1024 * 1024;
+
+export interface WallpaperVideoMetadata {
+  readonly width: number;
+  readonly height: number;
+  /** Measured playback frame rate (1-120); 0 when unknown. */
+  readonly fps: number;
+  readonly durationSec: number;
+}
+
+/**
+ * Read a video blob's resolution, duration, and (measured) frame rate without
+ * touching the wallpaper store. Plays the first ~1s of the blob off-screen.
+ */
+export function probeWallpaperVideoMetadata(blob: Blob): Promise<WallpaperVideoMetadata> {
+  return new Promise((resolve, reject) => {
+    if (typeof document === "undefined") {
+      reject(new Error("No DOM available."));
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "metadata";
+    let settled = false;
+    let deadline = 0;
+    const finish = (meta: WallpaperVideoMetadata | null, error?: Error) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(deadline);
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      URL.revokeObjectURL(url);
+      if (error || !meta) reject(error ?? new Error("Cannot read video metadata."));
+      else resolve(meta);
+    };
+    // A corrupt or codec-unsupported blob must not hang the settings save.
+    deadline = window.setTimeout(
+      () => finish(null, new Error("Reading video metadata timed out.")),
+      10_000,
+    );
+    video.onerror = () => finish(null, new Error("Cannot read video metadata."));
+    video.onloadedmetadata = () => {
+      const width = video.videoWidth;
+      const height = video.videoHeight;
+      if (!width || !height) {
+        finish(null, new Error("Video has no frames."));
+        return;
+      }
+      const durationSec = Number.isFinite(video.duration) ? video.duration : 0;
+      let frames = 0;
+      const started = performance.now();
+      const sample = () => {
+        frames += 1;
+        const elapsed = performance.now() - started;
+        if (elapsed < 1000 && frames < 150 && !video.ended) {
+          video.requestVideoFrameCallback(sample);
+        } else {
+          const fps = Math.max(
+            1,
+            Math.min(120, Math.round((frames * 1000) / Math.max(1, elapsed))),
+          );
+          finish({ width, height, fps, durationSec });
+        }
+      };
+      void video
+        .play()
+        .then(() => video.requestVideoFrameCallback(sample))
+        .catch(() => {
+          // Playback blocked (unusual for a muted local blob): assume 60fps.
+          finish({ width, height, fps: 60, durationSec });
+        });
+    };
+    video.src = url;
+  });
+}
+
+/**
+ * Best-effort normalization of a background-video blob:
+ * - Already within caps (≤1920px wide, ≤60fps, ≤20MB) → returned unchanged.
+ * - Otherwise re-encoded at the capped resolution/fps via a real-time
+ *   canvas.captureStream + MediaRecorder pass (VP9/VP8 WebM), then verified
+ *   playable before being returned.
+ * - Any failure falls back to the original blob, so uploads never get worse.
+ */
+export async function normalizeWallpaperVideo(
+  blob: Blob,
+): Promise<{ readonly blob: Blob; readonly optimized: boolean }> {
+  if (typeof MediaRecorder === "undefined" || typeof document === "undefined") {
+    return { blob, optimized: false };
+  }
+  let meta: WallpaperVideoMetadata;
+  try {
+    meta = await probeWallpaperVideoMetadata(blob);
+  } catch {
+    return { blob, optimized: false };
+  }
+  const withinCaps =
+    meta.width <= WALLPAPER_VIDEO_MAX_WIDTH &&
+    meta.fps <= WALLPAPER_VIDEO_MAX_FPS &&
+    blob.size <= WALLPAPER_VIDEO_FAST_PATH_BYTES;
+  if (withinCaps) {
+    return { blob, optimized: false };
+  }
+  try {
+    const transcoded = await transcodeWallpaperVideo(blob, meta);
+    if (transcoded.size >= blob.size) {
+      return { blob, optimized: false };
+    }
+    return { blob: transcoded, optimized: true };
+  } catch {
+    return { blob, optimized: false };
+  }
+}
+
+function transcodeWallpaperVideo(blob: Blob, meta: WallpaperVideoMetadata): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const mimeType = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"].find(
+      (candidate) => MediaRecorder.isTypeSupported(candidate),
+    );
+    if (!mimeType) {
+      reject(new Error("No supported video encoder."));
+      return;
+    }
+    const targetWidth = Math.min(meta.width, WALLPAPER_VIDEO_MAX_WIDTH);
+    const targetHeight = Math.max(
+      1,
+      Math.round((targetWidth * meta.height) / Math.max(1, meta.width)),
+    );
+    const targetFps = Math.min(
+      WALLPAPER_VIDEO_MAX_FPS,
+      Math.max(WALLPAPER_MIN_FPS, meta.fps || 30),
+    );
+    const bitrate = targetWidth <= 1280 ? 4_000_000 : targetWidth <= 1920 ? 6_000_000 : 8_000_000;
+
+    const url = URL.createObjectURL(blob);
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    video.src = url;
+    video.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;";
+    const canvas = document.createElement("canvas");
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      URL.revokeObjectURL(url);
+      reject(new Error("Canvas unavailable."));
+      return;
+    }
+
+    let recorder: MediaRecorder | null = null;
+    let drawTimer = 0;
+    let settled = false;
+    let deadline = 0;
+    const cleanup = () => {
+      window.clearInterval(drawTimer);
+      window.clearTimeout(deadline);
+      if (recorder && recorder.state !== "inactive") {
+        try {
+          recorder.stop();
+        } catch {
+          /* noop */
+        }
+      }
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      video.remove();
+      URL.revokeObjectURL(url);
+    };
+    // Master deadline: a corrupt blob (no loadedmetadata/ended) must fall back
+    // to the original instead of hanging the settings save. Real-time
+    // transcodes need source-duration wall time plus a generous margin.
+    deadline = window.setTimeout(
+      () => finish(null, new Error("Video optimization timed out.")),
+      Math.max(30_000, meta.durationSec * 1000 + 30_000),
+    );
+    const finish = (out: Blob | null, error?: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error || !out) reject(error ?? new Error("Video optimization failed."));
+      else resolve(out);
+    };
+
+    video.onerror = () => finish(null, new Error("Cannot read video for optimization."));
+    video.onended = () => {
+      // Capture the final frame, then stop the recorder.
+      window.clearInterval(drawTimer);
+      ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+    };
+    video.onloadedmetadata = () => {
+      const stream = canvas.captureStream(targetFps);
+      recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: bitrate });
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunks.push(event.data);
+      };
+      recorder.onstop = () => {
+        const output = new Blob(chunks, { type: mimeType });
+        // Only commit to the transcoded blob if it actually plays.
+        verifyPlayableVideo(output)
+          .then(() => finish(output))
+          .catch(() => finish(null, new Error("Optimized video failed verification.")));
+      };
+      recorder.onerror = () => finish(null, new Error("Recording failed."));
+      recorder.start(500);
+      drawTimer = window.setInterval(
+        () => {
+          if (
+            !video.paused &&
+            !video.ended &&
+            video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+          ) {
+            ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+          }
+        },
+        Math.max(16, Math.round(1000 / Math.max(1, targetFps))),
+      );
+      void video
+        .play()
+        .catch(() => finish(null, new Error("Playback failed during optimization.")));
+    };
+    document.body.append(video);
+  });
+}
+
+function verifyPlayableVideo(blob: Blob): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "metadata";
+    let settled = false;
+    let deadline = 0;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(deadline);
+      video.removeAttribute("src");
+      video.load();
+      URL.revokeObjectURL(url);
+      if (error) reject(error);
+      else resolve();
+    };
+    // Never hang the upload on an unreadable transcoded blob.
+    deadline = window.setTimeout(() => finish(new Error("Verification timed out.")), 10_000);
+    video.onloadedmetadata = () => finish();
+    video.onerror = () => finish(new Error("Verification failed."));
+    video.src = url;
+  });
 }
