@@ -72,8 +72,8 @@ export function SpegStatusBar(props: SpegStatusBarProps) {
     <div
       data-speg-status-bar="true"
       className={cn(
-        "pointer-events-auto z-10 flex shrink-0 items-center gap-x-4 overflow-x-auto px-4",
-        "border-t border-border/60 bg-muted/40 py-1 text-[11px] leading-none text-muted-foreground",
+        "glass-surface glass-thin glass-footer pointer-events-auto z-10 flex shrink-0 items-center gap-x-4 overflow-x-auto px-4",
+        "border-t border-border/60 py-1 text-[11px] leading-none text-muted-foreground",
       )}
     >
       {chips.map((chip) => (

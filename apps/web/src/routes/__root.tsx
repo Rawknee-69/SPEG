@@ -131,6 +131,7 @@ function RootRouteView() {
       <AnchoredToastProvider>
         <DocumentTitleSync />
         <GlassAppearanceSync />
+        <GlassPointerLight />
         <FontAppearanceSync />
         <WallpaperLayer />
         {primaryEnvironmentAuthenticated ? <AuthenticatedTracingBootstrap /> : null}
@@ -156,6 +157,135 @@ function GlassAppearanceSync() {
   useEffect(() => {
     document.documentElement.style.setProperty("--glass-opacity", `${glassOpacity}%`);
   }, [glassOpacity]);
+
+  return null;
+}
+
+/**
+ * Subtle pointer-following light for glass surfaces (DESIGN.md §21).
+ *
+ * Elements opt in via `data-glass-light`. A delegated pointermove handler
+ * drives --glass-light-x/y toward the pointer while a rAF loop interpolates
+ * them (the light glides, it never snaps), and --glass-light-opacity fades in
+ * only while the pointer is over the surface. The light stays under the
+ * surface's content and never blocks interaction. Disabled for reduced motion.
+ */
+function GlassPointerLight() {
+  useEffect(() => {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const LIGHT_ORIGIN = { x: 0.5, y: 0, tx: 0.5, ty: 0, opacity: 0, target: 0 };
+    type LightState = typeof LIGHT_ORIGIN;
+    const states = new Map<HTMLElement, LightState>();
+    let frame: number | null = null;
+    let pointerX = 0;
+    let pointerY = 0;
+    let disabled = reducedMotion.matches;
+
+    const ensureState = (el: HTMLElement): LightState => {
+      let state = states.get(el);
+      if (!state) {
+        state = { ...LIGHT_ORIGIN };
+        states.set(el, state);
+      }
+      return state;
+    };
+
+    const tick = () => {
+      // Resolve per-surface targets once per frame: a pointermove handler runs
+      // far more often and would force layout on every event.
+      for (const el of document.querySelectorAll<HTMLElement>("[data-glass-light]")) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) {
+          continue;
+        }
+        const state = ensureState(el);
+        const inside =
+          pointerX >= rect.left &&
+          pointerX <= rect.right &&
+          pointerY >= rect.top &&
+          pointerY <= rect.bottom;
+        if (inside) {
+          state.tx = Math.min(1, Math.max(0, (pointerX - rect.left) / rect.width));
+          state.ty = Math.min(1, Math.max(0, (pointerY - rect.top) / rect.height));
+          state.target = 1;
+        } else {
+          state.target = 0;
+        }
+      }
+
+      let dirty = false;
+      for (const [el, state] of states) {
+        if (!el.isConnected) {
+          states.delete(el);
+          continue;
+        }
+        state.x += (state.tx - state.x) * 0.18;
+        state.y += (state.ty - state.y) * 0.18;
+        state.opacity += (state.target - state.opacity) * 0.2;
+        el.style.setProperty("--glass-light-x", `${(state.x * 100).toFixed(2)}%`);
+        el.style.setProperty("--glass-light-y", `${(state.y * 100).toFixed(2)}%`);
+        el.style.setProperty("--glass-light-opacity", state.opacity.toFixed(3));
+        if (Math.abs(state.tx - state.x) > 0.002 || Math.abs(state.target - state.opacity) > 0.01) {
+          dirty = true;
+        }
+      }
+      frame = dirty ? window.requestAnimationFrame(tick) : null;
+    };
+
+    const startTicking = () => {
+      if (frame === null && !disabled) {
+        frame = window.requestAnimationFrame(tick);
+      }
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (disabled) {
+        return;
+      }
+      pointerX = event.clientX;
+      pointerY = event.clientY;
+      startTicking();
+    };
+
+    const fadeOutAll = () => {
+      if (disabled) {
+        return;
+      }
+      for (const state of states.values()) {
+        state.target = 0;
+      }
+      startTicking();
+    };
+
+    const onReducedMotionChange = (event: MediaQueryListEvent) => {
+      disabled = event.matches;
+      if (frame !== null) {
+        window.cancelAnimationFrame(frame);
+        frame = null;
+      }
+      if (disabled) {
+        for (const [el, state] of states) {
+          state.target = 0;
+          state.opacity = 0;
+          el.style.setProperty("--glass-light-opacity", "0");
+        }
+      }
+      // Re-enabling reduced motion resumes on the next pointermove (the loop
+      // only runs while the pointer is active, so there is nothing to catch up).
+    };
+
+    document.addEventListener("pointermove", onPointerMove, { passive: true });
+    document.documentElement.addEventListener("pointerleave", fadeOutAll);
+    reducedMotion.addEventListener("change", onReducedMotionChange);
+    return () => {
+      document.removeEventListener("pointermove", onPointerMove);
+      document.documentElement.removeEventListener("pointerleave", fadeOutAll);
+      reducedMotion.removeEventListener("change", onReducedMotionChange);
+      if (frame !== null) {
+        window.cancelAnimationFrame(frame);
+      }
+    };
+  }, []);
 
   return null;
 }

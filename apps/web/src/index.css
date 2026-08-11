@@ -96,7 +96,29 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(speg-mob
   --floating-content-inset: 0.75rem;
   --glass-blur: 12px;
   --glass-opacity: 80%;
-  --glass-saturation: 1.14;
+  --glass-saturation: 1.3;
+  /*
+   * Liquid Glass material tokens (DESIGN.md). Densities map to the material
+   * ladder: thin = toolbar/footer, regular = sidebar/search/composer,
+   * thick = popover/large controls, floating = menus/command palette.
+   */
+  --glass-blur-thin: 18px;
+  --glass-blur-regular: 24px;
+  --glass-blur-thick: 32px;
+  --glass-blur-floating: 38px;
+  --glass-sheen-top: rgb(255 255 255 / 9%);
+  --glass-sheen-bottom: rgb(255 255 255 / 5%);
+  --glass-edge: rgb(255 255 255 / 10%);
+  --glass-edge-strong: rgb(255 255 255 / 18%);
+  --glass-highlight: rgb(255 255 255 / 11%);
+  --glass-shadow-structural: 0 10px 30px rgb(0 0 0 / 18%);
+  --glass-shadow-floating: 0 24px 70px rgb(0 0 0 / 40%);
+  --glass-shadow-modal: 0 30px 90px rgb(0 0 0 / 48%);
+  --glass-light-color: rgb(255 255 255 / 10%);
+  --glass-motion-micro: 120ms;
+  --glass-motion-button: 140ms;
+  --glass-motion-popover: 180ms;
+  --glass-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
   --desktop-window-right-resize-inset: 0px;
   --workspace-topbar-height: 52px;
   --workspace-controls-top: 0px;
@@ -111,7 +133,12 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(speg-mob
   --app-scrollbar-thumb: rgb(255 255 255 / 8%);
   --app-scrollbar-thumb-hover: rgb(255 255 255 / 12%);
   --glass-blur: 16px;
-  --glass-saturation: 1.08;
+  --glass-saturation: 1.2;
+  --glass-sheen-top: rgb(255 255 255 / 6%);
+  --glass-sheen-bottom: rgb(255 255 255 / 3%);
+  --glass-edge: rgb(255 255 255 / 8%);
+  --glass-edge-strong: rgb(255 255 255 / 15%);
+  --glass-highlight: rgb(255 255 255 / 7%);
 }
 
 [data-slot="sidebar-wrapper"] {
@@ -658,8 +685,8 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(speg-mob
 
   .dialog-glass {
     background: color-mix(in srgb, var(--background) var(--glass-opacity), transparent);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+    -webkit-backdrop-filter: blur(var(--glass-blur-floating)) saturate(var(--glass-saturation));
+    backdrop-filter: blur(var(--glass-blur-floating)) saturate(var(--glass-saturation));
   }
 
   .dialog-backdrop {
@@ -680,10 +707,12 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(speg-mob
       var(--popover) 18%,
       color-mix(in srgb, var(--popover) var(--glass-opacity), transparent)
     );
-    -webkit-backdrop-filter: blur(var(--glass-blur));
-    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur-floating)) saturate(var(--glass-saturation));
+    backdrop-filter: blur(var(--glass-blur-floating)) saturate(var(--glass-saturation));
     border: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent);
-    box-shadow: 0 16px 40px -18px rgb(0 0 0 / 55%);
+    box-shadow:
+      0 20px 50px -20px rgb(0 0 0 / 60%),
+      inset 0 1px 0 var(--glass-highlight);
   }
 
   .dialog-glass {
@@ -692,7 +721,9 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(speg-mob
   }
 
   .dark .dropdown-glass {
-    box-shadow: 0 18px 44px -18px rgb(0 0 0 / 80%);
+    box-shadow:
+      0 22px 52px -18px rgb(0 0 0 / 80%),
+      inset 0 1px 0 var(--glass-highlight);
   }
 
   .dark .model-picker-surface.model-picker-surface {
@@ -2251,4 +2282,320 @@ label:has(> select#reasoning-effort) select {
   background-color: Highlight;
   opacity: 0.3;
   pointer-events: none;
+}
+
+/* ============================================================================
+   Liquid Glass material (DESIGN.md — Apple-inspired Liquid Glass design system)
+   ----------------------------------------------------------------------------
+   A glass surface is a layered material: translucent tint + backdrop blur +
+   saturation + sheen gradient + inner highlight + soft elevation + optical
+   edge. All surfaces consume the same density tokens (--glass-blur-*, sheen,
+   edge, highlight, shadows) so the material cannot drift.
+
+   Deliberately few persistent blur surfaces: sidebar (1), topbar (1), right
+   panel tabbar (1), composer (1), status bar (1) + transient floating menus.
+   Content (editor, terminal, code) stays solid. Children of a glass surface
+   are promoted to their own layer so the decorative layers never cover them.
+   ========================================================================== */
+
+.glass-surface {
+  --glass-surface-color: var(--background);
+  --glass-surface-blur: var(--glass-blur-regular);
+  --glass-surface-shadow: var(--glass-shadow-structural);
+
+  position: relative;
+  isolation: isolate;
+
+  background:
+    linear-gradient(180deg, var(--glass-sheen-top), var(--glass-sheen-bottom)),
+    color-mix(in srgb, var(--glass-surface-color) var(--glass-opacity), transparent);
+
+  -webkit-backdrop-filter: blur(var(--glass-surface-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-surface-blur)) saturate(var(--glass-saturation));
+
+  box-shadow:
+    var(--glass-surface-shadow),
+    inset 0 1px 0 var(--glass-highlight),
+    inset 0 0 0 1px color-mix(in srgb, var(--glass-edge) 25%, transparent);
+}
+
+/* Material densities (DESIGN.md §11): thin = toolbar/footer,
+   regular (default) = sidebar/search/composer, thick = popover,
+   floating = menus/command palette. */
+.glass-thin {
+  --glass-surface-blur: var(--glass-blur-thin);
+  --glass-surface-shadow: 0 8px 24px rgb(0 0 0 / 14%);
+}
+
+.glass-thick {
+  --glass-surface-blur: var(--glass-blur-thick);
+  --glass-surface-shadow: var(--glass-shadow-floating);
+}
+
+.glass-floating {
+  --glass-surface-blur: var(--glass-blur-floating);
+  --glass-surface-shadow: var(--glass-shadow-floating);
+}
+
+/* Keep the material's decorative layers below the surface's own content.
+   `workspace-titlebar-controls` is excluded: it is already absolutely
+   positioned (it must not be promoted into normal flow). */
+.glass-surface > :not(.workspace-titlebar-controls) {
+  position: relative;
+  z-index: 1;
+}
+
+/* Subtle pointer-following light (DESIGN.md §21). Only elements carrying
+   data-glass-light get a light layer; the GlassPointerLight runtime in
+   __root.tsx drives --glass-light-x/y and --glass-light-opacity with
+   smoothing. The light follows the pointer, never behaves like a flashlight. */
+.glass-surface[data-glass-light]::before,
+[data-slot="sidebar-container"].glass-sidebar[data-glass-light]::before,
+[data-chat-header].glass-topbar[data-glass-light]::before,
+.chat-composer-glass-host[data-glass-light]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle at var(--glass-light-x, 50%) var(--glass-light-y, 0%),
+    var(--glass-light-color) 0%,
+    transparent 38%
+  );
+  /* No transition here: the rAF loop in GlassPointerLight is the only
+     animator — a CSS transition would fight the per-frame var writes. */
+  opacity: var(--glass-light-opacity, 0);
+}
+
+/* --- Structural glass: main sidebar (DESIGN.md §34-35) ----------------------
+   The sidebar container also carries data-sidebar-version, so the theme
+   mapping re-declares its surface color at higher specificity — !important
+   keeps the material in charge while still reading the themed --sidebar. */
+[data-slot="sidebar-container"].glass-sidebar {
+  --glass-surface-color: var(--sidebar);
+  --glass-surface-blur: var(--glass-blur-regular);
+
+  /* No position here: the container is already `fixed` (positioned), which is
+     the containing block the pointer-light layer and content z-index rely on. */
+
+  background:
+    linear-gradient(180deg, var(--glass-sheen-top), var(--glass-sheen-bottom)),
+    color-mix(in srgb, var(--glass-surface-color) var(--glass-opacity), transparent) !important;
+
+  -webkit-backdrop-filter: blur(var(--glass-surface-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-surface-blur)) saturate(var(--glass-saturation));
+
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
+[data-slot="sidebar-container"].glass-sidebar > * {
+  /* The container's only direct child is sidebar-inner; keep this promotion
+     above the pointer-light layer. Future absolute/fixed direct children
+     would be flattened by this rule (see .glass-surface for the same guard). */
+  position: relative;
+  z-index: 1;
+}
+
+[data-slot="sidebar-container"].glass-sidebar [data-slot="sidebar-inner"] {
+  background-color: transparent;
+}
+
+/* --- Structural glass: workspace topbar (DESIGN.md §38) ---------------------
+   Thin grouped glass. The html[data-theme-id] selector beats the themed
+   toolbar background so the bar stays translucent under every palette. */
+[data-chat-header].glass-topbar,
+html[data-theme-id] [data-chat-header].glass-topbar {
+  --glass-surface-color: var(--toolbar-background, var(--background));
+  --glass-surface-blur: var(--glass-blur-thin);
+
+  position: relative;
+  isolation: isolate;
+
+  background:
+    linear-gradient(180deg, var(--glass-sheen-top), var(--glass-sheen-bottom)),
+    color-mix(in srgb, var(--glass-surface-color) var(--glass-opacity), transparent);
+
+  -webkit-backdrop-filter: blur(var(--glass-surface-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-surface-blur)) saturate(var(--glass-saturation));
+
+  box-shadow:
+    inset 0 -1px 0 color-mix(in srgb, var(--glass-edge) 60%, transparent),
+    inset 0 1px 0 var(--glass-highlight);
+}
+
+[data-chat-header].glass-topbar > :not(.workspace-titlebar-controls) {
+  position: relative;
+  z-index: 1;
+}
+
+/* --- Structural glass: right panel tab bar (DESIGN.md §38, §45) -------------
+   Panel chrome is glass; the panel body (terminal/files/preview) stays solid. */
+[data-right-panel-tabbar].glass-panel-tabbar {
+  --glass-surface-color: var(--background);
+
+  box-shadow:
+    inset 0 -1px 0 color-mix(in srgb, var(--glass-edge) 55%, transparent),
+    inset 0 1px 0 var(--glass-highlight);
+}
+
+/* --- Structural glass: status bar (DESIGN.md §46) ---------------------------
+   Thin glass, very low body opacity, subtle top separator, small typography.
+   The 50% muted pre-mix keeps the bar quiet even at high glass opacity. */
+[data-speg-status-bar].glass-footer {
+  --glass-surface-color: color-mix(in srgb, var(--muted) 50%, transparent);
+
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-edge) 45%, transparent);
+}
+
+/* --- Interactive glass: composer focus (DESIGN.md §42) ----------------------
+   Focused composer gets a slightly denser body, an accent edge, and a
+   stronger internal highlight. The whole surface does not turn blue. */
+.chat-composer-glass-shell:focus-within::before {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--glass-sheen-top) 65%, transparent),
+      transparent
+    ),
+    color-mix(
+      in srgb,
+      var(--chat-composer-glass-surface) calc(var(--glass-opacity) + 6%),
+      transparent
+    );
+}
+
+.chat-composer-glass-host::after {
+  transition:
+    border-color var(--glass-motion-button) var(--glass-ease),
+    box-shadow var(--glass-motion-button) var(--glass-ease);
+}
+
+.chat-composer-glass-shell:focus-within .chat-composer-glass-host::after {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent),
+    inset 0 1px 0 var(--glass-highlight);
+}
+
+/* Dialogs and the command palette are modal glass: the strongest elevation. */
+.dialog-glass {
+  box-shadow: var(--glass-shadow-modal);
+}
+
+.dark .dialog-glass {
+  box-shadow:
+    var(--glass-shadow-modal),
+    inset 0 1px 0 var(--glass-highlight);
+}
+
+/* --- Accessibility ----------------------------------------------------------
+   Reduced transparency: near-solid surfaces, no backdrop blur, same geometry
+   (DESIGN.md §64). Increased contrast: more opaque, stronger edges (§65).
+   Reduced motion: no pointer light (§66). */
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass-surface,
+  [data-slot="sidebar-container"].glass-sidebar,
+  [data-chat-header].glass-topbar,
+  html[data-theme-id] [data-chat-header].glass-topbar,
+  [data-right-panel-tabbar].glass-panel-tabbar,
+  [data-speg-status-bar].glass-footer,
+  .chat-composer-glass,
+  .chat-composer-glass-shell::before,
+  .alert-glass,
+  .dialog-glass,
+  .dropdown-glass {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .glass-surface,
+  [data-right-panel-tabbar].glass-panel-tabbar,
+  [data-speg-status-bar].glass-footer,
+  .chat-composer-glass,
+  .alert-glass,
+  .dialog-glass,
+  .dropdown-glass {
+    background: color-mix(in srgb, var(--background) 96%, transparent) !important;
+  }
+
+  [data-chat-header].glass-topbar,
+  html[data-theme-id] [data-chat-header].glass-topbar {
+    background: color-mix(
+      in srgb,
+      var(--toolbar-background, var(--background)) 96%,
+      transparent
+    ) !important;
+  }
+
+  [data-slot="sidebar-container"].glass-sidebar {
+    background: color-mix(in srgb, var(--sidebar) 96%, transparent) !important;
+  }
+
+  .chat-composer-glass-shell::before {
+    background: color-mix(in srgb, var(--chat-composer-glass-surface) 96%, transparent) !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .glass-surface,
+  [data-slot="sidebar-container"].glass-sidebar,
+  [data-chat-header].glass-topbar,
+  html[data-theme-id] [data-chat-header].glass-topbar,
+  [data-right-panel-tabbar].glass-panel-tabbar,
+  [data-speg-status-bar].glass-footer {
+    background: color-mix(in srgb, var(--glass-surface-color) 97%, transparent) !important;
+    box-shadow:
+      inset 0 0 0 1px var(--glass-edge-strong),
+      inset 0 1px 0 var(--glass-highlight);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-surface[data-glass-light]::before,
+  [data-slot="sidebar-container"].glass-sidebar[data-glass-light]::before,
+  [data-chat-header].glass-topbar[data-glass-light]::before,
+  .chat-composer-glass-host[data-glass-light]::before {
+    opacity: 0 !important;
+    transition: none;
+  }
+
+  .chat-composer-glass-host::after {
+    transition: none;
+  }
+}
+
+/* --- Fallback: no backdrop blur -> readable near-solid surfaces -------------
+   (DESIGN.md §71). Priority is readability, not transparency. */
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .glass-surface,
+  [data-slot="sidebar-container"].glass-sidebar,
+  [data-chat-header].glass-topbar,
+  html[data-theme-id] [data-chat-header].glass-topbar,
+  [data-right-panel-tabbar].glass-panel-tabbar,
+  [data-speg-status-bar].glass-footer {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  [data-slot="sidebar-container"].glass-sidebar {
+    background: color-mix(in srgb, var(--sidebar) 96%, transparent) !important;
+  }
+
+  [data-chat-header].glass-topbar,
+  html[data-theme-id] [data-chat-header].glass-topbar {
+    background: color-mix(
+      in srgb,
+      var(--toolbar-background, var(--background)) 96%,
+      transparent
+    ) !important;
+  }
+
+  .glass-surface,
+  [data-right-panel-tabbar].glass-panel-tabbar,
+  [data-speg-status-bar].glass-footer {
+    background: color-mix(in srgb, var(--background) 96%, transparent) !important;
+  }
 }
