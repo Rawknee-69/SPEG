@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
+  ANIME_THEME,
   getThemeColorsForMode,
   getThemeDefinition,
   getThemeModes,
   getThemePreferenceMode,
+  GLASS_THEME,
   isKnownThemePreference,
+  JUNGLE_THEME,
   getCustomThemes,
   invalidateCustomThemes,
   installCustomTheme,
@@ -275,7 +278,16 @@ describe("theme files", () => {
   });
 
   it("includes the dual-mode maintainer themes", () => {
-    for (const theme of [SPEG_CHAT_THEME, GROVE_THEME, OCEAN_THEME, EMBER_THEME, IRIS_THEME]) {
+    for (const theme of [
+      SPEG_CHAT_THEME,
+      GROVE_THEME,
+      OCEAN_THEME,
+      EMBER_THEME,
+      IRIS_THEME,
+      GLASS_THEME,
+      JUNGLE_THEME,
+      ANIME_THEME,
+    ]) {
       expect(getThemeDefinition(theme.id)).toBe(theme);
       expect(getThemeModes(theme)).toEqual(["light", "dark"]);
       expect(theme.colors.accent).toMatch(/^#[0-9a-f]{6}$/i);

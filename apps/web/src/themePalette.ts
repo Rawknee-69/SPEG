@@ -10,6 +10,12 @@ export const EMBER_THEME_ID = "ember" as const;
 export const EMBER_THEME_LABEL = "Ember";
 export const IRIS_THEME_ID = "iris" as const;
 export const IRIS_THEME_LABEL = "Iris";
+export const GLASS_THEME_ID = "glass" as const;
+export const GLASS_THEME_LABEL = "Glass";
+export const JUNGLE_THEME_ID = "jungle" as const;
+export const JUNGLE_THEME_LABEL = "Jungle";
+export const ANIME_THEME_ID = "anime" as const;
+export const ANIME_THEME_LABEL = "Anime";
 export const THEME_FILE_VERSION = 1 as const;
 export const CUSTOM_THEMES_STORAGE_KEY = "speg:themes:v1";
 export const THEME_FOLLOW_SYSTEM_STORAGE_KEY = "speg:theme-follow-system";
@@ -119,6 +125,9 @@ const RESERVED_THEME_IDS = new Set([
   OCEAN_THEME_ID,
   EMBER_THEME_ID,
   IRIS_THEME_ID,
+  GLASS_THEME_ID,
+  JUNGLE_THEME_ID,
+  ANIME_THEME_ID,
   LEGACY_SPEG_CHAT_DARK_THEME_ID,
   "speg-grove",
   "speg-ocean",
@@ -1363,12 +1372,67 @@ export const IRIS_THEME: ThemeDefinition = {
   },
 };
 
+/** Frosted light theme in the Apple mold: cool neutrals with the signature
+ * system blue carrying accents, actions, and links. */
+export const GLASS_THEME: ThemeDefinition = {
+  id: GLASS_THEME_ID,
+  label: GLASS_THEME_LABEL,
+  appearance: "light",
+  colors: {
+    ...createManagedThemeColors("light", "#f2f5f9", "#0a84ff"),
+    ...themeActionColors("#0071e3"),
+  },
+  variants: {
+    dark: {
+      ...createManagedThemeColors("dark", "#1b1d22", "#5ac8fa"),
+      ...themeActionColors("#3aa2ff"),
+    },
+  },
+};
+
+/** Dense rainforest: deep greens by day, electric lime on a dark canopy. */
+export const JUNGLE_THEME: ThemeDefinition = {
+  id: JUNGLE_THEME_ID,
+  label: JUNGLE_THEME_LABEL,
+  appearance: "light",
+  colors: {
+    ...createManagedThemeColors("light", "#f1f7ea", "#4d7c0f"),
+    ...themeActionColors("#b45309"),
+  },
+  variants: {
+    dark: {
+      ...createManagedThemeColors("dark", "#0e1710", "#a3e635"),
+      ...themeActionColors("#84cc16"),
+    },
+  },
+};
+
+/** Bright manga-style duo-tone: sakura pink canvas, violet accents. */
+export const ANIME_THEME: ThemeDefinition = {
+  id: ANIME_THEME_ID,
+  label: ANIME_THEME_LABEL,
+  appearance: "light",
+  colors: {
+    ...createManagedThemeColors("light", "#fff5fb", "#ec4899"),
+    ...themeActionColors("#8b5cf6"),
+  },
+  variants: {
+    dark: {
+      ...createManagedThemeColors("dark", "#1b1124", "#f472b6"),
+      ...themeActionColors("#a78bfa"),
+    },
+  },
+};
+
 const BUILT_IN_THEME_DEFINITIONS: ReadonlyArray<ThemeDefinition> = [
   SPEG_CHAT_THEME,
   GROVE_THEME,
   OCEAN_THEME,
   EMBER_THEME,
   IRIS_THEME,
+  GLASS_THEME,
+  JUNGLE_THEME,
+  ANIME_THEME,
 ];
 
 export function getThemeDefinition(theme: ThemePreference): ThemeDefinition | null {

@@ -9,8 +9,11 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "../../lib/utils";
 import {
+  ANIME_THEME,
   getThemeDefinition,
   getThemeModes,
+  GLASS_THEME,
+  JUNGLE_THEME,
   removeCustomTheme,
   serializeThemeFile,
   type ThemeAppearance,
@@ -52,6 +55,9 @@ const MAINTAINER_THEMES: ReadonlyArray<ThemeDefinition> = [
   OCEAN_THEME,
   EMBER_THEME,
   IRIS_THEME,
+  GLASS_THEME,
+  JUNGLE_THEME,
+  ANIME_THEME,
 ];
 
 function downloadThemeFile(filename: string, contents: string): void {
