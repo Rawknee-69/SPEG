@@ -60,6 +60,7 @@ import {
   useTheme,
 } from "../../hooks/useTheme";
 import { ThemeLibrary } from "./ThemeSettings";
+import { WallpaperSettings } from "./WallpaperSettings";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { isMacPlatform } from "../../lib/utils";
 import { usePrimarySettings, useUpdatePrimarySettings } from "../../hooks/useSettings";
@@ -1035,6 +1036,7 @@ export function AppearanceSettingsPanel() {
           />
         ) : null}
       </SettingsSection>
+      <WallpaperSettings />
       <TypographySection />
     </SettingsPageContainer>
   );

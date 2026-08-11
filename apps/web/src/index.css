@@ -1194,6 +1194,84 @@ html[data-theme-id] body {
   color: var(--foreground);
 }
 
+/* Wallpaper: when a full-screen background media is active, the big surfaces
+   turn translucent (CSS-only, no JS color rewrites) so the media shows
+   through. The fallback chains keep the stock look working when no theme
+   definition is applied. Keep this block after the theme mapping above so
+   both attributes together resolve to the translucent values — the explicit
+   html.dark selector ties the dark theme mapping's specificity and wins by
+   source order. */
+html[data-wallpaper],
+html.dark[data-wallpaper] {
+  --background: color-mix(in srgb, var(--app-theme-canvas, var(--background)) 72%, transparent);
+  --app-chrome-background: color-mix(
+    in srgb,
+    var(--app-theme-chrome, var(--app-chrome-background)) 72%,
+    transparent
+  );
+  --toolbar-background: color-mix(
+    in srgb,
+    var(--app-theme-toolbar, var(--toolbar-background)) 72%,
+    transparent
+  );
+  --card: color-mix(in srgb, var(--app-theme-surface, var(--card)) 78%, transparent);
+  --popover: color-mix(in srgb, var(--app-theme-surface-overlay, var(--popover)) 85%, transparent);
+  --surface-raised: color-mix(
+    in srgb,
+    var(--app-theme-surface-raised, var(--surface-raised)) 82%,
+    transparent
+  );
+  --sidebar: color-mix(in srgb, var(--app-theme-sidebar, var(--sidebar)) 66%, transparent);
+  --code-background: color-mix(
+    in srgb,
+    var(--app-theme-code-background, var(--code-background)) 66%,
+    transparent
+  );
+  --terminal-background: color-mix(
+    in srgb,
+    var(--app-theme-terminal-background, var(--terminal-background)) 66%,
+    transparent
+  );
+  --message-surface: color-mix(
+    in srgb,
+    var(--app-theme-message-surface, var(--message-surface)) 78%,
+    transparent
+  );
+}
+
+#wallpaper-layer {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  background: var(--background);
+}
+
+#wallpaper-layer[data-ready="true"] {
+  opacity: 1;
+}
+
+#wallpaper-layer img,
+#wallpaper-layer video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* A full-screen blur is one GPU pass; default 0px keeps it free. The small
+     scale hides the blurred edge without a second pass. */
+  filter: blur(var(--app-wallpaper-blur, 0px));
+  transform: scale(1.02);
+  user-select: none;
+}
+
+#wallpaper-layer .wallpaper-dim {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / var(--app-wallpaper-dim, 0.3));
+}
+
 /* Theme-token dependency probes are restored synchronously, before paint. Keep
    transitions from observing the temporary sentinel color in between. */
 html[data-theme-token-probe],
@@ -1377,6 +1455,25 @@ html[data-theme-id] [data-sidebar-version="v2"] {
   --sidebar-row-selected: var(--app-theme-sidebar-row-selected);
   --sidebar-border: var(--app-theme-sidebar-border);
   --sidebar-stage-fade: var(--app-theme-sidebar);
+  background-color: var(--sidebar);
+}
+
+/* The sidebar re-declares the surface tokens above, so the wallpaper
+   translucency has to be re-applied at its own specificity (higher than the
+   mapping and the wallpaper block) or the nav would stay opaque. */
+html[data-theme-id][data-wallpaper] [data-sidebar-version="v1"],
+html[data-theme-id][data-wallpaper] [data-sidebar-version="v2"],
+html.dark[data-theme-id][data-wallpaper] [data-sidebar-version="v1"],
+html.dark[data-theme-id][data-wallpaper] [data-sidebar-version="v2"] {
+  --background: color-mix(in srgb, var(--app-theme-canvas) 72%, transparent);
+  --card: color-mix(in srgb, var(--app-theme-surface) 78%, transparent);
+  --sidebar: color-mix(in srgb, var(--app-theme-sidebar) 66%, transparent);
+  --sidebar-control-surface: color-mix(
+    in srgb,
+    var(--app-theme-sidebar-control-surface) 70%,
+    transparent
+  );
+  --sidebar-stage-fade: var(--sidebar);
   background-color: var(--sidebar);
 }
 

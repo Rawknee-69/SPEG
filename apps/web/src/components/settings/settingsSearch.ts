@@ -55,6 +55,30 @@ export const SETTINGS_SEARCH_ITEMS = [
     targetId: "appearance",
   },
   {
+    id: "wallpaper",
+    title: "Background (image, GIF, video)",
+    to: "/settings/appearance",
+    targetId: "background",
+  },
+  {
+    id: "wallpaper-dim",
+    title: "Background dim",
+    to: "/settings/appearance",
+    targetId: "background",
+  },
+  {
+    id: "wallpaper-blur",
+    title: "Background blur",
+    to: "/settings/appearance",
+    targetId: "background",
+  },
+  {
+    id: "wallpaper-accent",
+    title: "Match accent to background",
+    to: "/settings/appearance",
+    targetId: "background",
+  },
+  {
     // Prefixed because the slider control already owns the `glass-opacity` id.
     id: "setting-glass-opacity",
     title: "Glass opacity",
