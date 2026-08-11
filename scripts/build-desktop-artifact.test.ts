@@ -43,6 +43,7 @@ import {
   stageLinuxIconSize,
   STAGE_INSTALL_ARGS,
   WINDOWS_ASAR_UNPACK,
+  WINDOWS_CACM_DAEMON_EXTRA_RESOURCE,
 } from "./build-desktop-artifact.ts";
 import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
 import { HostProcessArchitecture, HostProcessPlatform } from "@speg/shared/hostProcess";
@@ -527,9 +528,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       assert.equal(config.appId, "com.speg.speg");
       assert.equal(mac.entitlements, "/tmp/entitlements.mac.plist");
       assert.equal(mac.provisioningProfile, "/tmp/speg.provisionprofile");
-      assert.deepStrictEqual(mac.protocols, [
-        { name: "SPEG", schemes: ["speg", "speg-dev"] },
-      ]);
+      assert.deepStrictEqual(mac.protocols, [{ name: "SPEG", schemes: ["speg", "speg-dev"] }]);
     }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
   );
 
@@ -549,16 +548,27 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       assert.equal(win.icon, "icon.ico");
       assert.equal(win.signAndEditExecutable, true);
       assert.notProperty(win, "azureSignOptions");
+
+      // Windows artifacts carry both sidecars; mac/linux only resource-monitor.
+      const winExtraResources = (config.extraResources as ReadonlyArray<{ to: string }>) ?? [];
+      assert.deepStrictEqual(
+        winExtraResources.map((entry) => entry.to),
+        ["resource-monitor", "cacm-daemon"],
+      );
     }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
   );
 
-  it("stages the resource monitor as an external executable resource", () => {
+  it("stages the sidecar binaries as external executable resources", () => {
     assert.deepStrictEqual(DESKTOP_EXTRA_RESOURCES, [
       {
         from: "apps/desktop/prod-resources/resource-monitor",
         to: "resource-monitor",
       },
     ]);
+    assert.deepStrictEqual(WINDOWS_CACM_DAEMON_EXTRA_RESOURCE, {
+      from: "apps/desktop/prod-resources/cacm-daemon",
+      to: "cacm-daemon",
+    });
     assert.deepStrictEqual(resolveResourceMonitorRustTargets("mac", "universal"), [
       "aarch64-apple-darwin",
       "x86_64-apple-darwin",

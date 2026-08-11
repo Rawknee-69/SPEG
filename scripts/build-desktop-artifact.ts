@@ -283,6 +283,20 @@ export class ResourceMonitorBuildOutputMissingError extends Schema.TaggedErrorCl
   }
 }
 
+export class CacmDaemonBuildOutputMissingError extends Schema.TaggedErrorClass<CacmDaemonBuildOutputMissingError>()(
+  "CacmDaemonBuildOutputMissingError",
+  {
+    binaryPath: Schema.String,
+    rustTarget: Schema.String,
+    platform: BuildPlatform,
+    arch: BuildArch,
+  },
+) {
+  override get message(): string {
+    return `cacm-daemon build for ${this.rustTarget} did not produce ${this.binaryPath}.`;
+  }
+}
+
 const desktopIconPlatformNames = {
   mac: "macOS",
   linux: "Linux",
@@ -646,6 +660,12 @@ export const DESKTOP_EXTRA_RESOURCES = [
     to: "resource-monitor",
   },
 ] as const;
+
+/** Windows-only: the cacm-daemon sidecar is staged only for win artifacts. */
+export const WINDOWS_CACM_DAEMON_EXTRA_RESOURCE = {
+  from: "apps/desktop/prod-resources/cacm-daemon",
+  to: "cacm-daemon",
+} as const;
 
 export interface MacPasskeySigningConfiguration {
   readonly appId: string;
@@ -1253,6 +1273,85 @@ const stageResourceMonitor = Effect.fn("stageResourceMonitor")(function* (input:
   }
 });
 
+function cacmDaemonExecutableName(platform: typeof BuildPlatform.Type): string {
+  return platform === "win" ? "cacm-daemon.exe" : "cacm-daemon";
+}
+
+/**
+ * Build the `cacm-daemon` sidecar (the SPEG CACM harness, Rust workspace in
+ * `cacm/`) and stage it next to the other sidecar resources. Currently gated
+ * to Windows artifacts — the packaged desktop app resolves it via
+ * `process.resourcesPath/cacm-daemon/`; macOS/Linux can be enabled once those
+ * target builds are verified.
+ */
+const stageCacmDaemon = Effect.fn("stageCacmDaemon")(function* (input: {
+  readonly repoRoot: string;
+  readonly stageResourcesDir: string;
+  readonly platform: typeof BuildPlatform.Type;
+  readonly arch: typeof BuildArch.Type;
+  readonly verbose: boolean;
+}) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  if (input.platform !== "win") {
+    return;
+  }
+  const manifestPath = path.join(input.repoRoot, "cacm/Cargo.toml");
+  const executableName = cacmDaemonExecutableName(input.platform);
+  const rustTargets = resolveResourceMonitorRustTargets(input.platform, input.arch);
+  const builtBinaries: string[] = [];
+
+  for (const rustTarget of rustTargets) {
+    const spawnCommand = yield* resolveSpawnCommand("cargo", [
+      "build",
+      "--locked",
+      "--release",
+      "--manifest-path",
+      manifestPath,
+      "-p",
+      "cacm-daemon",
+      "--target",
+      rustTarget,
+    ]);
+    yield* runCommand(
+      ChildProcess.make(spawnCommand.command, spawnCommand.args, {
+        cwd: input.repoRoot,
+        shell: spawnCommand.shell,
+      }),
+      {
+        label: `cargo build cacm-daemon (${rustTarget})`,
+        verbose: input.verbose,
+      },
+    );
+
+    const binaryPath = path.join(
+      input.repoRoot,
+      "cacm/target",
+      rustTarget,
+      "release",
+      executableName,
+    );
+    if (!(yield* fs.exists(binaryPath))) {
+      return yield* new CacmDaemonBuildOutputMissingError({
+        binaryPath,
+        rustTarget,
+        platform: input.platform,
+        arch: input.arch,
+      });
+    }
+    builtBinaries.push(binaryPath);
+  }
+
+  const destinationDirectory = path.join(input.stageResourcesDir, "cacm-daemon");
+  const destinationPath = path.join(destinationDirectory, executableName);
+  yield* fs.remove(destinationDirectory, { recursive: true, force: true }).pipe(Effect.ignore);
+  yield* fs.makeDirectory(destinationDirectory, { recursive: true });
+
+  if (builtBinaries.length === 1) {
+    yield* fs.copyFile(builtBinaries[0]!, destinationPath);
+  }
+});
+
 function generateMacIconSet(
   sourcePng: string,
   targetIcns: string,
@@ -1548,7 +1647,10 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     // WINDOWS_ASAR_UNPACK); macOS and Linux stay packed — smart unpack
     // extracts native libraries, which fff-node finds in app.asar.unpacked.
     ...(platform === "win" ? { asarUnpack: [...WINDOWS_ASAR_UNPACK] } : {}),
-    extraResources: DESKTOP_EXTRA_RESOURCES,
+    extraResources:
+      platform === "win"
+        ? [...DESKTOP_EXTRA_RESOURCES, WINDOWS_CACM_DAEMON_EXTRA_RESOURCE]
+        : DESKTOP_EXTRA_RESOURCES,
   };
   const updateChannel = resolveDesktopUpdateChannel(version);
   const publishConfig = yield* resolveGitHubPublishConfig(updateChannel);
@@ -1838,6 +1940,13 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   yield* fs.copy(distDirs.desktopResources, stageResourcesDir);
   yield* fs.copy(distDirs.serverDist, path.join(stageAppDir, "apps/server/dist"));
   yield* stageResourceMonitor({
+    repoRoot,
+    stageResourcesDir,
+    platform: options.platform,
+    arch: options.arch,
+    verbose: options.verbose,
+  });
+  yield* stageCacmDaemon({
     repoRoot,
     stageResourcesDir,
     platform: options.platform,

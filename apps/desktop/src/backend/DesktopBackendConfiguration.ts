@@ -179,6 +179,42 @@ const resolveResourceMonitorPath = Effect.fn(
   return Option.none<string>();
 });
 
+function cacmDaemonBinaryName(platform: NodeJS.Platform): string {
+  return platform === "win32" ? "cacm-daemon.exe" : "cacm-daemon";
+}
+
+/**
+ * Locate the `cacm-daemon` sidecar (the SPEG CACM harness) so the spawned
+ * server can be told where it lives via `SPEG_CACM_DAEMON_PATH`. Packaged
+ * Windows artifacts ship it as an extraResource at `resources/cacm-daemon/`;
+ * dev builds use the repo's cargo target dirs.
+ */
+const resolveCacmDaemonPath = Effect.fn("desktop.backendConfiguration.resolveCacmDaemonPath")(
+  function* () {
+    const environment = yield* DesktopEnvironment.DesktopEnvironment;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const binaryName = cacmDaemonBinaryName(environment.platform);
+    const candidates = environment.isDevelopment
+      ? [
+          environment.path.join(environment.rootDir, "cacm/target/release", binaryName),
+          environment.path.join(environment.rootDir, "cacm/target/debug", binaryName),
+        ]
+      : environment.isPackaged
+        ? [environment.path.join(environment.resourcesPath, "cacm-daemon", binaryName)]
+        : environment.resolveResourcePathCandidates(
+            environment.path.join("cacm-daemon", binaryName),
+          );
+
+    for (const candidate of candidates) {
+      if (yield* fileSystem.exists(candidate).pipe(Effect.orElseSucceed(() => false))) {
+        return Option.some(candidate);
+      }
+    }
+
+    return Option.none<string>();
+  },
+);
+
 const readPersistedBackendObservabilitySettings = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
@@ -366,6 +402,7 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
   function* (
     input: SharedBootstrapInput & {
       readonly resourceMonitorPath: Option.Option<string>;
+      readonly cacmDaemonPath: Option.Option<string>;
     },
   ): Effect.fn.Return<
     DesktopBackendManager.DesktopBackendStartConfig,
@@ -402,6 +439,13 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       env: {
         ...backendChildEnvPatch(),
         ELECTRON_RUN_AS_NODE: "1",
+        // The server's CacmDaemonProcess honors this override first, so the
+        // packaged cacm-daemon sidecar is found even though the repo's cargo
+        // target dirs don't exist inside the artifact.
+        ...Option.match(input.cacmDaemonPath, {
+          onNone: () => ({}),
+          onSome: (cacmDaemonPath) => ({ SPEG_CACM_DAEMON_PATH: cacmDaemonPath }),
+        }),
       },
       // Primary wants process.env (PATH, dev-runner's SPEG_HOME, etc.).
       extendEnv: true,
@@ -675,7 +719,15 @@ export const make = Effect.gen(function* () {
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment),
     );
-    return yield* resolvePrimaryStartConfig({ ...shared, resourceMonitorPath }).pipe(
+    const cacmDaemonPath = yield* resolveCacmDaemonPath().pipe(
+      Effect.provideService(FileSystem.FileSystem, fileSystem),
+      Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment),
+    );
+    return yield* resolvePrimaryStartConfig({
+      ...shared,
+      resourceMonitorPath,
+      cacmDaemonPath,
+    }).pipe(
       Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment),
       Effect.provideService(DesktopServerExposure.DesktopServerExposure, serverExposure),
     );
