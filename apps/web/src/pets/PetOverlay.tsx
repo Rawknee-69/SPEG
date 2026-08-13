@@ -7,7 +7,6 @@ import {
   type CSSProperties,
   type PointerEvent,
 } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { AGENT_STATE_TO_VISUAL, renderSize, SpriteRenderer } from "@speg/pets";
 import type { PetManifest, PetVisualState } from "@speg/pets";
 import { ThreadId, type DesktopBridge, type PetSettings } from "@speg/contracts";
@@ -17,6 +16,7 @@ import { useUpdateClientSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
 import { usePrimaryEnvironmentId } from "~/state/environments";
 import { buildThreadRouteParams } from "~/threadRoutes";
+import type { AppRouter } from "~/router";
 import {
   DEFAULT_PET_ASSET_URL,
   DEFAULT_PET_ID,
@@ -121,7 +121,13 @@ export function formatPetStateLabel(state: PetVisualState): string {
  * Keeps a single decoded atlas in memory and stops its animation loop when
  * hidden or in reduced-motion mode (spec §82, §43).
  */
-export function PetOverlay({ overlay = false }: { readonly overlay?: boolean }) {
+export function PetOverlay({
+  overlay = false,
+  router = null,
+}: {
+  readonly overlay?: boolean;
+  readonly router?: AppRouter | null;
+}) {
   const isElectronHost = typeof window !== "undefined" && "desktopBridge" in window;
 
   // In the desktop app the transparent overlay window is the pet surface; the
@@ -130,24 +136,17 @@ export function PetOverlay({ overlay = false }: { readonly overlay?: boolean }) 
   if (isElectronHost && !overlay) {
     return null;
   }
-  if (!overlay) {
-    return <PetOverlayRouterAware />;
-  }
   // The overlay surface has no router; navigation targets live in the main
   // window, so the overlay's popover/menu drop router-backed actions.
-  return <PetOverlayInner overlay navigate={null} />;
-}
-
-function PetOverlayRouterAware() {
-  return <PetOverlayInner overlay={false} navigate={useNavigate()} />;
+  return <PetOverlayInner overlay={overlay} router={router} />;
 }
 
 function PetOverlayInner({
   overlay,
-  navigate,
+  router,
 }: {
   readonly overlay: boolean;
-  readonly navigate: ReturnType<typeof useNavigate> | null;
+  readonly router: AppRouter | null;
 }) {
   const environmentId = usePrimaryEnvironmentId();
   const updateClientSettings = useUpdateClientSettings();
@@ -439,17 +438,17 @@ function PetOverlayInner({
   );
 
   const openFollowedThread = useCallback(() => {
-    if (navigate === null || environmentId === null || selection.threadId === null) return;
+    if (router === null || environmentId === null || selection.threadId === null) return;
     setPopoverOpen(false);
     setMenuOpen(false);
-    void navigate({
+    void router.navigate({
       to: "/$environmentId/$threadId",
       params: buildThreadRouteParams({
         environmentId,
         threadId: ThreadId.make(selection.threadId),
       }),
     });
-  }, [environmentId, navigate, selection.threadId]);
+  }, [environmentId, router, selection.threadId]);
 
   const hidePet = useCallback(() => {
     setMenuOpen(false);
@@ -461,11 +460,11 @@ function PetOverlayInner({
   }, [desktopBridge, overlay, settings, updateClientSettings]);
 
   const openSettings = useCallback(() => {
-    if (navigate === null) return;
+    if (router === null) return;
     setMenuOpen(false);
     setPopoverOpen(false);
-    void navigate({ to: "/settings/pets" });
-  }, [navigate]);
+    void router.navigate({ to: "/settings/pets" });
+  }, [router]);
 
   if (!enabled) {
     return null;
@@ -539,12 +538,12 @@ function PetOverlayInner({
             </p>
           ) : null}
           <div className="mt-2 flex flex-col gap-1">
-            {navigate !== null ? (
+            {router !== null ? (
               <Button size="xs" onClick={openFollowedThread}>
                 Open task
               </Button>
             ) : null}
-            {navigate !== null ? (
+            {router !== null ? (
               <Button size="xs" variant="ghost" onClick={openSettings}>
                 Pet settings
               </Button>
@@ -555,13 +554,13 @@ function PetOverlayInner({
 
       {menuOpen ? (
         <div className="glass-surface glass-floating absolute bottom-full left-1/2 z-20 mb-2 w-44 -translate-x-1/2 rounded-xl p-1 text-foreground">
-          {navigate !== null ? (
+          {router !== null ? (
             <MenuButton onClick={openFollowedThread} disabled={selection.threadId === null}>
               Open task
             </MenuButton>
           ) : null}
           <MenuButton onClick={hidePet}>Hide pet</MenuButton>
-          {navigate !== null ? <MenuButton onClick={openSettings}>Pet settings</MenuButton> : null}
+          {router !== null ? <MenuButton onClick={openSettings}>Pet settings</MenuButton> : null}
         </div>
       ) : null}
     </div>

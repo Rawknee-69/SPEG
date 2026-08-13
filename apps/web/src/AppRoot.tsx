@@ -28,7 +28,7 @@ export function AppRoot({ router }: { readonly router: AppRouter }) {
   return (
     <AppAtomRegistryProvider>
       <RouterProvider router={router} />
-      <PetOverlay />
+      <PetOverlay router={router} />
       {isElectron ? (
         <Suspense fallback={null}>
           <PreviewAutomationHosts />

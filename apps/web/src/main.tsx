@@ -36,6 +36,10 @@ if (isPetSurface) {
   const container = document.getElementById("root") as HTMLElement;
   ReactDOM.createRoot(container).render(<PetOverlaySurface />);
 } else {
+  // Single root on `#root`: this branch is the ONLY renderApp() call, so the
+  // container never gets a second concurrent React root (two roots on one
+  // container fight over the DOM and freeze the app with removeChild /
+  // insertBefore "not a child of this node" errors).
   void renderApp();
 }
 
@@ -81,5 +85,3 @@ async function renderApp(): Promise<void> {
 
   root.render(<React.StrictMode>{app}</React.StrictMode>);
 }
-
-void renderApp();
