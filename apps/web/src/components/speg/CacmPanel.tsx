@@ -34,6 +34,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "~/lib/utils";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
+import { readDesktopPrimaryBearerToken } from "~/environments/primary/desktopAuth";
 import { Badge } from "~/components/ui/badge";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Spinner } from "~/components/ui/spinner";
@@ -332,12 +333,22 @@ export function CacmPanel(props: CacmPanelProps) {
    * so this asks the SPEG server (which owns the daemon lifecycle) to stop the
    * current instance — including a stale one from an earlier run — and spawn
    * a fresh one with the current origins. Then reload the timeline.
+   *
+   * The route is server-authenticated (`orchestration:operate`). In the
+   * desktop shell the renderer has no cookie for the backend, so the desktop
+   * bearer token is attached explicitly; in the browser (same-origin through
+   * the dev proxy) the session cookie is sent automatically.
    */
   const restartDaemon = useCallback(async () => {
     setRestartError(null);
     setRestarting(true);
     try {
-      const response = await fetch("/api/speg/cacm/restart", { method: "POST" });
+      const token = await readDesktopPrimaryBearerToken().catch(() => null);
+      const init: RequestInit = { method: "POST" };
+      if (token) {
+        init.headers = { Authorization: `Bearer ${token}` };
+      }
+      const response = await fetch("/api/speg/cacm/restart", init);
       const body = (await response.json().catch(() => null)) as {
         status?: string;
         reason?: string;

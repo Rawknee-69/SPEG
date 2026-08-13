@@ -87,6 +87,10 @@ export function makeDesktopContentSecurityPolicy(input: DesktopProtocolRegistrat
     `script-src ${scriptSources.join(" ")}`,
     `connect-src ${connectSources.join(" ")}`,
     `img-src 'self' ${input.scheme}: blob: data: http: https:`,
+    // Background video wallpapers and their settings previews play blob:
+    // (IndexedDB-backed) media; without an explicit media-src, media falls
+    // back to `default-src 'self'` and blob: videos are blocked.
+    `media-src 'self' ${input.scheme}: blob: data: http: https:`,
     "style-src 'self' 'unsafe-inline'",
     `font-src 'self' ${input.scheme}: data:`,
     "worker-src 'self' blob:",

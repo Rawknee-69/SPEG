@@ -67,9 +67,7 @@ function makeHttpClient(status = 200) {
   return Layer.succeed(
     HttpClient.HttpClient,
     HttpClient.make((request) =>
-      Effect.succeed(
-        HttpClientResponse.fromWeb(request, new Response(null, { status })),
-      ),
+      Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status }))),
     ),
   );
 }
@@ -160,11 +158,9 @@ function runStart(input: {
 describe("resolveBinaryCandidates", () => {
   it("prefers the env override and appends repo cargo target dirs", () => {
     assert.deepEqual(
-      CacmDaemonProcess.resolveBinaryCandidates(
-        "win32",
-        "E:/SPEG/speg/apps/server/src/speg",
-        { SPEG_CACM_DAEMON_PATH: "C:/custom/cacm-daemon.exe" },
-      ),
+      CacmDaemonProcess.resolveBinaryCandidates("win32", "E:/SPEG/speg/apps/server/src/speg", {
+        SPEG_CACM_DAEMON_PATH: "C:/custom/cacm-daemon.exe",
+      }),
       [
         "C:/custom/cacm-daemon.exe",
         "E:/SPEG/speg/apps/server/src/speg/../../../../cacm/target/release/cacm-daemon.exe",
@@ -199,7 +195,7 @@ describe("resolveAllowedOrigins", () => {
     );
   });
 
-  it("allows the null origin for the production desktop renderer only", () => {
+  it("allows the desktop renderer origins and null origin for desktop mode", () => {
     assert.deepEqual(
       CacmDaemonProcess.resolveAllowedOrigins({
         mode: "desktop",
@@ -207,7 +203,7 @@ describe("resolveAllowedOrigins", () => {
         devAllowedOrigins: [],
         webPort: undefined,
       }),
-      ["null"],
+      ["null", "speg://app", "speg-dev://app"],
     );
     assert.deepEqual(
       CacmDaemonProcess.resolveAllowedOrigins({
@@ -216,7 +212,7 @@ describe("resolveAllowedOrigins", () => {
         devAllowedOrigins: [],
         webPort: 5733,
       }),
-      ["http://127.0.0.1:5733", "http://localhost:5733"],
+      ["http://127.0.0.1:5733", "http://localhost:5733", "null", "speg://app", "speg-dev://app"],
     );
   });
 });
@@ -432,10 +428,9 @@ describe("CacmDaemonProcess start", () => {
         Effect.gen(function* () {
           const daemonProcess = yield* CacmDaemonProcess.CacmDaemonProcess;
           // Fire start and restart concurrently: the mutex serializes them.
-          const [a, b] = yield* Effect.all(
-            [daemonProcess.start, daemonProcess.restart],
-            { concurrency: "unbounded" },
-          );
+          const [a, b] = yield* Effect.all([daemonProcess.start, daemonProcess.restart], {
+            concurrency: "unbounded",
+          });
           assert.deepEqual(a, { status: "started", pid: TEST_PID });
           assert.deepEqual(b, { status: "started", pid: TEST_PID });
         }).pipe(

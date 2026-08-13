@@ -26,6 +26,7 @@
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -43,6 +44,16 @@ import * as ServerConfig from "../config.ts";
 
 /** The daemon's own default bind address (loopback; the client dials localhost). */
 export const DEFAULT_CACM_DAEMON_BIND_HOST = "127.0.0.1";
+
+/**
+ * Origins the desktop renderer connects from. The `speg`/`speg-dev` schemes
+ * are registered as *standard* schemes (see `apps/desktop`), so Chromium
+ * serializes the page origin literally (`speg://app`) instead of the opaque
+ * `null` a `file://` page produces. The daemon allow-list is an exact match,
+ * so both spellings must be passed explicitly or the packaged/dev desktop
+ * CACM panel is rejected with 403 on every WebSocket upgrade.
+ */
+export const DESKTOP_RENDERER_ORIGINS = ["speg://app", "speg-dev://app"] as const;
 
 /**
  * Env override for the daemon executable path (e.g. a bundled release
@@ -95,10 +106,11 @@ export class CacmDaemonProcess extends Context.Service<
     /**
      * Best-effort auto-start of the cacm-daemon sidecar. Never fails: every
      * failure is logged and reported in the returned status. When a daemon is
-     * spawned, it is registered in the caller's scope and killed when that
-     * scope closes (i.e. when the server shuts down).
+     * spawned, it is pinned to this service's own scope and killed when that
+     * scope closes (i.e. when the server shuts down) — not when the caller's
+     * scope closes, so the HTTP restart route can reuse it.
      */
-    readonly start: Effect.Effect<CacmDaemonStartStatus, never, Scope.Scope>;
+    readonly start: Effect.Effect<CacmDaemonStartStatus, never>;
     /**
      * Restart the sidecar: stop any daemon currently answering on the CACM
      * port (the one we spawned, or a stale instance from an earlier run),
@@ -165,9 +177,15 @@ export function resolveAllowedOrigins(input: {
     origins.add(`http://127.0.0.1:${webPort}`);
   }
   // The production desktop renderer loads the client from disk; browsers
-  // send `Origin: null` for file:// pages on WebSocket upgrades.
-  if (input.mode === "desktop" && input.devUrl === undefined) {
+  // send `Origin: null` for file:// pages on WebSocket upgrades. The
+  // `speg://app` / `speg-dev://app` origins (standard schemes — Chromium
+  // serializes them literally, not as `null`) are always allowed for desktop
+  // mode, packaged and dev alike.
+  if (input.mode === "desktop") {
     origins.add("null");
+    for (const origin of DESKTOP_RENDERER_ORIGINS) {
+      origins.add(origin);
+    }
   }
   return [...origins];
 }
@@ -188,6 +206,16 @@ export const make = Effect.fn("speg.cacmDaemonProcess.make")(function* () {
   // Serialize start/restart so a concurrent POST cannot double-kill or
   // double-spawn.
   const lifecycleMutex = yield* Semaphore.make(1);
+
+  // The sidecar must outlive any single caller. The startup phase forks
+  // `start` into the server scope, but the HTTP restart route runs in a
+  // per-request scope that closes as soon as the response is sent — a daemon
+  // spawned inside it would be killed the moment the request finished. Pin
+  // the spawned child to a scope this service owns (a child of the layer
+  // scope), which closes only when the layer — i.e. the server runtime —
+  // shuts down.
+  const daemonScope = yield* Scope.make("sequential");
+  yield* Effect.addFinalizer(() => Scope.close(daemonScope, Exit.void));
 
   const probe = (url: string) =>
     httpClient.get(url).pipe(
@@ -217,24 +245,20 @@ export const make = Effect.fn("speg.cacmDaemonProcess.make")(function* () {
     Effect.gen(function* () {
       const command = ChildProcess.make(
         platform === "win32" ? "taskkill" : "kill",
-        platform === "win32"
-          ? ["/PID", String(pid), "/T", "/F"]
-          : ["-9", String(pid)],
+        platform === "win32" ? ["/PID", String(pid), "/T", "/F"] : ["-9", String(pid)],
         {
           stdin: "ignore",
           stdout: "ignore",
           stderr: "ignore",
         },
       );
-      yield* spawner
-        .spawn(command)
-        .pipe(
-          Effect.flatMap((child) => child.exitCode),
-          Effect.catch((error) =>
-            Effect.logDebug("failed to kill stale cacm-daemon by pid", { pid, error }),
-          ),
-          Effect.asVoid,
-        );
+      yield* spawner.spawn(command).pipe(
+        Effect.flatMap((child) => child.exitCode),
+        Effect.catch((error) =>
+          Effect.logDebug("failed to kill stale cacm-daemon by pid", { pid, error }),
+        ),
+        Effect.asVoid,
+      );
     });
 
   /**
@@ -266,15 +290,14 @@ export const make = Effect.fn("speg.cacmDaemonProcess.make")(function* () {
     return yield* Effect.fail(new CacmDaemonBinaryNotFound(candidates));
   });
 
-  const startUnlocked: Effect.Effect<CacmDaemonStartStatus, never, Scope.Scope> =
-    Effect.gen(function* () {
+  const startUnlocked: Effect.Effect<CacmDaemonStartStatus, never> = Effect.gen(function* () {
     const autostart = environment[CACM_DAEMON_AUTOSTART_ENV];
     if (autostart !== undefined && (autostart === "0" || autostart.toLowerCase() === "false")) {
       yield* Effect.logInfo("cacm-daemon auto-start is disabled", {
         key: CACM_DAEMON_AUTOSTART_ENV,
       });
       return { status: "disabled" } as const;
-    };
+    }
 
     const host = DEFAULT_CACM_DAEMON_BIND_HOST;
     const port = DEFAULT_SPEG_CACM_PORT;
@@ -321,48 +344,56 @@ export const make = Effect.fn("speg.cacmDaemonProcess.make")(function* () {
       killSignal: "SIGTERM",
       forceKillAfter: DAEMON_KILL_TIMEOUT,
     });
-    const handle = yield* Effect.acquireRelease(
-      spawner.spawn(command).pipe(
-        Effect.mapError((cause) => new CacmDaemonSpawnFailed(binaryPath, cause)),
-      ),
-      // `kill()` does not inherit the command's `forceKillAfter`; pass it
-      // explicitly so a daemon that ignores SIGTERM cannot hang shutdown.
-      (child) => child.kill({ forceKillAfter: DAEMON_KILL_TIMEOUT }).pipe(Effect.ignore),
-    );
-    // Remember the child so `restart` can stop exactly this process.
-    yield* Ref.set(currentChild, Option.some(handle));
+    // Spawn and watch the daemon inside `daemonScope` (not the caller's
+    // scope): the acquireRelease finalizer, the output drainers, and the
+    // exit watcher are all pinned to the daemon's own lifetime, so a spawn
+    // from the per-request restart route survives the request.
+    const handle = yield* Effect.gen(function* () {
+      const child = yield* Effect.acquireRelease(
+        spawner
+          .spawn(command)
+          .pipe(Effect.mapError((cause) => new CacmDaemonSpawnFailed(binaryPath, cause))),
+        // `kill()` does not inherit the command's `forceKillAfter`; pass it
+        // explicitly so a daemon that ignores SIGTERM cannot hang shutdown.
+        (child) => child.kill({ forceKillAfter: DAEMON_KILL_TIMEOUT }).pipe(Effect.ignore),
+      );
+      // Remember the child so `restart` can stop exactly this process.
+      yield* Ref.set(currentChild, Option.some(child));
 
-    // Keep the daemon's own output out of the server's stdout but visible in
-    // server logs; the drainers die with the server scope.
-    yield* handle.stderr.pipe(
-      Stream.decodeText,
-      Stream.splitLines,
-      Stream.runForEach((line) => Effect.logDebug("cacm-daemon stderr", { line })),
-      Effect.catchCause((cause) =>
-        Effect.logDebug("cacm-daemon stderr stream closed", { cause }),
-      ),
-      Effect.forkScoped,
-    );
-    yield* handle.stdout.pipe(
-      Stream.decodeText,
-      Stream.splitLines,
-      Stream.runForEach((line) => Effect.logDebug("cacm-daemon stdout", { line })),
-      Effect.catchCause((cause) =>
-        Effect.logDebug("cacm-daemon stdout stream closed", { cause }),
-      ),
-      Effect.forkScoped,
-    );
+      // Keep the daemon's own output out of the server's stdout but visible
+      // in server logs; the drainers die with the daemon scope.
+      yield* child.stderr.pipe(
+        Stream.decodeText,
+        Stream.splitLines,
+        Stream.runForEach((line) => Effect.logDebug("cacm-daemon stderr", { line })),
+        Effect.catchCause((cause) =>
+          Effect.logDebug("cacm-daemon stderr stream closed", { cause }),
+        ),
+        Effect.forkScoped,
+      );
+      yield* child.stdout.pipe(
+        Stream.decodeText,
+        Stream.splitLines,
+        Stream.runForEach((line) => Effect.logDebug("cacm-daemon stdout", { line })),
+        Effect.catchCause((cause) =>
+          Effect.logDebug("cacm-daemon stdout stream closed", { cause }),
+        ),
+        Effect.forkScoped,
+      );
 
-    // Report an unexpected daemon exit; completes when the daemon stops.
-    yield* handle.exitCode.pipe(
-      Effect.flatMap((exitCode) =>
-        Effect.logWarning("cacm-daemon exited", { exitCode: Number(exitCode) }),
-      ),
-      Effect.catchCause((cause) =>
-        Effect.logDebug("cacm-daemon exit wait interrupted", { cause }),
-      ),
-      Effect.forkScoped,
-    );
+      // Report an unexpected daemon exit; completes when the daemon stops.
+      yield* child.exitCode.pipe(
+        Effect.flatMap((exitCode) =>
+          Effect.logWarning("cacm-daemon exited", { exitCode: Number(exitCode) }),
+        ),
+        Effect.catchCause((cause) =>
+          Effect.logDebug("cacm-daemon exit wait interrupted", { cause }),
+        ),
+        Effect.forkScoped,
+      );
+
+      return child;
+    }).pipe(Effect.provideService(Scope.Scope, daemonScope));
 
     yield* Effect.logInfo("cacm-daemon started", {
       pid: Number(handle.pid),
@@ -383,7 +414,7 @@ export const make = Effect.fn("speg.cacmDaemonProcess.make")(function* () {
 
   // Serialized entry: the daemon is a single-instance sidecar, so start and
   // restart must never interleave (double-spawn / kill-the-fresh-child).
-  const start: Effect.Effect<CacmDaemonStartStatus, never, Scope.Scope> =
+  const start: Effect.Effect<CacmDaemonStartStatus, never> =
     lifecycleMutex.withPermits(1)(startUnlocked);
 
   /**
@@ -392,8 +423,8 @@ export const make = Effect.fn("speg.cacmDaemonProcess.make")(function* () {
    * port to be released, then start fresh with the current origin list.
    * Never fails — every outcome is reported as a status.
    */
-  const restart: Effect.Effect<CacmDaemonStartStatus, never, Scope.Scope> = lifecycleMutex
-    .withPermits(1)(
+  const restart: Effect.Effect<CacmDaemonStartStatus, never, Scope.Scope> =
+    lifecycleMutex.withPermits(1)(
       Effect.gen(function* () {
         const host = DEFAULT_CACM_DAEMON_BIND_HOST;
         const port = DEFAULT_SPEG_CACM_PORT;
