@@ -2069,6 +2069,23 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     yield* fs.copy(path.join(repoRoot, "patches"), path.join(stageAppDir, "patches"));
   }
 
+  // The staged install (pnpm, no lockfile) floats semver ranges to the latest
+  // release and, on Windows, downloads both win32 and linux optional platform
+  // packages (e.g. each @anthropic-ai/claude-agent-sdk-* binary is ~200MB).
+  // pnpm's defaults abort these downloads after 60s/2 retries on slow links,
+  // so give the stage generous fetch settings; the tarballs are cached in the
+  // pnpm store afterwards, so later builds reuse them.
+  yield* fs.writeFileString(
+    path.join(stageAppDir, ".npmrc"),
+    [
+      "fetch-timeout=1800000",
+      "fetch-retries=5",
+      "fetch-retry-maxtimeout=600000",
+      "network-concurrency=4",
+      "",
+    ].join("\n"),
+  );
+
   yield* Effect.log("[desktop-artifact] Installing staged production dependencies...");
   const installCommand = yield* resolveSpawnCommand("vp", [...STAGE_INSTALL_ARGS]);
   yield* runCommand(
