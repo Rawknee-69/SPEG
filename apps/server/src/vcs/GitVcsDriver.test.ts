@@ -108,3 +108,45 @@ it.effect("GitVcsDriver forwards execute env to the VCS process", () => {
     ),
   );
 });
+
+it.effect(
+  "detectRepository takes an existing .git in an ancestor when rev-parse reports no work tree",
+  () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "speg-git-detect-fallback-",
+      });
+      const parent = path.join(root, "parent");
+      const nested = path.join(parent, "nested");
+      yield* fileSystem.makeDirectory(nested, { recursive: true });
+      yield* fileSystem.makeDirectory(path.join(parent, ".git"), { recursive: true });
+
+      const driver = yield* GitVcsDriver.makeVcsDriverShape();
+      const identity = yield* driver.detectRepository(nested);
+
+      // The nested folder has no .git of its own, but its ancestor does. The
+      // driver must take the existing repository instead of reporting null (and
+      // instead of ever re-initializing inside it).
+      assert.equal(identity?.kind, "git");
+      assert.equal(identity?.rootPath, parent);
+      assert.equal(identity?.metadataPath, path.join(parent, ".git"));
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          NodeServices.layer,
+          Layer.succeed(VcsProcess.VcsProcess, {
+            run: () =>
+              Effect.succeed({
+                exitCode: ChildProcessSpawner.ExitCode(128),
+                stdout: "",
+                stderr: "fatal: not a git repository",
+                stdoutTruncated: false,
+                stderrTruncated: false,
+              }),
+          } satisfies VcsProcess.VcsProcess["Service"]),
+        ),
+      ),
+    ),
+);

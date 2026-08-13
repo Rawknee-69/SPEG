@@ -187,6 +187,27 @@ describe("ServerSettings worktree defaults", () => {
   });
 });
 
+describe("ServerSettings git initialization mode", () => {
+  it("defaults to asking the user for legacy configs", () => {
+    expect(decodeServerSettings({}).vcsGitInitMode).toBe("ask");
+    expect(DEFAULT_SERVER_SETTINGS.vcsGitInitMode).toBe("ask");
+  });
+
+  it("accepts auto and off modes", () => {
+    expect(decodeServerSettings({ vcsGitInitMode: "auto" }).vcsGitInitMode).toBe("auto");
+    expect(decodeServerSettings({ vcsGitInitMode: "off" }).vcsGitInitMode).toBe("off");
+  });
+
+  it("rejects unknown modes", () => {
+    expect(() => decodeServerSettings({ vcsGitInitMode: "always" })).toThrow();
+    expect(() => decodeServerSettingsPatch({ vcsGitInitMode: "always" })).toThrow();
+  });
+
+  it("round-trips through the patch schema", () => {
+    expect(decodeServerSettingsPatch({ vcsGitInitMode: "auto" }).vcsGitInitMode).toBe("auto");
+  });
+});
+
 describe("ServerSettings.sourceControlWritingStyle", () => {
   it("defaults all style settings for legacy configs", () => {
     const settings = decodeServerSettings({});

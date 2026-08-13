@@ -16,6 +16,7 @@ import * as CheckpointStore from "./CheckpointStore.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 import * as ServerConfig from "../config.ts";
+import * as ServerSettings from "../serverSettings.ts";
 
 const ServerConfigLayer = ServerConfig.ServerConfig.layerTest(process.cwd(), {
   prefix: "speg-checkpoint-store-test-",
@@ -29,6 +30,7 @@ const CheckpointStoreTestLayer = CheckpointStore.layer.pipe(
 const TestLayer = CheckpointStoreTestLayer.pipe(
   Layer.provideMerge(VcsProcessTestLayer),
   Layer.provideMerge(VcsDriverTestLayer),
+  Layer.provideMerge(ServerSettings.ServerSettingsService.layerTest()),
   Layer.provideMerge(ServerConfigLayer),
   Layer.provideMerge(NodeServices.layer),
 );

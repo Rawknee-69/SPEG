@@ -6,7 +6,8 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 
 import type { VcsDriverKind, VcsError, VcsRepositoryIdentity } from "@speg/contracts";
-import { VcsUnsupportedOperationError } from "@speg/contracts";
+import { VcsRepositoryNotFoundError, VcsUnsupportedOperationError } from "@speg/contracts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as GitVcsDriver from "./GitVcsDriver.ts";
 import * as VcsProjectConfig from "./VcsProjectConfig.ts";
 import * as VcsDriver from "./VcsDriver.ts";
@@ -62,6 +63,7 @@ function parseDetectionCacheKey(key: string): {
 
 export const make = Effect.gen(function* () {
   const projectConfig = yield* VcsProjectConfig.VcsProjectConfig;
+  const serverSettings = yield* ServerSettings.ServerSettingsService;
   const git = yield* GitVcsDriver.makeVcsDriver;
   const drivers: Partial<Record<VcsDriverKind, VcsDriver.VcsDriver["Service"]>> = {
     git,
@@ -137,13 +139,63 @@ export const make = Effect.gen(function* () {
       }
 
       const requestedKind = input.requestedKind ?? "auto";
-      return yield* new VcsUnsupportedOperationError({
+      const autoInitEligible = requestedKind === "auto" || requestedKind === "unknown";
+
+      // With "auto" git initialization, initialize a repository at the target
+      // directory and retry detection. Detection already walks the ancestor
+      // chain (see GitVcsDriver.detectRepository), so reaching this point means
+      // no repository exists in the directory or any of its ancestors — a
+      // nested folder inside an existing repo is never re-initialized.
+      if (autoInitEligible) {
+        const settings = yield* serverSettings.getSettings.pipe(
+          Effect.mapError(
+            () =>
+              new VcsRepositoryNotFoundError({
+                operation: "VcsDriverRegistry.resolve",
+                cwd: input.cwd,
+                detail: "Unable to read settings while resolving the VCS driver.",
+              }),
+          ),
+        );
+        if (settings.vcsGitInitMode === "auto") {
+          const initialized = yield* git
+            .initRepository({
+              cwd: input.cwd,
+              kind: "git",
+            })
+            .pipe(
+              Effect.matchCauseEffect({
+                onFailure: () =>
+                  Effect.fail(
+                    new VcsRepositoryNotFoundError({
+                      operation: "VcsDriverRegistry.resolve",
+                      cwd: input.cwd,
+                      detail: "Failed to initialize a Git repository.",
+                    }),
+                  ),
+                onSuccess: () => Effect.succeed(true),
+              }),
+            );
+          if (initialized) {
+            yield* Cache.invalidate(
+              detectionCache,
+              detectionCacheKey({ cwd: input.cwd, requestedKind }),
+            );
+            const afterInit = yield* detect(input);
+            if (afterInit) {
+              return afterInit;
+            }
+          }
+        }
+      }
+
+      return yield* new VcsRepositoryNotFoundError({
         operation: "VcsDriverRegistry.resolve",
-        kind: requestedKind === "auto" ? "unknown" : requestedKind,
+        cwd: input.cwd,
         detail:
           requestedKind === "auto"
-            ? `No supported VCS repository was detected at ${input.cwd}.`
-            : `No ${requestedKind} repository was detected at ${input.cwd}.`,
+            ? "No supported VCS repository was detected."
+            : `No ${requestedKind} repository was detected.`,
       });
     },
   );

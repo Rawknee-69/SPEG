@@ -4,10 +4,8 @@ import type {
   AtomCommandResult,
   AtomCommandSuccess,
 } from "@speg/client-runtime/state/runtime";
-import {
-  VcsActionUnavailableError,
-  type VcsActionOperation,
-} from "@speg/client-runtime/state/vcs";
+import { runAtomCommand } from "@speg/client-runtime/state/runtime";
+import { VcsActionUnavailableError, type VcsActionOperation } from "@speg/client-runtime/state/vcs";
 import type {
   EnvironmentId,
   GitActionProgressEvent,
@@ -22,9 +20,11 @@ import * as Option from "effect/Option";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useCallback } from "react";
 
+import { ensureLocalApi, readLocalApi } from "../localApi";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { gitEnvironment } from "./git";
 import { useEnvironmentQuery } from "./query";
+import { primaryServerSettingsAtom } from "./server";
 import { sourceControlEnvironment } from "./sourceControl";
 import { useAtomCommand } from "./use-atom-command";
 import { vcsActionManager, vcsEnvironment } from "./vcs";
@@ -50,7 +50,10 @@ interface SourceControlActionState<
   readonly run: (
     ...args: TArgs
   ) => Promise<
-    AtomCommandResult<AtomCommandSuccess<R>, AtomCommandFailure<R> | VcsActionUnavailableError>
+    AtomCommandResult<
+      AtomCommandSuccess<R>,
+      AtomCommandFailure<R> | VcsActionUnavailableError | GitRepositoryNotInitializedError
+    >
   >;
   readonly resetError: () => void;
 }
@@ -84,6 +87,13 @@ function useAction<
 
   const run = useCallback(
     async (...args: TArgs) => {
+      const provisioning = await ensureRepositoryInitialized(input.scope, input.kind);
+      if (provisioning === "declined") {
+        const target = resolveScope(input.scope);
+        return AsyncResult.failure<never, GitRepositoryNotInitializedError>(
+          Cause.fail(new GitRepositoryNotInitializedError(target?.cwd ?? "this folder")),
+        );
+      }
       const execute = async (): Promise<
         AtomCommandResult<AtomCommandSuccess<R>, AtomCommandFailure<R>>
       > => {
@@ -124,6 +134,91 @@ function resolveScope(scope: SourceControlActionScope) {
     environmentId: scope.environmentId,
     cwd: scope.cwd,
   };
+}
+
+export class GitRepositoryNotInitializedError extends Error {
+  constructor(readonly cwd: string) {
+    super(`No Git repository was detected at ${cwd}. Initialize Git to use source control.`);
+    this.name = "GitRepositoryNotInitializedError";
+  }
+}
+
+async function initializeRepository(target: { environmentId: EnvironmentId; cwd: string }) {
+  await runAtomCommand(
+    appAtomRegistry,
+    vcsEnvironment.init,
+    {
+      environmentId: target.environmentId,
+      input: { cwd: target.cwd },
+    },
+    { reportFailure: false },
+  );
+}
+
+/**
+ * Ensures a repository exists for the scope before a source-control action
+ * runs, honoring the "vcsGitInitMode" setting:
+ *
+ * - "auto": initialize Git automatically when no repository exists in the
+ *   directory or any ancestor (the server performs the same check, so a
+ *   nested folder inside an existing repo is never re-initialized).
+ * - "ask": prompt the user first; only initialize on approval. A declined
+ *   prompt reports "not initialized" and does not run the action.
+ * - "off": never initialize; the action runs and surfaces the server's
+ *   "no repository detected" error.
+ *
+ * Returns "ready" when the action may proceed, "declined" when the user
+ * declined to initialize, and "unknown" when the repository state is not
+ * known yet (the action runs and the server decides).
+ */
+async function ensureRepositoryInitialized(
+  scope: SourceControlActionScope,
+  kind: SourceControlActionKind,
+): Promise<"ready" | "declined" | "unknown"> {
+  if (kind === "init") {
+    return "ready";
+  }
+  const target = resolveScope(scope);
+  if (target === null) {
+    return "unknown";
+  }
+
+  const mode = appAtomRegistry.get(primaryServerSettingsAtom).vcsGitInitMode;
+  if (mode === "off") {
+    return "ready";
+  }
+
+  const status = appAtomRegistry.get(
+    vcsEnvironment.status({
+      environmentId: target.environmentId,
+      input: { cwd: target.cwd },
+    }),
+  );
+  const current = Option.getOrNull(AsyncResult.value(status));
+  // `current` may be null until the status subscription has produced a
+  // snapshot; an existing repository is also "ready".
+  if (current?.isRepo === true) {
+    return "ready";
+  }
+  if (current === null) {
+    return "unknown";
+  }
+
+  // No repository exists in the directory or any of its ancestors.
+  if (mode === "auto") {
+    await initializeRepository(target);
+    return "ready";
+  }
+
+  const api = readLocalApi() ?? ensureLocalApi();
+  const confirmed = await api.dialogs.confirm(
+    `No Git repository was found in ${target.cwd}.\n\nInitialize Git here so you can use source control?`,
+  );
+  if (!confirmed) {
+    return "declined";
+  }
+  await initializeRepository(target);
+  return "ready";
 }
 
 export function useSourceControlActionRunning(

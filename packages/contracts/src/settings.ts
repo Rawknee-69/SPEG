@@ -507,6 +507,22 @@ export type SourceControlWritingStyleSettings = typeof SourceControlWritingStyle
 export const DEFAULT_AUTOMATIC_GIT_FETCH_INTERVAL = Duration.seconds(30);
 export const DEFAULT_PROVIDER_HEALTH_REFRESH_INTERVAL = Duration.minutes(5);
 
+/**
+ * What to do when a source-control operation targets a directory that is not
+ * inside any Git repository.
+ *
+ * - "ask": ask the user whether to initialize Git (the client shows a
+ *   confirmation prompt and initializes only on approval).
+ * - "auto": initialize a Git repository automatically. Only happens when no
+ *   repository exists anywhere up the ancestor chain, so a nested folder
+ *   inside an existing repo is never re-initialized.
+ * - "off": never initialize; the operation fails with a "no repository
+ *   detected" error.
+ */
+export const VcsGitInitMode = Schema.Literals(["auto", "ask", "off"]);
+export type VcsGitInitMode = typeof VcsGitInitMode.Type;
+export const DEFAULT_VCS_GIT_INIT_MODE: VcsGitInitMode = "ask";
+
 export const BackgroundActivityProfile = Schema.Literals([
   "balanced",
   "performance",
@@ -572,6 +588,12 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(true)),
   ),
   addProjectBaseDirectory: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  // What to do when an operation targets a directory outside any Git repo:
+  // "auto" initializes Git automatically, "ask" lets the client prompt the
+  // user, "off" never initializes.
+  vcsGitInitMode: VcsGitInitMode.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_VCS_GIT_INIT_MODE)),
+  ),
   textGenerationModelSelection: ModelSelection.pipe(
     Schema.withDecodingDefault(
       Effect.succeed({
@@ -726,6 +748,7 @@ export const ServerSettingsPatch = Schema.Struct({
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
   newWorktreesStartFromOrigin: Schema.optionalKey(Schema.Boolean),
   addProjectBaseDirectory: Schema.optionalKey(TrimmedString),
+  vcsGitInitMode: Schema.optionalKey(VcsGitInitMode),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
   sourceControlWritingStyle: Schema.optionalKey(
     Schema.Struct({

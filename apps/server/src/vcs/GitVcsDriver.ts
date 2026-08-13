@@ -439,28 +439,88 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
         : {}),
     });
 
+  const findAncestorGitDir = Effect.fn("GitVcsDriver.detectRepository.findAncestorGitDir")(
+    function* (cwd: string) {
+      let current = path.resolve(cwd);
+      while (true) {
+        const gitPath = path.join(current, ".git");
+        const exists = yield* fileSystem.exists(gitPath).pipe(Effect.orElseSucceed(() => false));
+        if (exists) {
+          return { rootPath: current, gitPath };
+        }
+        const parent = path.dirname(current);
+        if (parent === current) {
+          return null;
+        }
+        current = parent;
+      }
+    },
+  );
+
+  const resolveGitMetadataPath = Effect.fn("GitVcsDriver.detectRepository.resolveGitMetadataPath")(
+    function* (gitPath: string) {
+      // A linked worktree stores a `.git` file pointing at the common git dir;
+      // a regular repository stores a `.git` directory.
+      const info = yield* fileSystem.stat(gitPath).pipe(Effect.orElseSucceed(() => null));
+      if (info === null || info.type === "Directory") {
+        return gitPath;
+      }
+      const content = yield* fileSystem
+        .readFileString(gitPath)
+        .pipe(Effect.orElseSucceed(() => ""));
+      const gitdirLine = content
+        .split("\n")
+        .map((line) => line.trim())
+        .find((line) => line.startsWith("gitdir:"));
+      if (gitdirLine === undefined) {
+        return gitPath;
+      }
+      const target = gitdirLine.slice("gitdir:".length).trim();
+      if (target.length === 0) {
+        return gitPath;
+      }
+      return path.isAbsolute(target) ? target : path.resolve(path.dirname(gitPath), target);
+    },
+  );
+
   const detectRepository: VcsDriver.VcsDriver["Service"]["detectRepository"] = Effect.fn(
     "detectRepository",
   )(function* (cwd) {
-    if (!(yield* isInsideWorkTree(cwd))) {
+    if (yield* isInsideWorkTree(cwd)) {
+      const root = yield* gitCommand(vcsProcess, "GitVcsDriver.detectRepository.root", cwd, [
+        "rev-parse",
+        "--show-toplevel",
+      ]);
+      const gitCommonDir = yield* gitCommand(
+        vcsProcess,
+        "GitVcsDriver.detectRepository.commonDir",
+        cwd,
+        ["rev-parse", "--git-common-dir"],
+      ).pipe(Effect.orElseSucceed(() => null));
+
+      return {
+        kind: "git" as const,
+        rootPath: root.stdout.trim(),
+        metadataPath: gitCommonDir?.stdout.trim() || null,
+        freshness: yield* nowFreshness(),
+      };
+    }
+
+    // `git rev-parse` reported no work tree, but a repository may still exist
+    // in this directory or an ancestor (for example when git itself fails for
+    // an environment reason such as dubious ownership). Take the existing
+    // repository instead of reporting "no repository detected" — and, crucially,
+    // never auto-initialize inside a directory whose ancestors already contain
+    // a repository.
+    const ancestor = yield* findAncestorGitDir(cwd);
+    if (ancestor === null) {
       return null;
     }
 
-    const root = yield* gitCommand(vcsProcess, "GitVcsDriver.detectRepository.root", cwd, [
-      "rev-parse",
-      "--show-toplevel",
-    ]);
-    const gitCommonDir = yield* gitCommand(
-      vcsProcess,
-      "GitVcsDriver.detectRepository.commonDir",
-      cwd,
-      ["rev-parse", "--git-common-dir"],
-    ).pipe(Effect.orElseSucceed(() => null));
-
     return {
       kind: "git" as const,
-      rootPath: root.stdout.trim(),
-      metadataPath: gitCommonDir?.stdout.trim() || null,
+      rootPath: ancestor.rootPath,
+      metadataPath: yield* resolveGitMetadataPath(ancestor.gitPath),
       freshness: yield* nowFreshness(),
     };
   });

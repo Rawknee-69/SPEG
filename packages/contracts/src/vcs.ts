@@ -266,6 +266,25 @@ export class VcsUnsupportedOperationError extends Schema.TaggedErrorClass<VcsUns
   }
 }
 
+/**
+ * Raised when no VCS repository can be found for a directory (neither the
+ * directory itself nor any ancestor contains a repository). Clients that run
+ * with "ask" git-initialization may intercept this error to prompt the user
+ * before initializing a new repository.
+ */
+export class VcsRepositoryNotFoundError extends Schema.TaggedErrorClass<VcsRepositoryNotFoundError>()(
+  "VcsRepositoryNotFoundError",
+  {
+    operation: Schema.String,
+    cwd: Schema.String,
+    detail: Schema.String,
+  },
+) {
+  override get message(): string {
+    return `No supported VCS repository was detected at ${this.cwd}.`;
+  }
+}
+
 export const VcsError = Schema.Union([
   VcsProcessSpawnError,
   VcsProcessExitError,
@@ -276,5 +295,6 @@ export const VcsError = Schema.Union([
   VcsProcessMissingExitCodeError,
   VcsRepositoryDetectionError,
   VcsUnsupportedOperationError,
+  VcsRepositoryNotFoundError,
 ]);
 export type VcsError = typeof VcsError.Type;

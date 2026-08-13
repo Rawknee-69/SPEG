@@ -496,6 +496,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.addProjectBaseDirectory !== DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory
         ? ["Add project base directory"]
         : []),
+      ...(settings.vcsGitInitMode !== DEFAULT_UNIFIED_SETTINGS.vcsGitInitMode
+        ? ["Git auto-initialization"]
+        : []),
       ...(settings.confirmThreadArchive !== DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive
         ? ["Archive confirmation"]
         : []),
@@ -510,6 +513,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.confirmThreadArchive,
       settings.confirmThreadDelete,
       settings.addProjectBaseDirectory,
+      settings.vcsGitInitMode,
       settings.defaultThreadEnvMode,
       settings.newWorktreesStartFromOrigin,
       settings.diffIgnoreWhitespace,
@@ -612,6 +616,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       defaultThreadEnvMode: DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode,
       newWorktreesStartFromOrigin: DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin,
       addProjectBaseDirectory: DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory,
+      vcsGitInitMode: DEFAULT_UNIFIED_SETTINGS.vcsGitInitMode,
       confirmThreadArchive: DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive,
       confirmThreadDelete: DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete,
       textGenerationModelSelection: DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
@@ -1905,6 +1910,54 @@ export function GeneralSettingsPanel() {
               spellCheck={false}
               aria-label="Add project base directory"
             />
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("vcs-git-init")}
+          description="What to do when a source control operation targets a folder that is not inside any Git repository. 'Ask' prompts you first; 'Auto' initializes Git automatically (never inside an existing repository); 'Do nothing' leaves the folder alone and shows an error."
+          resetAction={
+            settings.vcsGitInitMode !== DEFAULT_UNIFIED_SETTINGS.vcsGitInitMode ? (
+              <SettingResetButton
+                label="git auto-initialization"
+                onClick={() =>
+                  updateSettings({
+                    vcsGitInitMode: DEFAULT_UNIFIED_SETTINGS.vcsGitInitMode,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              value={settings.vcsGitInitMode}
+              onValueChange={(value) => {
+                if (value === "auto" || value === "ask" || value === "off") {
+                  updateSettings({ vcsGitInitMode: value });
+                }
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-44" aria-label="Git auto-initialization mode">
+                <SelectValue>
+                  {settings.vcsGitInitMode === "auto"
+                    ? "Auto"
+                    : settings.vcsGitInitMode === "ask"
+                      ? "Ask"
+                      : "Do nothing"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                <SelectItem hideIndicator value="ask">
+                  Ask
+                </SelectItem>
+                <SelectItem hideIndicator value="auto">
+                  Auto
+                </SelectItem>
+                <SelectItem hideIndicator value="off">
+                  Do nothing
+                </SelectItem>
+              </SelectPopup>
+            </Select>
           }
         />
 
