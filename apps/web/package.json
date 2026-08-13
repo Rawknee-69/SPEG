@@ -28,6 +28,7 @@
     "@pierre/trees": "1.0.0-beta.4",
     "@speg/client-runtime": "workspace:*",
     "@speg/contracts": "workspace:*",
+    "@speg/pets": "workspace:*",
     "@speg/shared": "workspace:*",
     "@tanstack/react-pacer": "^0.19.4",
     "@tanstack/react-router": "^1.160.2",

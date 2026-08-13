@@ -130,6 +130,10 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.removeListener(IpcChannels.WINDOW_FULLSCREEN_STATE_CHANNEL, wrappedListener);
     };
   },
+  petEnsure: () => ipcRenderer.invoke(IpcChannels.PET_ENSURE_CHANNEL),
+  petHide: () => ipcRenderer.invoke(IpcChannels.PET_HIDE_CHANNEL),
+  petDrag: (delta) => ipcRenderer.invoke(IpcChannels.PET_DRAG_CHANNEL, delta),
+  petSetSettings: (settings) => ipcRenderer.invoke(IpcChannels.PET_SET_SETTINGS_CHANNEL, settings),
   getUpdateState: () => ipcRenderer.invoke(IpcChannels.UPDATE_GET_STATE_CHANNEL),
   setUpdateChannel: (channel) =>
     ipcRenderer.invoke(IpcChannels.UPDATE_SET_CHANNEL_CHANNEL, channel),

@@ -66,6 +66,68 @@ export const GlassOpacity = Schema.Int.check(
 export type GlassOpacity = typeof GlassOpacity.Type;
 export const DEFAULT_GLASS_OPACITY: GlassOpacity = 80;
 
+// ── Pet settings (client-local companion) ───────────────────────
+
+/** Which agent thread the pet follows when several are active. */
+export const PetFollowMode = Schema.Literals([
+  "selected",
+  "highest-priority",
+  "recent",
+  "pinned",
+  "workspace",
+]);
+export type PetFollowMode = typeof PetFollowMode.Type;
+export const DEFAULT_PET_FOLLOW_MODE: PetFollowMode = "highest-priority";
+
+/** Screen anchor for the pet, shared by the in-app widget and the desktop overlay. */
+export const PetAnchor = Schema.Literals([
+  "top-left",
+  "top-center",
+  "top-right",
+  "center-left",
+  "center",
+  "center-right",
+  "bottom-left",
+  "bottom-center",
+  "bottom-right",
+]);
+export type PetAnchor = typeof PetAnchor.Type;
+export const DEFAULT_PET_ANCHOR: PetAnchor = "bottom-right";
+
+export const MIN_PET_SCALE = 0.5;
+export const MAX_PET_SCALE = 2;
+export const PetScale = Schema.Number.check(
+  Schema.isBetween({ minimum: MIN_PET_SCALE, maximum: MAX_PET_SCALE }),
+);
+export type PetScale = typeof PetScale.Type;
+export const DEFAULT_PET_SCALE: PetScale = 1;
+
+/**
+ * Client-local pet preferences. Like `speg`, the whole object is replaced on
+ * each edit (see `ClientSettingsPatch`), so consumers build a full `PetSettings`
+ * when patching a single field.
+ */
+export const PetSettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  selectedPet: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed("default"))),
+  visible: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  scale: PetScale.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_PET_SCALE))),
+  anchor: PetAnchor.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_PET_ANCHOR))),
+  offsetX: Schema.Number.pipe(Schema.withDecodingDefault(Effect.succeed(24))),
+  offsetY: Schema.Number.pipe(Schema.withDecodingDefault(Effect.succeed(24))),
+  followMode: PetFollowMode.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_PET_FOLLOW_MODE)),
+  ),
+  alwaysOnTop: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  clickThrough: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  mouseTracking: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  sounds: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  reducedMotion: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  hideOnFullscreen: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+});
+export type PetSettings = typeof PetSettings.Type;
+export const DEFAULT_PET_SETTINGS: PetSettings = Schema.decodeSync(PetSettings)({});
+
 /**
  * Font size preferences, in CSS pixels. The ranges are deliberately narrow:
  * the interface size scales every rem-based dimension in the app, so the
@@ -177,6 +239,7 @@ export const ClientSettingsSchema = Schema.Struct({
   // default UI; this beta flag restores it (plus the /plan and /default slash
   // commands) for users who still rely on the old workflow.
   planModeEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  pets: PetSettings.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_PET_SETTINGS))),
   sidebarAutoSettleAfterDays: Schema.NullOr(SidebarAutoSettleAfterDays).pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_AUTO_SETTLE_AFTER_DAYS)),
   ),
@@ -818,6 +881,7 @@ export const ClientSettingsPatch = Schema.Struct({
     ),
   ),
   planModeEnabled: Schema.optionalKey(Schema.Boolean),
+  pets: Schema.optionalKey(PetSettings),
   sidebarAutoSettleAfterDays: Schema.optionalKey(Schema.NullOr(SidebarAutoSettleAfterDays)),
   sidebarProjectGroupingMode: Schema.optionalKey(SidebarProjectGroupingMode),
   sidebarProjectGroupingOverrides: Schema.optionalKey(

@@ -28,6 +28,8 @@ export interface DesktopSettings {
   readonly linuxPasswordStore: LinuxPasswordStorePreference;
   readonly mainWindowBounds: DesktopWindowBounds | null;
   readonly mainWindowMaximized: boolean;
+  /** Bottom-right-anchored pet overlay position (top-left of the pet window). */
+  readonly petWindowPosition: DesktopPetWindowPosition | null;
   readonly serverExposureMode: DesktopServerExposureMode;
   readonly tailscaleServeEnabled: boolean;
   readonly tailscaleServePort: number;
@@ -76,6 +78,7 @@ export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   linuxPasswordStore: DEFAULT_LINUX_PASSWORD_STORE,
   mainWindowBounds: null,
   mainWindowMaximized: false,
+  petWindowPosition: null,
   serverExposureMode: "local-only",
   tailscaleServeEnabled: false,
   tailscaleServePort: DEFAULT_TAILSCALE_SERVE_PORT,
@@ -85,6 +88,17 @@ export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   wslDistro: null,
   wslOnly: false,
 };
+
+export const DesktopPetWindowPositionSchema = Schema.Struct({
+  x: Schema.Int,
+  y: Schema.Int,
+});
+export type DesktopPetWindowPosition = typeof DesktopPetWindowPositionSchema.Type;
+
+const DesktopPetWindowPositionDocument = Schema.Struct({
+  x: Schema.Number,
+  y: Schema.Number,
+});
 
 const DesktopWindowBoundsDocument = Schema.Struct({
   x: Schema.Number,
@@ -97,6 +111,7 @@ const DesktopSettingsDocument = Schema.Struct({
   linuxPasswordStore: Schema.optionalKey(Schema.Unknown),
   mainWindowBounds: Schema.optionalKey(Schema.NullOr(DesktopWindowBoundsDocument)),
   mainWindowMaximized: Schema.optionalKey(Schema.Boolean),
+  petWindowPosition: Schema.optionalKey(Schema.NullOr(DesktopPetWindowPositionDocument)),
   serverExposureMode: Schema.optionalKey(DesktopServerExposureModeSchema),
   tailscaleServeEnabled: Schema.optionalKey(Schema.Boolean),
   tailscaleServePort: Schema.optionalKey(Schema.Number),
@@ -156,6 +171,9 @@ export class DesktopAppSettings extends Context.Service<
       bounds: DesktopWindowBounds,
       isMaximized: boolean,
     ) => Effect.Effect<DesktopSettingsChange, DesktopSettingsWriteError>;
+    readonly setPetWindowPosition: (
+      position: DesktopPetWindowPosition,
+    ) => Effect.Effect<DesktopSettingsChange, DesktopSettingsWriteError>;
     readonly setServerExposureMode: (
       mode: DesktopServerExposureMode,
     ) => Effect.Effect<DesktopSettingsChange, DesktopSettingsWriteError>;
@@ -204,6 +222,10 @@ export function normalizeMainWindowBounds(value: unknown): DesktopWindowBounds |
   return Option.getOrNull(decodeDesktopWindowBounds(value));
 }
 
+export function normalizePetWindowPosition(value: unknown): DesktopPetWindowPosition | null {
+  return Option.getOrNull(Schema.decodeUnknownOption(DesktopPetWindowPositionSchema)(value));
+}
+
 function normalizeDesktopSettingsDocument(
   parsed: DesktopSettingsDocument,
   appVersion: string,
@@ -227,6 +249,7 @@ function normalizeDesktopSettingsDocument(
     linuxPasswordStore: normalizeLinuxPasswordStorePreference(parsed.linuxPasswordStore),
     mainWindowBounds,
     mainWindowMaximized: mainWindowBounds !== null && parsed.mainWindowMaximized === true,
+    petWindowPosition: normalizePetWindowPosition(parsed.petWindowPosition),
     serverExposureMode:
       parsed.serverExposureMode === "network-accessible" ? "network-accessible" : "local-only",
     tailscaleServeEnabled: parsed.tailscaleServeEnabled === true,
@@ -252,6 +275,9 @@ function toDesktopSettingsDocument(
   }
   if (settings.mainWindowBounds !== null) {
     document.mainWindowBounds = settings.mainWindowBounds;
+  }
+  if (settings.petWindowPosition !== null) {
+    document.petWindowPosition = settings.petWindowPosition;
   }
   if (settings.mainWindowMaximized) {
     document.mainWindowMaximized = true;
@@ -309,6 +335,20 @@ function setMainWindowBounds(
         ...settings,
         mainWindowBounds: bounds,
         mainWindowMaximized: isMaximized,
+      };
+}
+
+function setPetWindowPosition(
+  settings: DesktopSettings,
+  position: DesktopPetWindowPosition,
+): DesktopSettings {
+  return settings.petWindowPosition !== null &&
+    settings.petWindowPosition.x === position.x &&
+    settings.petWindowPosition.y === position.y
+    ? settings
+    : {
+        ...settings,
+        petWindowPosition: position,
       };
 }
 
@@ -518,6 +558,12 @@ export const make = Effect.gen(function* () {
           },
         }),
       ),
+    setPetWindowPosition: (position) =>
+      persist((settings) => setPetWindowPosition(settings, position)).pipe(
+        Effect.withSpan("desktop.settings.setPetWindowPosition", {
+          attributes: { x: position.x, y: position.y },
+        }),
+      ),
     setServerExposureMode: (mode) =>
       persist((settings) => setServerExposureMode(settings, mode)).pipe(
         Effect.withSpan("desktop.settings.setServerExposureMode", { attributes: { mode } }),
@@ -577,6 +623,8 @@ export const layerTest = (initialSettings: DesktopSettings = DEFAULT_DESKTOP_SET
         load: SynchronizedRef.get(settingsRef),
         setMainWindowBounds: (bounds, isMaximized) =>
           update((settings) => setMainWindowBounds(settings, bounds, isMaximized)),
+        setPetWindowPosition: (position) =>
+          update((settings) => setPetWindowPosition(settings, position)),
         setServerExposureMode: (mode) =>
           update((settings) => setServerExposureMode(settings, mode)),
         setTailscaleServe: (input) => update((settings) => setTailscaleServe(settings, input)),

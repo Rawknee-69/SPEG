@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { RouterProvider } from "@tanstack/react-router";
 
 import { isElectron } from "./env";
+import { PetOverlay } from "./pets/PetOverlay";
 import { AppAtomRegistryProvider } from "./rpc/atomRegistry";
 import type { AppRouter } from "./router";
 
@@ -27,6 +28,7 @@ export function AppRoot({ router }: { readonly router: AppRouter }) {
   return (
     <AppAtomRegistryProvider>
       <RouterProvider router={router} />
+      <PetOverlay />
       {isElectron ? (
         <Suspense fallback={null}>
           <PreviewAutomationHosts />

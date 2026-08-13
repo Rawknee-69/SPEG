@@ -47,6 +47,7 @@ const clientSettings: ClientSettings = {
   sidebarV2ConfiguredByUser: false,
   // SPEG blob with all defaults (the fixture's other fields override their
   // defaults too — keep this in sync with DEFAULT_CLIENT_SETTINGS).
+  pets: DEFAULT_CLIENT_SETTINGS.pets,
   speg: DEFAULT_CLIENT_SETTINGS.speg,
   timestampFormat: "24-hour",
   wordWrap: true,

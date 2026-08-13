@@ -7,6 +7,7 @@ export type SettingsPath =
   | "/settings/connections"
   | "/settings/beta"
   | "/settings/archived"
+  | "/settings/pets"
   | "/settings/speg";
 
 export interface SettingsSearchItem {
@@ -29,6 +30,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/connections": "Connections",
   "/settings/beta": "Beta",
   "/settings/archived": "Archive",
+  "/settings/pets": "Pets",
   "/settings/speg": "SPEG",
 };
 
@@ -266,6 +268,31 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "speg-status-bar",
     title: "Status bar",
     to: "/settings/speg",
+  },
+  {
+    id: "pet",
+    title: "Pet",
+    to: "/settings/pets",
+    // The enable/visibility switches sit at the top of the Pets section.
+    targetId: "pet",
+  },
+  {
+    id: "pet-selection",
+    title: "Pet selection",
+    to: "/settings/pets",
+    targetId: "pet-selection",
+  },
+  {
+    id: "pet-position",
+    title: "Pet size and position",
+    to: "/settings/pets",
+    targetId: "pet-position",
+  },
+  {
+    id: "pet-behavior",
+    title: "Pet behavior",
+    to: "/settings/pets",
+    targetId: "pet-behavior",
   },
 ] as const satisfies ReadonlyArray<SettingsSearchItem>;
 

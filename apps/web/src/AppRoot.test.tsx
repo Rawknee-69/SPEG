@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { AppAtomRegistryProvider } from "./rpc/atomRegistry";
 import type { AppRouter } from "./router";
+import { PetOverlay } from "./pets/PetOverlay";
 import { AppRoot } from "./AppRoot";
 
 describe("AppRoot", () => {
@@ -14,9 +15,11 @@ describe("AppRoot", () => {
     const children = Children.toArray(
       (root as ReactElement<{ readonly children: ReactNode }>).props.children,
     );
-    // In a plain browser the desktop hosts render nothing, so only the router
-    // is mounted — their code is split off and fetched only by the Electron shell.
-    expect(children).toHaveLength(1);
+    // In a plain browser the desktop hosts render nothing: the router and the
+    // pet overlay mount, and nothing else (host code is split off and fetched
+    // only by the Electron shell).
+    expect(children).toHaveLength(2);
     expect(isValidElement(children[0]) && children[0].type).toBe(RouterProvider);
+    expect(isValidElement(children[1]) && children[1].type).toBe(PetOverlay);
   });
 });

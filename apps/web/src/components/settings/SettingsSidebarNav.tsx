@@ -16,6 +16,7 @@ import {
   KeyboardIcon,
   Link2Icon,
   PaletteIcon,
+  PawPrintIcon,
   SearchIcon,
   Settings2Icon,
   SparklesIcon,
@@ -35,7 +36,10 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "../ui/sidebar";
-import { SpegConnectSidebarAvatar, SpegConnectSidebarSignIn } from "../clerk/SpegConnectSidebarSignIn";
+import {
+  SpegConnectSidebarAvatar,
+  SpegConnectSidebarSignIn,
+} from "../clerk/SpegConnectSidebarSignIn";
 import { scrollToSettingsTarget } from "./settingsLayout";
 import {
   searchSettings,
@@ -55,6 +59,7 @@ const SETTINGS_SECTION_ICONS: Readonly<
   "/settings/connections": Link2Icon,
   "/settings/beta": FlaskConicalIcon,
   "/settings/archived": ArchiveIcon,
+  "/settings/pets": PawPrintIcon,
   "/settings/speg": SparklesIcon,
 };
 

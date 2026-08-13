@@ -13,6 +13,7 @@ import {
   syncDocumentWindowControlsOverlayClass,
 } from "./lib/windowControlsOverlay";
 import { AppRoot } from "./AppRoot";
+import { PetOverlaySurface } from "./pets/PetOverlaySurface";
 
 // Electron loads the app from a file-backed shell, so hash history avoids path resolution issues.
 const history = isElectron ? createHashHistory() : createBrowserHistory();
@@ -27,6 +28,16 @@ if (isElectron) {
 const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 
 const app = <AppRoot router={router} />;
+
+// The desktop pet overlay window loads this same bundle with `?surface=pet`
+// and renders ONLY the pet — no router, no chat, no Clerk (spec §12).
+const isPetSurface = new URLSearchParams(window.location.search).get("surface") === "pet";
+if (isPetSurface) {
+  const container = document.getElementById("root") as HTMLElement;
+  ReactDOM.createRoot(container).render(<PetOverlaySurface />);
+} else {
+  void renderApp();
+}
 
 /**
  * Clerk's runtime is ~9.6 MB unpacked; it is only mounted when a cloud public

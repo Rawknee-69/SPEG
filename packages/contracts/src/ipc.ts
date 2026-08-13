@@ -1052,6 +1052,18 @@ export interface DesktopBridge {
   onMenuAction: (listener: (action: string) => void) => () => void;
   getWindowFullscreenState: () => boolean;
   onWindowFullscreenStateChange: (listener: (fullscreen: boolean) => void) => () => void;
+  /**
+   * Desktop pet overlay surface. Present iff the renderer is hosted by the
+   * Electron desktop build; web builds have these undefined.
+   */
+  petEnsure?: () => Promise<void>;
+  petHide?: () => Promise<void>;
+  petDrag?: (delta: { readonly dx: number; readonly dy: number }) => Promise<void>;
+  petSetSettings?: (settings: {
+    readonly alwaysOnTop: boolean;
+    readonly clickThrough: boolean;
+    readonly hideOnFullscreen: boolean;
+  }) => Promise<void>;
   getUpdateState: () => Promise<DesktopUpdateState>;
   setUpdateChannel: (channel: DesktopUpdateChannel) => Promise<DesktopUpdateState>;
   checkForUpdate: () => Promise<DesktopUpdateCheckResult>;

@@ -28,6 +28,8 @@ squashfs-root/
 dist-electron/
 .electron-runtime/
 .showcase/
+# Regenerable pet QA previews (node scripts/generate-default-pet.mjs)
+apps/web/src/assets/pets/qa/
 apps/mobile/.showcase/
 artifacts/app-store/screenshots/
 native/**/target/
